@@ -16,8 +16,8 @@ The primary checkout is coordination-only while agents are active. Do feature
 work in an isolated Git worktree, never by sharing edits in this checkout.
 
 ```sh
-make worktree NAME=<short-feature-name>
-cd ../ao-worktrees/<short-feature-name>
+make worktree-create NAME=<short-feature-name>
+cd .worktrees/<short-feature-name>
 ```
 
 This creates branch `agent/<short-feature-name>` from the current `HEAD`.

@@ -1,4 +1,5 @@
 .tooling/
+.worktrees/
 build/
 state/
 *.zo
