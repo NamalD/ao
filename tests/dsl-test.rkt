@@ -18,15 +18,32 @@
 (define-runtime-path rothko-plugin "../plugins/rothko.rkt")
 (define orbs-render (dynamic-require orbs-plugin 'render))
 (define rings-render (dynamic-require rings-plugin 'render))
+(define rothko-render (dynamic-require rothko-plugin 'render))
 (define quiet-frame
-  (audio-frame 0 '() '() (make-list 48 .2) 0 0 0 1280 720))
+  (audio-frame 0 '() '() (make-list 48 .2) 0 0 0 0 1280 720))
 (define later-frame
-  (audio-frame 8 '() '() (make-list 48 .2) 0 0 0 1280 720))
+  (audio-frame 8 '() '() (make-list 48 .2) 0 0 0 0 1280 720))
 (define early-orb (first (group-nodes (second (scene-nodes (orbs-render quiet-frame))))))
 (define later-orb (first (group-nodes (second (scene-nodes (orbs-render later-frame))))))
 (check-not-equal? (gradient-circle-inner early-orb) (gradient-circle-inner later-orb))
 (define loud-rings-frame
-  (audio-frame 0 '() '() (make-list 48 .9) 0 0 0 1280 720))
+  (audio-frame 0 '() '() (make-list 48 .9) 0 0 0 0 1280 720))
+(define impact-frame
+  (audio-frame 0 '() '() (make-list 48 .2) 0 1 0 0 1280 720))
+(check-equal? (audio-frame-impulse impact-frame) 1)
+
+;; A transient should visibly punch every visualiser, independently of the
+;; slower loudness and spectrum controls.
+(define impact-orb (first (group-nodes (second (scene-nodes (orbs-render impact-frame))))))
+(define quiet-orb (first (group-nodes (second (scene-nodes (orbs-render quiet-frame))))))
+(check-true (> (gradient-circle-radius impact-orb)
+               (gradient-circle-radius quiet-orb)))
+(check-true (> (group-scale (first (scene-nodes (orbs-render impact-frame)))) 1))
+
+(define impact-ring-group (first (scene-nodes (rings-render impact-frame))))
+(check-true (> (group-scale impact-ring-group) 1))
+(check-true (> (gradient-circle-radius (first (group-nodes impact-ring-group)))
+               (gradient-circle-radius (first (group-nodes (first (scene-nodes (rings-render quiet-frame))))))))
 (define quiet-ring-orbs (group-nodes (first (scene-nodes (rings-render quiet-frame)))))
 (define quiet-ring-orb (first quiet-ring-orbs))
 (define loud-ring-orb (first (group-nodes (first (scene-nodes (rings-render loud-rings-frame))))))
@@ -45,7 +62,7 @@
 (define wave-render (dynamic-require wave-plugin 'render))
 (define jagged-frame
   (audio-frame 0 (for/list ([i (in-range 256)]) (if (even? i) -1.0 1.0)) '()
-               (make-list 48 0.0) 0 0 0 1280 720))
+               (make-list 48 0.0) 0 0 0 0 1280 720))
 (define wave-line (first (group-nodes (third (scene-nodes (wave-render jagged-frame))))))
 (define wave-points (polyline-points wave-line))
 (check-equal? (length wave-points) 256)
@@ -55,6 +72,12 @@
 (check-= (cdr (list-ref wave-points 3))
          (+ .5 (* .24 .2) (* .08 (sin (* 9 peak-x))))
          1e-9)
+(define impact-wave-line (first (group-nodes (third (scene-nodes (wave-render impact-frame))))))
+(check-true (> (polyline-width impact-wave-line) (polyline-width wave-line)))
+(define quiet-rothko-first (first (scene-nodes (rothko-render quiet-frame))))
+(define impact-rothko-first (first (scene-nodes (rothko-render impact-frame))))
+(check-true (> (rect-width impact-rothko-first)
+               (rect-width quiet-rothko-first)))
 
 ;; Regression for the idle-only bug: subprocess must receive /usr/bin/parec
 ;; (or equivalent), not the bare string that a shell would resolve via PATH.

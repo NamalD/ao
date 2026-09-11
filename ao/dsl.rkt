@@ -9,7 +9,9 @@
 ;; Plugins use normalized coordinates: x/y/width/height are 0..1.
 ;; Prefab structs make a scene safe to pass across the fresh namespaces used
 ;; for hot-loaded plugin modules.
-(struct audio-frame (time waveform-left waveform-right spectrum loudness beat tempo width height) #:prefab)
+;; impulse is a short-lived 0..1 transient envelope.  It is intentionally
+;; separate from loudness: a loud sustained sound should not hit every frame.
+(struct audio-frame (time waveform-left waveform-right spectrum loudness impulse beat tempo width height) #:prefab)
 (struct scene (background nodes) #:prefab)
 (struct rgba (r g b a) #:prefab)
 (struct rect (x y width height color) #:prefab)

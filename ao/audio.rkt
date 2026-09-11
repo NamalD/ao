@@ -3,9 +3,11 @@
 (require racket/port racket/string racket/list "dsl.rkt")
 (provide start-audio-capture current-audio-frame parec-command)
 
-(define latest (box (audio-frame 0.0 '() '() (make-list 48 0.0) 0.0 0.0 0.0 1280 720)))
+(define latest (box (audio-frame 0.0 '() '() (make-list 48 0.0) 0.0 0.0 0.0 0.0 1280 720)))
 (define previous-energy 0.0)
 (define last-beat 0.0)
+(define impulse-envelope 0.0)
+(define previous-analysis-time #f)
 
 (define (default-monitor)
   (define sink (string-trim (with-output-to-string (lambda () (system "pactl get-default-sink 2>/dev/null")))))
@@ -34,13 +36,23 @@
                   (floating-point-bytes->real raw #f (+ (* i 8) 4) (+ (* i 8) 8))))
   (define mono (map (lambda (a b) (* .5 (+ a b))) left right))
   (define energy (if (null? mono) 0.0 (sqrt (/ (for/sum ([x mono]) (* x x)) (length mono)))))
+  ;; Compare against the smoothed energy baseline so a sudden hit gets a
+  ;; strong response, while a sustained loud passage settles back down.
+  (define attack (max 0.0 (- energy previous-energy)))
+  (define raw-impulse (clamp (* 9.0 attack)))
+  (define elapsed (if previous-analysis-time
+                      (max 0.0 (- now previous-analysis-time))
+                      0.0))
+  (set! impulse-envelope
+        (max raw-impulse (* impulse-envelope (exp (* -7.0 elapsed)))))
+  (set! previous-analysis-time now)
   (define beat (if (and (> energy (+ (* previous-energy 1.35) .012)) (> (- now last-beat) .18)) 1.0 0.0))
   (set! previous-energy (+ (* .82 previous-energy) (* .18 energy)))
   (when (= beat 1.0) (set! last-beat now))
   (define spectrum
     (for/list ([i (in-range 48)])
       (min 1.0 (* 7.5 (abs (dft-band mono (+ 1 (inexact->exact (floor (* i i .12))))))))))
-  (audio-frame now left right spectrum (min 1.0 (* 5 energy)) beat 0.0 1280 720))
+  (audio-frame now left right spectrum (min 1.0 (* 5 energy)) impulse-envelope beat 0.0 1280 720))
 
 (define (start-audio-capture started-at [report (lambda (_message) (void))])
   (define target (default-monitor))
