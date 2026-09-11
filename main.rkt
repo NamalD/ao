@@ -43,6 +43,14 @@
     [(gradient-circle? n)
      (define-values (x y) (xy (gradient-circle-x n) (gradient-circle-y n)))
      (string-append prefix (format "circle ~a ~a ~a ~a ~a\n" x y (* (min width height) (abs scale) (gradient-circle-radius n)) (color (gradient-circle-inner n)) (color (gradient-circle-outer n))))]
+    [(light? n)
+     (define-values (x y) (xy (light-x n) (light-y n)))
+     ;; Lights are always additive, even when nested in a normal group.  The
+     ;; source's intensity still follows group opacity and transitions.
+     (string-append "blend add\n"
+                    (format "light ~a ~a ~a ~a ~a\n"
+                            x y (* (min width height) (abs scale) (light-radius n))
+                            (color (light-color n)) (* opacity (light-intensity n))))]
     [(line? n)
      (define-values (x1 y1) (xy (line-x1 n) (line-y1 n))) (define-values (x2 y2) (xy (line-x2 n) (line-y2 n)))
      (string-append prefix (format "line ~a ~a ~a ~a ~a ~a\n" x1 y1 x2 y2 (* (min width height) (abs scale) (line-width n)) (color (line-color n))))]

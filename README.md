@@ -43,8 +43,8 @@ handoff; it leaves the branch intact for review or merge.
 
 Drop a `.rkt` module into `plugins/`. A plugin exports `name` and `render`.
 `render` receives an `audio-frame` and returns a `scene` with high-level
-primitives. The compact API includes filled radial-gradient circles, linear-gradient rectangles,
-thick polylines, and composable `group` layers with translation, scale,
+primitives. The compact API includes filled radial-gradient circles, additive
+radial `light` sources, linear-gradient rectangles, thick polylines, and composable `group` layers with translation, scale,
 rotation, opacity, and normal/additive blending. The Vulkan-backed renderer
 adds soft bloom to circles and draws polylines as smooth triangle ribbons. See
 the included plugins and `ao/dsl.rkt`.
