@@ -4,7 +4,6 @@
 (define name "Rings")
 (define (render a)
   (define hue (* .35 (audio-frame-time a)))
-  (define pulse (+ .14 (* .13 (audio-frame-loudness a))))
   (scene (color-scale (color-cycle hue) .045)
          (list
           (group
@@ -18,4 +17,4 @@
                               (color-scale (color-cycle orb-hue) (+ .55 (* .45 level)) .95)
                               (color-cycle orb-hue 0)))
            0 0 1 (* .11 (audio-frame-time a)) 1 "add")
-          (gradient-circle .5 .5 pulse (color-scale (color-cycle (+ hue .5)) .8 .7) (color-cycle hue 0)))))
+          )))

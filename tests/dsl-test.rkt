@@ -17,6 +17,7 @@
 (define-runtime-path wave-plugin "../plugins/wave.rkt")
 (define-runtime-path rothko-plugin "../plugins/rothko.rkt")
 (define orbs-render (dynamic-require orbs-plugin 'render))
+(define rings-render (dynamic-require rings-plugin 'render))
 (define quiet-frame
   (audio-frame 0 '() '() (make-list 48 .2) 0 0 0 1280 720))
 (define later-frame
@@ -30,6 +31,8 @@
 (define quiet-ring-orb (first (group-nodes (first (scene-nodes (rings-render quiet-frame))))))
 (define loud-ring-orb (first (group-nodes (first (scene-nodes (rings-render loud-rings-frame))))))
 (check-not-equal? (gradient-circle-inner quiet-ring-orb) (gradient-circle-inner loud-ring-orb))
+(check-equal? (length (scene-nodes (rings-render quiet-frame))) 1)
+(check-equal? (length (group-nodes (first (scene-nodes (rings-render quiet-frame))))) 28)
 (for ([plugin-path (list orbs-plugin rings-plugin wave-plugin rothko-plugin)])
   (define render (dynamic-require plugin-path 'render))
   (check-not-equal? (scene-background (render quiet-frame))
