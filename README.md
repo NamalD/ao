@@ -17,6 +17,20 @@ last selected visualizer from `state/last-plugin.rktd`.
 Keys: `j` previous visualizer, `k` next visualizer, `f` fullscreen, `h` show
 the four-second help overlay, `r` rescan plugins, `q` or `Esc` quit.
 
+## Parallel development
+
+For concurrent feature work, create an isolated checkout rather than editing
+the primary checkout:
+
+```sh
+make worktree NAME=short-feature-name
+cd ../ao-worktrees/short-feature-name
+```
+
+Use `make worktree-list` to see active worktrees. From the primary checkout,
+`make worktree-remove NAME=short-feature-name` removes a clean worktree after
+handoff; it leaves the branch intact for review or merge.
+
 ## Plugins
 
 Drop a `.rkt` module into `plugins/`. A plugin exports `name` and `render`.

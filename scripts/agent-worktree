@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/agent-worktree {create|list|remove|prune} [name]
+
+Feature worktrees live in ../ao-worktrees/<name> on branch agent/<name>.
+EOF
+}
+
+root=$(git rev-parse --show-toplevel)
+if [[ $root != "$PWD" ]]; then
+  echo "Run this command from Ao's primary checkout: $root" >&2
+  exit 1
+fi
+
+command=${1:-}
+name=${2:-}
+worktree_root="$(dirname "$root")/ao-worktrees"
+
+require_name() {
+  if [[ ! $name =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
+    echo "Worktree name must be lowercase hyphenated text (for example, audio-smoothing)." >&2
+    exit 1
+  fi
+}
+
+require_primary_clean() {
+  if [[ -n $(git status --porcelain) ]]; then
+    echo "Primary checkout has uncommitted changes; commit or stash them before creating a worktree." >&2
+    exit 1
+  fi
+}
+
+case $command in
+  create)
+    require_name
+    require_primary_clean
+    target="$worktree_root/$name"
+    branch="agent/$name"
+    if [[ -e $target ]]; then
+      echo "Worktree path already exists: $target" >&2
+      exit 1
+    fi
+    if git show-ref --verify --quiet "refs/heads/$branch"; then
+      echo "Branch already exists: $branch. Choose a new name or add it manually." >&2
+      exit 1
+    fi
+    mkdir -p "$worktree_root"
+    git worktree add -b "$branch" "$target" HEAD
+    ;;
+  list)
+    git worktree list
+    ;;
+  remove)
+    require_name
+    target="$worktree_root/$name"
+    if [[ ! -d $target ]]; then
+      echo "No worktree found at: $target" >&2
+      exit 1
+    fi
+    if [[ -n $(git -C "$target" status --porcelain) ]]; then
+      echo "Worktree has uncommitted changes: $target" >&2
+      exit 1
+    fi
+    git worktree remove "$target"
+    ;;
+  prune)
+    git worktree prune
+    ;;
+  *)
+    usage >&2
+    exit 1
+    ;;
+esac
