@@ -13,7 +13,9 @@
 
 (define (render a)
   (define t (audio-frame-time a))
-  (define hue (* .22 t))
+  ;; Keep the palette moving quickly enough to read as an ambient shift, while
+  ;; keeping adjacent orbs close enough in hue for the sweep to be visible.
+  (define hue (* 1.15 t))
   (define backdrop (orb-colour hue 0 1))
   (scene (rgba* (* .09 (rgba-r backdrop)) (* .09 (rgba-g backdrop)) (* .09 (rgba-b backdrop)))
          (list
@@ -23,7 +25,7 @@
              (define band (list-ref (audio-frame-spectrum a) (modulo i 48)))
              (define x (+ .5 (* .42 (sin (+ (* .37 i) (* .19 t))))) )
              (define y (+ .5 (* .42 (cos (+ (* .61 i) (* .13 t))))) )
-             (define phase (+ hue (* .31 i) (* .8 band)))
+             (define phase (+ hue (* .035 i) (* .8 band)))
              (gradient-circle x y (+ .01 (* .045 band))
                               (orb-colour phase band (+ .42 (* .25 band)))
                               (orb-colour phase band 0)))
