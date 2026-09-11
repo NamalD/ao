@@ -1,7 +1,8 @@
 #lang racket
 
 (require racket/file racket/list racket/string racket/path racket/format racket/date
-         "ao/dsl.rkt" "ao/audio.rkt" "ao/plugins.rkt")
+         "ao/dsl.rkt" "ao/audio.rkt" "ao/plugins.rkt"
+         "ao/window-state.rkt")
 
 (define root (current-directory))
 (define state-dir (build-path root "state"))
@@ -11,8 +12,11 @@
   (call-with-output-file log-path #:exists 'append
     (lambda (out) (fprintf out "~a  ~a\n" (date->string (current-date) #t) (apply format fmt xs)))))
 (define (state-path) (build-path state-dir "last-plugin.rktd"))
+(define (window-position-path) (build-path state-dir "window-position.rktd"))
 (define (saved-name) (with-handlers ([exn:fail? (lambda (_) #f)]) (call-with-input-file (state-path) read)))
 (define (save-name! name) (call-with-output-file (state-path) #:exists 'truncate (lambda (out) (write name out))))
+(define (persist-window-position! position)
+  (save-window-position! (window-position-path) position))
 (define (u8 x) (inexact->exact (round (* 255 (clamp x)))))
 (define (color-lines c) (format "~a ~a ~a ~a" (u8 (rgba-r c)) (u8 (rgba-g c)) (u8 (rgba-b c)) (u8 (rgba-a c))))
 (define (apply-transform x y tx ty scale rotation)
@@ -79,6 +83,13 @@
 (define render-width 1280) (define render-height 720)
 (define (title! text) (fprintf to-native "title ~a\n" text) (flush-output to-native))
 (define (status! text) (fprintf to-native "status ~a\n" text) (flush-output to-native))
+(define (restore-window-position!)
+  (define position (load-window-position (window-position-path)))
+  (when position
+    (fprintf to-native "position ~a ~a\n"
+             (window-position-x position) (window-position-y position))
+    (flush-output to-native)))
+(restore-window-position!)
 (define next-plugin-scan 0.0)
 (define (rescan-plugins!)
   (define selected-name (plugin-name (list-ref plugins index)))
@@ -105,6 +116,10 @@
             [(regexp-match #rx"^size ([0-9]+) ([0-9]+)$" event)
              => (lambda (m) (set! render-width (string->number (list-ref m 1)))
                             (set! render-height (string->number (list-ref m 2))))]
+            [(regexp-match #rx"^position (-?[0-9]+) (-?[0-9]+)$" event)
+             => (lambda (m) (persist-window-position!
+                             (window-position (string->number (list-ref m 1))
+                                              (string->number (list-ref m 2)))))]
             [(or (equal? event "key q") (equal? event "key escape")) (exit 0)])
       (loop))))
 (with-handlers ([exn:break? (lambda (_) (void))])

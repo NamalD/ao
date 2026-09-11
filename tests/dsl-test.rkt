@@ -1,5 +1,5 @@
 #lang racket
-(require rackunit racket/file racket/runtime-path "../ao/dsl.rkt" "../ao/audio.rkt" "../ao/plugins.rkt")
+(require rackunit racket/file racket/runtime-path "../ao/dsl.rkt" "../ao/audio.rkt" "../ao/plugins.rkt" "../ao/window-state.rkt")
 (check-equal? (clamp -1) 0.0)
 (check-equal? (clamp 2) 1.0)
 (check-equal? (lerp 0 10 .25) 2.5)
@@ -99,6 +99,14 @@
 (check-equal? (car capture) "/usr/bin/parec")
 (check-equal? (cadr capture) "--device")
 (check-equal? (caddr capture) "test.monitor")
+
+;; Window placement survives restart and accepts negative coordinates for a
+;; monitor positioned to the left or above the primary display.
+(define position-path (make-temporary-file "ao-position~a.rktd" #f (current-directory)))
+(define position (window-position -640 120))
+(save-window-position! position-path position)
+(check-equal? (load-window-position position-path) position)
+(delete-file position-path)
 
 ;; Newly added plugin files are discovered without replacing loaded plugins.
 (define plugin-dir (make-temporary-file "ao-plugin-test~a" 'directory (current-directory)))
