@@ -22,8 +22,9 @@ make dev
 is used automatically when present. Ao opens windowed and restores only the
 last selected visualizer from `state/last-plugin.rktd`.
 
-Keys: `j` previous visualizer, `k` next visualizer, `f` fullscreen, `h` show
-the four-second help overlay, `r` rescan plugins, `q` or `Esc` quit.
+Keys: `j` previous visualizer, `k` next visualizer, `f` fullscreen, `i` toggle
+the FPS counter, `h` show the four-second help overlay, `r` rescan plugins,
+`q` or `Esc` quit.
 
 ## Parallel development
 

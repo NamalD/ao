@@ -20,6 +20,10 @@ static Command commands[MAX_COMMANDS];
 static int command_count = 0;
 static Uint8 clear_r = 2, clear_g = 2, clear_b = 8, clear_a = 255;
 static bool show_help = false;
+static bool show_fps = false;
+static Uint64 fps_window_start = 0;
+static unsigned fps_frames = 0;
+static float fps_value = 0.0f;
 static char status_text[384] = {0};
 static Uint64 status_until = 0;
 static SDL_BlendMode active_blend = SDL_BLENDMODE_BLEND;
@@ -84,6 +88,15 @@ static SDL_Texture *ensure_scene_layer(SDL_Renderer *renderer) {
 }
 
 static void render(SDL_Renderer *renderer) {
+  Uint64 frame_time = SDL_GetTicks();
+  if (fps_window_start == 0) fps_window_start = frame_time;
+  fps_frames++;
+  Uint64 elapsed = frame_time - fps_window_start;
+  if (elapsed >= 500) {
+    fps_value = (float)fps_frames * 1000.0f / (float)elapsed;
+    fps_frames = 0;
+    fps_window_start = frame_time;
+  }
   SDL_Texture *layer = ensure_scene_layer(renderer);
   if (layer) SDL_SetRenderTarget(renderer, layer);
   SDL_SetRenderDrawColor(renderer, clear_r, clear_g, clear_b, clear_a);
@@ -113,9 +126,20 @@ static void render(SDL_Renderer *renderer) {
     if (show_help) {
       SDL_RenderDebugText(renderer, 38, 38, "Ao controls");
       SDL_RenderDebugText(renderer, 38, 58, "j previous   k next   f fullscreen");
-      SDL_RenderDebugText(renderer, 38, 78, "r reload     h help   q / Esc quit");
+      SDL_RenderDebugText(renderer, 38, 78, "r reload     h help   i FPS   q / Esc quit");
     }
     if (status_text[0]) SDL_RenderDebugText(renderer, 38, show_help ? 108 : 38, status_text);
+  }
+  if (show_fps) {
+    char fps_text[32];
+    snprintf(fps_text, sizeof(fps_text), "FPS %.1f", fps_value);
+    int width = 0, height = 0;
+    SDL_GetRenderOutputSize(renderer, &width, &height);
+    SDL_SetRenderDrawColor(renderer, 8, 10, 22, 220);
+    SDL_FRect panel = {(float)(width - 118), 22, 96, 42};
+    SDL_RenderFillRect(renderer, &panel);
+    SDL_SetRenderDrawColor(renderer, 205, 224, 255, 255);
+    SDL_RenderDebugText(renderer, (float)(width - 102), 38, fps_text);
   }
   SDL_RenderPresent(renderer);
 }
@@ -175,6 +199,7 @@ int main(void) {
         SDL_Keycode k=e.key.key;
         if (k == SDLK_J) puts("key j"); else if (k == SDLK_K) puts("key k");
         else if (k == SDLK_H) puts("key h"); else if (k == SDLK_R) puts("key r");
+        else if (k == SDLK_I) { show_fps = !show_fps; puts("key i"); }
         else if (k == SDLK_F) { SDL_SetWindowFullscreen(window, !(SDL_GetWindowFlags(window)&SDL_WINDOW_FULLSCREEN)); puts("key f"); }
         else if (k == SDLK_Q) { puts("key q"); running=0; } else if (k == SDLK_ESCAPE) { puts("key escape"); running=0; }
         fflush(stdout);
