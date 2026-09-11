@@ -24,8 +24,8 @@
                               (+ .5 (* orbit (sin angle)))
                               radius
                               (color-scale (color-cycle orb-hue) (+ .65 (* .35 level)) .98)
-                              ;; Retaining colour and opacity at the rim gives each
-                              ;; stretched orb a defined, bead-like silhouette.
-                              (color-scale (color-cycle orb-hue) (+ .16 (* .16 level)) .7)))
+                              ;; A transparent rim lets the radial falloff dissolve
+                              ;; into the ring, so each orb reads as a soft gas ball.
+                              (color-scale (color-cycle orb-hue) (+ .16 (* .16 level)) 0)))
            0 0 (+ 1 (* .16 impulse)) (* .11 t) 1 "add")
           )))
