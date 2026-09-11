@@ -3,10 +3,12 @@
 Ao is a personal Linux/Wayland ambient audio visualizer. Keep the Racket host
 and plugin DSL separate from the narrow C bridge in `native/`.
 
-Commit completed, coherent work without asking for permission. Do not commit
-generated binaries, the project-local Racket runtime, or anything in `state/`.
-Run the relevant build and test checks before each commit. Keep plugin files
-small, readable examples of the public DSL.
+Commit completed, coherent work without asking for permission. At the end of
+the task, merge the completed branch into `master` from the primary checkout
+without waiting for approval. Do not commit generated binaries, the
+project-local Racket runtime, or anything in `state/`. Run the relevant build
+and test checks before each commit. Keep plugin files small, readable examples
+of the public DSL.
 
 ## Concurrent-agent workflow
 
@@ -19,10 +21,18 @@ cd ../ao-worktrees/<short-feature-name>
 ```
 
 This creates branch `agent/<short-feature-name>` from the current `HEAD`.
-Use a distinct, lowercase hyphenated name for each task. Before handing work
-off, commit the coherent change on that branch. A coordinator can inspect all
-checkouts with `make worktree-list` and merge the branch from the primary
-checkout. Do not rebase, force-push, or delete another agent's branch.
+Use a distinct, lowercase hyphenated name for each task. Before finishing,
+commit the coherent change on that branch, return to the primary checkout, and
+merge it into `master`:
+
+```sh
+cd /home/namal/code/ao
+git merge --no-ff agent/<short-feature-name>
+```
+
+Do not rebase, force-push, or delete another agent's branch. If the merge has
+conflicts, stop and report the conflict rather than resolving another agent's
+work by guesswork.
 
 Once a branch has been merged or is no longer needed, remove its clean
 checkout from the primary checkout:
