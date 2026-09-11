@@ -121,9 +121,10 @@ static void draw_ribbon_polyline(SDL_Renderer *renderer, const SDL_FPoint *point
         if (mlen >= .01f) {
           mx /= mlen; my /= mlen;
           float scale = half_width / (mx * nnx + my * nny);
-          /* Limit very acute joins so a sharp sample cannot create a spike. */
-          if (fabsf(scale) > half_width * 2.0f)
-            scale = copysignf(half_width * 2.0f, scale);
+          /* Limit acute joins to the ribbon width.  Longer miters can fold
+             back across the strip and leave a blended seam at the join. */
+          if (fabsf(scale) > half_width)
+            scale = copysignf(half_width, scale);
           nx = mx * scale / half_width;
           ny = my * scale / half_width;
         }
