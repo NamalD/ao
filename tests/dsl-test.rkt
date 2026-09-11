@@ -38,7 +38,7 @@
 (define quiet-orb (first (group-nodes (second (scene-nodes (orbs-render quiet-frame))))))
 (check-true (> (gradient-circle-radius impact-orb)
                (gradient-circle-radius quiet-orb)))
-(check-true (> (group-scale (first (scene-nodes (orbs-render impact-frame)))) 1))
+(check-true (> (group-scale (second (scene-nodes (orbs-render impact-frame)))) 1))
 
 (define impact-ring-group (first (scene-nodes (rings-render impact-frame))))
 (check-true (> (group-scale impact-ring-group) 1))
