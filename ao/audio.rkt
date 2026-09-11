@@ -1,7 +1,7 @@
 #lang racket
 
 (require racket/port racket/string racket/list "dsl.rkt")
-(provide start-audio-capture current-audio-frame)
+(provide start-audio-capture current-audio-frame pw-record-command)
 
 (define latest (box (audio-frame 0.0 '() '() (make-list 48 0.0) 0.0 0.0 0.0 1280 720)))
 (define previous-energy 0.0)
@@ -10,6 +10,13 @@
 (define (default-monitor)
   (define sink (string-trim (with-output-to-string (lambda () (system "pactl get-default-sink 2>/dev/null")))))
   (and (not (string=? sink "")) (string-append sink ".monitor")))
+
+;; `subprocess` needs an executable path; unlike a shell it does not perform a
+;; PATH lookup for a bare "pw-record" string.
+(define (pw-record-command target [executable (find-executable-path "pw-record")])
+  (and executable
+       (list executable "--target" target "--latency" "20ms"
+             "--rate" "48000" "--channels" "2" "--format" "f32" "--raw" "-")))
 
 (define (dft-band samples k)
   (define n (max 1 (length samples)))
@@ -41,8 +48,7 @@
     [else
     (with-handlers ([exn:fail? (lambda (e) (report (format "could not start capture: ~a" (exn-message e))))])
       (define-values (proc stdout stdin stderr)
-        (subprocess #f #f #f pw-record "--target" target "--latency" "20ms"
-                    "--rate" "48000" "--channels" "2" "--format" "f32" "--raw" "-"))
+        (apply subprocess #f #f #f (pw-record-command target pw-record)))
       (close-output-port stdin)
       (thread
        (lambda ()
