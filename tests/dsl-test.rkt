@@ -20,6 +20,7 @@
 (define-runtime-path rings-plugin "../plugins/rings.rkt")
 (define-runtime-path wave-plugin "../plugins/wave.rkt")
 (define-runtime-path rothko-plugin "../plugins/rothko.rkt")
+(define-runtime-path ink-plugin "../plugins/ink.rkt")
 (define orbs-render (dynamic-require orbs-plugin 'render))
 (define rings-render (dynamic-require rings-plugin 'render))
 (define rothko-render (dynamic-require rothko-plugin 'render))
@@ -66,7 +67,7 @@
 (check-not-equal? (gradient-circle-x early-orb-2) (gradient-circle-x active-orb-2))
 (check-not-equal? (gradient-circle-y early-orb-2) (gradient-circle-y active-orb-2))
 
-(for ([plugin-path (list orbs-plugin rings-plugin wave-plugin rothko-plugin)])
+(for ([plugin-path (list orbs-plugin rings-plugin wave-plugin rothko-plugin ink-plugin)])
   (define render (dynamic-require plugin-path 'render))
   (check-not-equal? (scene-background (render quiet-frame))
                     (scene-background (render later-frame))))
