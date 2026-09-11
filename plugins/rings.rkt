@@ -10,7 +10,7 @@
            (for/list ([i (in-range 28)])
              (define angle (* i (/ (* 2 pi) 28)))
              (define level (list-ref (audio-frame-spectrum a) (modulo (* i 2) 48)))
-             (define orb-hue (+ hue (* .08 i) (* .35 level)))
+             (define orb-hue (+ hue (* .35 level)))
              (gradient-circle (+ .5 (* (+ .14 (* .22 level)) (cos angle)))
                               (+ .5 (* (+ .14 (* .22 level)) (sin angle)))
                               (+ .006 (* .027 level))
