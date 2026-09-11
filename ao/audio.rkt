@@ -32,21 +32,26 @@
       (min 1.0 (* 7.5 (abs (dft-band mono (+ 1 (inexact->exact (floor (* i i .12))))))))))
   (audio-frame now left right spectrum (min 1.0 (* 5 energy)) beat 0.0 1280 720))
 
-(define (start-audio-capture started-at)
+(define (start-audio-capture started-at [report (lambda (_message) (void))])
   (define target (default-monitor))
-  (when target
-    (with-handlers ([exn:fail? (lambda (_) (void))])
+  (define pw-record (find-executable-path "pw-record"))
+  (cond
+    [(not target) (report "could not determine the default PipeWire monitor")]
+    [(not pw-record) (report "pw-record is not installed or is not on PATH")]
+    [else
+    (with-handlers ([exn:fail? (lambda (e) (report (format "could not start capture: ~a" (exn-message e))))])
       (define-values (proc stdout stdin stderr)
-        (subprocess #f #f #f "pw-record" "--target" target "--latency" "20ms"
+        (subprocess #f #f #f pw-record "--target" target "--latency" "20ms"
                     "--rate" "48000" "--channels" "2" "--format" "f32" "--raw" "-"))
       (close-output-port stdin)
       (thread
        (lambda ()
-         (let loop ()
-           (define bytes (read-bytes 2048 stdout))
-           (unless (eof-object? bytes)
-             (set-box! latest (analyse bytes (/ (- (current-inexact-milliseconds) started-at) 1000.0)))
-             (loop))))))))
+         (with-handlers ([exn:fail? (lambda (e) (report (format "capture stopped: ~a" (exn-message e))))])
+           (let loop ()
+             (define bytes (read-bytes 2048 stdout))
+             (unless (eof-object? bytes)
+               (set-box! latest (analyse bytes (/ (- (current-inexact-milliseconds) started-at) 1000.0)))
+               (loop)))))))]))
 
 (define (current-audio-frame now width height)
   (define f (unbox latest))

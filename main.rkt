@@ -38,7 +38,7 @@
 (define-values (native from-native to-native native-err)
   (subprocess #f #f #f (path->string (build-path root "build" "ao-native"))))
 (thread (lambda () (let loop () (define line (read-line native-err 'any)) (unless (eof-object? line) (log! "native: ~a" line) (loop)))))
-(start-audio-capture started)
+(start-audio-capture started (lambda (message) (log! "audio: ~a" message)))
 (define plugins (discover-plugins (build-path root "plugins")))
 (define selected (or (saved-name) "Rings"))
 (define index (or (index-where plugins (lambda (p) (equal? selected (plugin-name p)))) 0))
