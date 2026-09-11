@@ -3,6 +3,9 @@
 (check-equal? (clamp -1) 0.0)
 (check-equal? (clamp 2) 1.0)
 (check-equal? (lerp 0 10 .25) 2.5)
+(check-equal? (rgba-a (color-cycle 0 .4)) .4)
+(check-not-equal? (color-cycle 0) (color-cycle pi))
+(check-equal? (color-scale (rgba* .5 .25 1 .8) .4) (rgba* .2 .1 .4 .8))
 (check-true (scene? (scene (rgb 0 0 0) '())))
 (check-true (gradient-circle? (gradient-circle .5 .5 .1 (rgb 1 0 0) (rgba* 1 0 0 0))))
 (check-true (gradient-rect? (gradient-rect 0 0 1 1 (rgb 0 0 0) (rgb 1 1 1))))
@@ -10,6 +13,9 @@
 
 ;; Orbs should cycle through colours over time rather than stay in one hue.
 (define-runtime-path orbs-plugin "../plugins/orbs.rkt")
+(define-runtime-path rings-plugin "../plugins/rings.rkt")
+(define-runtime-path ribbon-plugin "../plugins/ribbon.rkt")
+(define-runtime-path rothko-plugin "../plugins/rothko.rkt")
 (define orbs-render (dynamic-require orbs-plugin 'render))
 (define quiet-frame
   (audio-frame 0 '() '() (make-list 48 .2) 0 0 0 1280 720))
@@ -18,6 +24,10 @@
 (define early-orb (first (group-nodes (second (scene-nodes (orbs-render quiet-frame))))))
 (define later-orb (first (group-nodes (second (scene-nodes (orbs-render later-frame))))))
 (check-not-equal? (gradient-circle-inner early-orb) (gradient-circle-inner later-orb))
+(for ([plugin-path (list orbs-plugin rings-plugin ribbon-plugin rothko-plugin)])
+  (define render (dynamic-require plugin-path 'render))
+  (check-not-equal? (scene-background (render quiet-frame))
+                    (scene-background (render later-frame))))
 
 ;; Regression for the idle-only bug: subprocess must receive /usr/bin/parec
 ;; (or equivalent), not the bare string that a shell would resolve via PATH.

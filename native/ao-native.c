@@ -146,7 +146,7 @@ static void parse_line(char *line, SDL_Window *window, SDL_Renderer *renderer, i
 
 int main(void) {
   if (!SDL_Init(SDL_INIT_VIDEO)) { fprintf(stderr,"SDL init: %s\n",SDL_GetError()); return 1; }
-  SDL_Window *window = SDL_CreateWindow("Ao", 1280, 720, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+  SDL_Window *window = SDL_CreateWindow("Ao", 1280, 720, SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS | SDL_WINDOW_HIGH_PIXEL_DENSITY);
   if (!window) { fprintf(stderr,"window: %s\n",SDL_GetError()); return 1; }
   /* SDL's GPU renderer is explicitly given a Vulkan device; drawing remains a tiny 2D API. */
   SDL_GPUDevice *gpu = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, false, "vulkan");

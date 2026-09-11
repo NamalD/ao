@@ -4,7 +4,7 @@
          (struct-out rgba) (struct-out rect) (struct-out circle)
          (struct-out gradient-circle) (struct-out gradient-rect) (struct-out group)
          (struct-out line) (struct-out polyline)
-         rgb rgba* clamp lerp)
+         rgb rgba* color-cycle color-scale clamp lerp)
 
 ;; Plugins use normalized coordinates: x/y/width/height are 0..1.
 ;; Prefab structs make a scene safe to pass across the fresh namespaces used
@@ -25,4 +25,9 @@
 (define (clamp x [low 0.0] [high 1.0]) (max low (min high x)))
 (define (rgb r g b) (rgba r g b 1.0))
 (define (rgba* r g b [a 1.0]) (rgba r g b a))
+(define (color-cycle phase [a 1.0])
+  (define (channel offset) (+ .12 (* .88 (/ (+ 1.0 (sin (+ phase offset))) 2.0))))
+  (rgba* (channel 0) (channel (/ (* 2 pi) 3)) (channel (/ (* 4 pi) 3)) a))
+(define (color-scale c amount [a (rgba-a c)])
+  (rgba* (* amount (rgba-r c)) (* amount (rgba-g c)) (* amount (rgba-b c)) a))
 (define (lerp a b t) (+ a (* (- b a) (clamp t))))

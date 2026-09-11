@@ -3,23 +3,12 @@
 (provide name render)
 (define name "Orbs")
 
-;; Three phase-shifted waves produce a continuous colour cycle without adding
-;; another colour type to the public plugin DSL.
-(define (orb-colour phase energy alpha)
-  (define (channel offset)
-    (+ .16 (* (+ .34 (* .5 energy))
-              (max 0 (sin (+ phase offset))))))
-  (rgba* (channel 0) (channel (/ (* 2 pi) 3)) (channel (/ (* 4 pi) 3)) alpha))
-
 (define (render a)
   (define t (audio-frame-time a))
-  ;; Keep the palette moving quickly enough to read as an ambient shift, while
-  ;; keeping adjacent orbs close enough in hue for the sweep to be visible.
-  (define hue (* 1.15 t))
-  (define backdrop (orb-colour hue 0 1))
-  (scene (rgba* (* .09 (rgba-r backdrop)) (* .09 (rgba-g backdrop)) (* .09 (rgba-b backdrop)))
+  (define hue (* .35 t))
+  (scene (color-scale (color-cycle hue) .06)
          (list
-          (gradient-circle .5 .5 .65 (orb-colour hue .15 .18) (orb-colour hue 0 0))
+          (gradient-circle .5 .5 .65 (color-scale (color-cycle hue) .35 .18) (color-cycle hue 0))
           (group
            (for/list ([i (in-range 52)])
              (define band (list-ref (audio-frame-spectrum a) (modulo i 48)))
@@ -27,6 +16,6 @@
              (define y (+ .5 (* .42 (cos (+ (* .61 i) (* .13 t))))) )
              (define phase (+ hue (* .035 i) (* .8 band)))
              (gradient-circle x y (+ .01 (* .045 band))
-                              (orb-colour phase band (+ .42 (* .25 band)))
-                              (orb-colour phase band 0)))
+                              (color-scale (color-cycle phase) (+ .5 (* .45 band)) (+ .42 (* .25 band)))
+                              (color-cycle phase 0)))
            0 0 1 0 1 "add"))))
