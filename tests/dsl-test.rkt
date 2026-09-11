@@ -57,7 +57,8 @@
 (check-not-equal? (gradient-circle-inner quiet-ring-orb)
                   (gradient-circle-inner (second quiet-ring-orbs)))
 (check-not-equal? (gradient-circle-inner quiet-ring-orb) (gradient-circle-inner loud-ring-orb))
-(check-true (positive? (rgba-a (gradient-circle-outer quiet-ring-orb))))
+;; Ring orbs should dissolve at the edge instead of retaining a hard bead rim.
+(check-equal? (rgba-a (gradient-circle-outer quiet-ring-orb)) 0)
 (check-equal? (group-blend (first (scene-nodes (rings-render quiet-frame)))) "add")
 (check-equal? (length (scene-nodes (rings-render quiet-frame))) 1)
 (check-equal? (length (group-nodes (first (scene-nodes (rings-render quiet-frame))))) 28)
