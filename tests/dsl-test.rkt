@@ -23,6 +23,7 @@
 (define-runtime-path rothko-plugin "../plugins/rothko.rkt")
 (define-runtime-path ink-plugin "../plugins/ink.rkt")
 (define-runtime-path depth-plugin "../plugins/depth.rkt")
+(define-runtime-path dunes-plugin "../plugins/dunes.rkt")
 (define orbs-render (dynamic-require orbs-plugin 'render))
 (define rings-render (dynamic-require rings-plugin 'render))
 (define rothko-render (dynamic-require rothko-plugin 'render))
@@ -72,7 +73,7 @@
 (check-not-equal? (gradient-circle-x early-orb-2) (gradient-circle-x active-orb-2))
 (check-not-equal? (gradient-circle-y early-orb-2) (gradient-circle-y active-orb-2))
 
-(for ([plugin-path (list orbs-plugin rings-plugin wave-plugin rothko-plugin ink-plugin depth-plugin)])
+(for ([plugin-path (list orbs-plugin rings-plugin wave-plugin rothko-plugin ink-plugin depth-plugin dunes-plugin)])
   (define render (dynamic-require plugin-path 'render))
   (check-not-equal? (scene-background (render quiet-frame))
                     (scene-background (render later-frame))))
@@ -81,6 +82,16 @@
 (define depth-scene (depth-render quiet-frame))
 (check-equal? (length (scene-nodes depth-scene)) 43)
 (check-true (sphere3d? (second (scene-nodes depth-scene))))
+
+;; Dunes is a layered journey scene: broad terrain ribbons, wind, and a
+;; foreground drone all remain present in a quiet frame.
+(define dunes-render (dynamic-require dunes-plugin 'render))
+(define dunes-scene (dunes-render quiet-frame))
+(check-equal? (dynamic-require dunes-plugin 'name) "Dunes")
+(check-true (>= (length (scene-nodes dunes-scene)) 20))
+(check-true (gradient-rect? (first (scene-nodes dunes-scene))))
+(check-true (varying-polyline? (fourth (scene-nodes dunes-scene))))
+(check-true (group? (list-ref (scene-nodes dunes-scene) 19)))
 
 ;; Wave uses the full capture resolution and filters the raw waveform so its
 ;; animated sine line remains visually continuous instead of faceting.
