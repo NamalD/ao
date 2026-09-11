@@ -23,11 +23,12 @@ run: all
 # files change. Plugin edits still reload in-process during normal `make run`.
 dev:
 	@command -v watchexec >/dev/null 2>&1 || (echo "make dev requires watchexec (https://github.com/watchexec/watchexec)" >&2; exit 1)
-	watchexec --restart --watch main.rkt --watch ao --watch plugins --watch native --watch Makefile \
-		--ignore 'ao/compiled/**' --ignore 'plugins/compiled/**' --ignore 'state/**' -- make run
+	RACKET="$(RACKET)" watchexec --restart --watch main.rkt --watch ao --watch plugins --watch native --watch scripts --watch Makefile \
+		--ignore 'ao/compiled/**' --ignore 'plugins/compiled/**' --ignore 'state/**' -- ./scripts/dev-run
 
 test:
 	$(RACKET) tests/dsl-test.rkt
+	tests/dev-run-test.sh
 	$(MAKE) $(BUILD)/ao-native-test
 	$(BUILD)/ao-native-test
 
