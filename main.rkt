@@ -61,7 +61,8 @@
             [(equal? event "key r") (set! status-until (+ (now) 2.0))]
             [(or (equal? event "key q") (equal? event "key escape")) (exit 0)])
       (loop))))
-(let loop ()
+(with-handlers ([exn:break? (lambda (_) (void))])
+ (let loop ()
   (handle-events!)
   (define p (list-ref plugins index))
   (define-values (new-p reload-error) (reload-plugin p))
@@ -76,4 +77,4 @@
   (when (and (> help-until (now)) (> (now) (- help-until 3.98))) (title! "Ao — controls") (display "help 1\n" to-native) (flush-output to-native))
   (when (and (> (now) help-until) (positive? help-until)) (set! help-until 0.0) (display "help 0\n" to-native) (flush-output to-native) (title! (format "Ao — ~a" (plugin-name p))))
   (sleep .01)
-  (loop))
+  (loop)))

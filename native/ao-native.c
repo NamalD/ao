@@ -130,6 +130,7 @@ int main(void) {
     }
     char chunk[4096]; ssize_t n=read(STDIN_FILENO,chunk,sizeof(chunk));
     if (n > 0 && used+(size_t)n < sizeof(input)) { memcpy(input+used,chunk,n); used+=n; input[used]=0; }
+    else if (n == 0) running = 0; /* The Racket host exited. */
     int present=0; char *start=input, *nl;
     while ((nl=strchr(start,'\n'))) { *nl=0; parse_line(start,window,renderer,&present); start=nl+1; }
     size_t remain=used-(size_t)(start-input); memmove(input,start,remain); used=remain; input[used]=0;
