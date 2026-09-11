@@ -1,5 +1,5 @@
 #lang racket
-(require rackunit racket/file "../ao/dsl.rkt" "../ao/audio.rkt" "../ao/plugins.rkt")
+(require rackunit racket/file racket/runtime-path "../ao/dsl.rkt" "../ao/audio.rkt" "../ao/plugins.rkt")
 (check-equal? (clamp -1) 0.0)
 (check-equal? (clamp 2) 1.0)
 (check-equal? (lerp 0 10 .25) 2.5)
@@ -7,6 +7,17 @@
 (check-true (gradient-circle? (gradient-circle .5 .5 .1 (rgb 1 0 0) (rgba* 1 0 0 0))))
 (check-true (gradient-rect? (gradient-rect 0 0 1 1 (rgb 0 0 0) (rgb 1 1 1))))
 (check-true (group? (group '() 0 0 1 0 1 "add")))
+
+;; Orbs should cycle through colours over time rather than stay in one hue.
+(define-runtime-path orbs-plugin "../plugins/orbs.rkt")
+(define orbs-render (dynamic-require orbs-plugin 'render))
+(define quiet-frame
+  (audio-frame 0 '() '() (make-list 48 .2) 0 0 0 1280 720))
+(define later-frame
+  (audio-frame 8 '() '() (make-list 48 .2) 0 0 0 1280 720))
+(define early-orb (first (group-nodes (second (scene-nodes (orbs-render quiet-frame))))))
+(define later-orb (first (group-nodes (second (scene-nodes (orbs-render later-frame))))))
+(check-not-equal? (gradient-circle-inner early-orb) (gradient-circle-inner later-orb))
 
 ;; Regression for the idle-only bug: subprocess must receive /usr/bin/parec
 ;; (or equivalent), not the bare string that a shell would resolve via PATH.
