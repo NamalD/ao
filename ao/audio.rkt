@@ -1,7 +1,7 @@
 #lang racket
 
 (require racket/port racket/string racket/list "dsl.rkt")
-(provide start-audio-capture current-audio-frame pw-record-command)
+(provide start-audio-capture current-audio-frame parec-command)
 
 (define latest (box (audio-frame 0.0 '() '() (make-list 48 0.0) 0.0 0.0 0.0 1280 720)))
 (define previous-energy 0.0)
@@ -11,12 +11,15 @@
   (define sink (string-trim (with-output-to-string (lambda () (system "pactl get-default-sink 2>/dev/null")))))
   (and (not (string=? sink "")) (string-append sink ".monitor")))
 
+;; Use PipeWire's PulseAudio compatibility server: unlike `pw-record`, parec
+;; understands the `.monitor` source name and cannot silently fall back to the
+;; user's default input device.
 ;; `subprocess` needs an executable path; unlike a shell it does not perform a
-;; PATH lookup for a bare "pw-record" string.
-(define (pw-record-command target [executable (find-executable-path "pw-record")])
+;; PATH lookup for a bare program name.
+(define (parec-command target [executable (find-executable-path "parec")])
   (and executable
-       (list executable "--target" target "--latency" "20ms"
-             "--rate" "48000" "--channels" "2" "--format" "f32" "--raw" "-")))
+       (list executable "--device" target "--format=float32le"
+             "--rate=48000" "--channels=2" "--raw" "--latency-msec=20")))
 
 (define (dft-band samples k)
   (define n (max 1 (length samples)))
@@ -41,14 +44,14 @@
 
 (define (start-audio-capture started-at [report (lambda (_message) (void))])
   (define target (default-monitor))
-  (define pw-record (find-executable-path "pw-record"))
+  (define parec (find-executable-path "parec"))
   (cond
     [(not target) (report "could not determine the default PipeWire monitor")]
-    [(not pw-record) (report "pw-record is not installed or is not on PATH")]
+    [(not parec) (report "parec is not installed or is not on PATH")]
     [else
     (with-handlers ([exn:fail? (lambda (e) (report (format "could not start capture: ~a" (exn-message e))))])
       (define-values (proc stdout stdin stderr)
-        (apply subprocess #f #f #f (pw-record-command target pw-record)))
+        (apply subprocess #f #f #f (parec-command target parec)))
       (close-output-port stdin)
       (thread
        (lambda ()

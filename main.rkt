@@ -26,11 +26,11 @@
      (string-append (format "polyline ~a ~a ~a" (length (polyline-points n)) (* (min width height) (polyline-width n)) (color-lines (struct-copy rgba (polyline-color n) [a (* opacity (rgba-a (polyline-color n)))])))
                     (apply string-append (for/list ([p (polyline-points n)]) (define-values (x y) (point->xy p width height)) (format " ~a ~a" x y))) "\n")]
     [else (error 'scene "unknown node: ~e" n)]))
-(define (write-scene out s [old #f] [mix 1.0])
+(define (write-scene out s width height [old #f] [mix 1.0])
   (define bg (scene-background s))
   (fprintf out "clear ~a\n" (color-lines bg))
-  (when old (for ([n (scene-nodes old)]) (display (node->line n 1280 720 (- 1.0 mix)) out)))
-  (for ([n (scene-nodes s)]) (display (node->line n 1280 720 mix) out))
+  (when old (for ([n (scene-nodes old)]) (display (node->line n width height (- 1.0 mix)) out)))
+  (for ([n (scene-nodes s)]) (display (node->line n width height mix) out))
   (display "present\n" out) (flush-output out))
 
 (define started (current-inexact-milliseconds))
@@ -43,6 +43,7 @@
 (define selected (or (saved-name) "Rings"))
 (define index (or (index-where plugins (lambda (p) (equal? selected (plugin-name p)))) 0))
 (define previous #f) (define transition-start -1.0) (define help-until 0.0) (define status-until 0.0)
+(define render-width 1280) (define render-height 720)
 (define (title! text) (fprintf to-native "title ~a\n" text) (flush-output to-native))
 (define (status! text) (fprintf to-native "status ~a\n" text) (flush-output to-native))
 (define (switch! delta)
@@ -59,6 +60,9 @@
             [(equal? event "key k") (switch! 1)]
             [(equal? event "key h") (set! help-until (+ (now) 4.0))]
             [(equal? event "key r") (set! status-until (+ (now) 2.0))]
+            [(regexp-match #rx"^size ([0-9]+) ([0-9]+)$" event)
+             => (lambda (m) (set! render-width (string->number (list-ref m 1)))
+                            (set! render-height (string->number (list-ref m 2))))]
             [(or (equal? event "key q") (equal? event "key escape")) (exit 0)])
       (loop))))
 (with-handlers ([exn:break? (lambda (_) (void))])
@@ -68,11 +72,11 @@
   (define-values (new-p reload-error) (reload-plugin p))
   (when reload-error (log! "reload ~a: ~a" (plugin-name p) reload-error) (title! (format "Ao — reload failed: ~a" reload-error)) (status! (format "Reload failed: ~a" reload-error)))
   (unless (eq? p new-p) (set! plugins (list-set plugins index new-p)) (set! p new-p))
-  (define-values (rendered render-error) (run-plugin p (current-audio-frame (now) 1280 720)))
+  (define-values (rendered render-error) (run-plugin p (current-audio-frame (now) render-width render-height)))
   (when render-error (log! "frame ~a: ~a" (plugin-name p) render-error) (title! (format "Ao — plugin error: ~a" render-error)) (status! (format "Plugin error: ~a" render-error)))
   (define current-scene (or (plugin-last-scene rendered) (scene (rgb 0 0 0) '())))
   (define mix (min 1.0 (/ (- (now) transition-start) .3)))
-  (write-scene to-native current-scene (and previous (plugin-last-scene previous)) mix)
+  (write-scene to-native current-scene render-width render-height (and previous (plugin-last-scene previous)) mix)
   (when (> (now) (+ transition-start .3)) (set! previous #f))
   (when (and (> help-until (now)) (> (now) (- help-until 3.98))) (title! "Ao — controls") (display "help 1\n" to-native) (flush-output to-native))
   (when (and (> (now) help-until) (positive? help-until)) (set! help-until 0.0) (display "help 0\n" to-native) (flush-output to-native) (title! (format "Ao — ~a" (plugin-name p))))

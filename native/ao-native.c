@@ -23,6 +23,14 @@ static bool show_help = false;
 static char status_text[384] = {0};
 static Uint64 status_until = 0;
 
+static void report_size(SDL_Window *window) {
+  int width = 0, height = 0;
+  if (SDL_GetWindowSizeInPixels(window, &width, &height)) {
+    printf("size %d %d\n", width, height);
+    fflush(stdout);
+  }
+}
+
 static void draw_circle(SDL_Renderer *renderer, const Command *c) {
   SDL_SetRenderDrawColor(renderer, c->r, c->g, c->b, c->a);
   int steps = 42;
@@ -113,12 +121,15 @@ int main(void) {
   if (!renderer) { fprintf(stderr,"Vulkan renderer: %s\n",SDL_GetError()); SDL_DestroyWindow(window); SDL_Quit(); return 1; }
   fprintf(stderr,"Ao renderer: %s\n", SDL_GetRendererName(renderer));
   SDL_SetRenderVSync(renderer, 1);
+  report_size(window);
   int flags = fcntl(STDIN_FILENO, F_GETFL, 0); fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
   char input[65536] = {0}; size_t used=0; int running=1;
   while (running) {
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
       if (e.type == SDL_EVENT_QUIT) running=0;
+      if (e.type == SDL_EVENT_WINDOW_RESIZED || e.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED ||
+          e.type == SDL_EVENT_WINDOW_ENTER_FULLSCREEN || e.type == SDL_EVENT_WINDOW_LEAVE_FULLSCREEN) report_size(window);
       if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat) {
         SDL_Keycode k=e.key.key;
         if (k == SDLK_J) puts("key j"); else if (k == SDLK_K) puts("key k");

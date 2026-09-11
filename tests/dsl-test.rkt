@@ -5,9 +5,9 @@
 (check-equal? (lerp 0 10 .25) 2.5)
 (check-true (scene? (scene (rgb 0 0 0) '())))
 
-;; Regression for the idle-only bug: subprocess must receive /usr/bin/pw-record
+;; Regression for the idle-only bug: subprocess must receive /usr/bin/parec
 ;; (or equivalent), not the bare string that a shell would resolve via PATH.
-(define capture (pw-record-command "test.monitor" "/usr/bin/pw-record"))
-(check-equal? (car capture) "/usr/bin/pw-record")
-(check-equal? (cadr capture) "--target")
+(define capture (parec-command "test.monitor" "/usr/bin/parec"))
+(check-equal? (car capture) "/usr/bin/parec")
+(check-equal? (cadr capture) "--device")
 (check-equal? (caddr capture) "test.monitor")
