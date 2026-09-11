@@ -1,4 +1,6 @@
-RACKET := $(if $(wildcard .tooling/racket/bin/racket),.tooling/racket/bin/racket,racket)
+# Worktrees do not copy the ignored project-local runtime. Reuse the runtime
+# from the primary checkout when this checkout is an isolated worktree.
+RACKET := $(or $(wildcard .tooling/racket/bin/racket),$(wildcard ../../ao/.tooling/racket/bin/racket),racket)
 BUILD := build
 
 .PHONY: all run dev test clean worktree worktree-list worktree-remove worktree-prune
