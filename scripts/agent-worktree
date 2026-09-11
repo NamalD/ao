@@ -5,7 +5,7 @@ usage() {
   cat <<'EOF'
 Usage: scripts/agent-worktree {create|list|remove|prune} [name]
 
-Feature worktrees live in ../ao-worktrees/<name> on branch agent/<name>.
+Feature worktrees live in .worktrees/<name> on branch agent/<name>.
 EOF
 }
 
@@ -17,7 +17,7 @@ fi
 
 command=${1:-}
 name=${2:-}
-worktree_root="$(dirname "$root")/ao-worktrees"
+worktree_root="$root/.worktrees"
 
 require_name() {
   if [[ ! $name =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
@@ -48,7 +48,7 @@ case $command in
       exit 1
     fi
     mkdir -p "$worktree_root"
-    git worktree add -b "$branch" "$target" HEAD
+    git worktree add -b "$branch" "$target" master
     ;;
   list)
     git worktree list

@@ -3,7 +3,7 @@
 RACKET := $(or $(wildcard .tooling/racket/bin/racket),$(wildcard ../../ao/.tooling/racket/bin/racket),racket)
 BUILD := build
 
-.PHONY: all run dev test clean worktree worktree-list worktree-remove worktree-prune
+.PHONY: all run dev test clean worktree worktree-create worktree-list worktree-remove worktree-prune
 
 all: $(BUILD)/ao-native
 
@@ -35,9 +35,11 @@ test:
 clean:
 	rm -rf $(BUILD)
 
-# Create an isolated feature checkout at ../ao-worktrees/<NAME> on agent/<NAME>.
-# Example: make worktree NAME=audio-smoothing
-worktree:
+# Create an isolated feature checkout at .worktrees/<NAME> on agent/<NAME>.
+# Example: make worktree-create NAME=audio-smoothing
+worktree: worktree-create
+
+worktree-create:
 	./scripts/agent-worktree create "$(NAME)"
 
 worktree-list:
