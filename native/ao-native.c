@@ -14,7 +14,7 @@
 #define MAX_COMMANDS 8192
 #define MAX_POINTS 256
 
-typedef enum { CMD_RECT, CMD_CIRCLE, CMD_LIGHT, CMD_LINE, CMD_POLYLINE } CommandType;
+typedef enum { CMD_RECT, CMD_CIRCLE, CMD_LIGHT, CMD_LINE, CMD_POLYLINE, CMD_SPHERE3D } CommandType;
 typedef struct { CommandType type; float x1,y1,x2,y2,radius,width,intensity; Uint8 r,g,b,a, r2,g2,b2,a2; SDL_BlendMode blend; int count; SDL_FPoint points[MAX_POINTS]; } Command;
 static Command commands[MAX_COMMANDS];
 static int command_count = 0;
@@ -81,6 +81,29 @@ static void draw_light(SDL_Renderer *renderer, const Command *c) {
   inner.a *= fmaxf(0.0f, c->intensity);
   draw_fan(renderer, c->x1, c->y1, c->radius, inner,
            (SDL_FColor){inner.r,inner.g,inner.b,0});
+}
+
+static bool project_sphere(float x, float y, float z, float radius,
+                           int width, int height, SDL_FPoint *center,
+                           float *projected_radius) {
+  /* Camera is at z=2. A near plane keeps malformed plugin data harmless. */
+  float depth = 2.0f - z;
+  if (depth < .15f || radius <= 0.0f) return false;
+  center->x = width * .5f + x * height / depth;
+  center->y = height * .5f + y * height / depth;
+  *projected_radius = radius * height / depth;
+  return true;
+}
+
+static void draw_sphere3d(SDL_Renderer *renderer, const Command *c) {
+  int width = 0, height = 0;
+  if (!SDL_GetRenderOutputSize(renderer, &width, &height)) return;
+  SDL_FPoint center; float radius;
+  if (!project_sphere(c->x1, c->y1, c->x2, c->radius, width, height,
+                      &center, &radius)) return;
+  Command projected = *c;
+  projected.x1 = center.x; projected.y1 = center.y; projected.radius = radius;
+  draw_circle(renderer, &projected);
 }
 
 static void draw_rect(SDL_Renderer *renderer, const Command *c) {
@@ -182,6 +205,7 @@ static void render(SDL_Renderer *renderer) {
       draw_rect(renderer, c);
     } else if (c->type == CMD_CIRCLE) draw_circle(renderer, c);
     else if (c->type == CMD_LIGHT) draw_light(renderer, c);
+    else if (c->type == CMD_SPHERE3D) draw_sphere3d(renderer, c);
     else if (c->type == CMD_LINE) draw_ribbon_segment(renderer,c->x1,c->y1,c->x2,c->y2,c->width,color(c->r,c->g,c->b,c->a));
     else if (c->type == CMD_POLYLINE && c->count > 1) {
       /* A joined strip has shared triangles at corners.  Additive blending
@@ -235,6 +259,7 @@ static void parse_line(char *line, SDL_Window *window, SDL_Renderer *renderer, i
     if (sscanf(line, "rect %f %f %f %f %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu", &c->x1,&c->y1,&c->x2,&c->y2,&c->r,&c->g,&c->b,&c->a,&c->r2,&c->g2,&c->b2,&c->a2) == 12) { c->type=CMD_RECT; command_count++; }
     else if (sscanf(line, "circle %f %f %f %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu", &c->x1,&c->y1,&c->radius,&c->r,&c->g,&c->b,&c->a,&c->r2,&c->g2,&c->b2,&c->a2) == 11) { c->type=CMD_CIRCLE; command_count++; }
     else if (sscanf(line, "light %f %f %f %hhu %hhu %hhu %hhu %f", &c->x1,&c->y1,&c->radius,&c->r,&c->g,&c->b,&c->a,&c->intensity) == 8) { c->type=CMD_LIGHT; command_count++; }
+    else if (sscanf(line, "sphere3d %f %f %f %f %hhu %hhu %hhu %hhu", &c->x1,&c->y1,&c->x2,&c->radius,&c->r,&c->g,&c->b,&c->a) == 8) { c->type=CMD_SPHERE3D; command_count++; }
     else if (sscanf(line, "line %f %f %f %f %f %hhu %hhu %hhu %hhu", &c->x1,&c->y1,&c->x2,&c->y2,&c->width,&c->r,&c->g,&c->b,&c->a) == 9) { c->type=CMD_LINE; command_count++; }
     else if (!strncmp(line, "polyline ", 9)) {
       char *at=line+9, *end; c->type=CMD_POLYLINE; c->count=(int)strtol(at,&end,10); at=end;

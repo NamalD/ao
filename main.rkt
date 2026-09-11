@@ -57,6 +57,14 @@
     [(polyline? n)
      (string-append prefix (format "polyline ~a ~a ~a" (length (polyline-points n)) (* (min width height) (abs scale) (polyline-width n)) (color (polyline-color n)))
                     (apply string-append (for/list ([p (polyline-points n)]) (define-values (x y) (xy (car p) (cdr p))) (format " ~a ~a" x y))) "\n")]
+    [(sphere3d? n)
+     (define-values (u v) (xy (+ .5 (sphere3d-x n)) (+ .5 (sphere3d-y n))))
+     (string-append prefix
+                    (format "sphere3d ~a ~a ~a ~a ~a\n"
+                            (- (/ u width) .5) (- (/ v height) .5)
+                            (sphere3d-z n)
+                            (* (abs scale) (sphere3d-radius n))
+                            (color (sphere3d-color n))))]
     [else (error 'scene "unknown node: ~e" n)]))
 (define (write-scene out s width height [old #f] [mix 1.0])
   (define bg (scene-background s))
@@ -73,7 +81,7 @@
 (start-audio-capture started (lambda (message) (log! "audio: ~a" message)))
 (define plugin-dir (build-path root "plugins"))
 (define plugins (discover-plugins plugin-dir))
-(define selected (or (saved-name) "Rings"))
+(define selected (or (saved-name) "Depth"))
 (define index (or (index-where plugins (lambda (p) (equal? selected (plugin-name p)))) 0))
 (define previous #f) (define transition-start -1.0) (define help-until 0.0) (define status-until 0.0)
 (define render-width 1280) (define render-height 720)

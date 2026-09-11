@@ -56,7 +56,9 @@ Ao watches source timestamps, retains the last working plugin if a reload or
 frame fails, and appends diagnostics to `state/ao.log`.
 
 The rendering bridge uses SDL's GPU renderer pinned to its Vulkan driver; the
-plugins never see backend concepts.
+plugins never see backend concepts. `sphere3d` adds a perspective-projected
+primitive with centered x/y coordinates and normalized depth, and the included
+`Depth` visualizer uses it for a simple 3D scene.
 
 The included `Ink` visualizer layers slowly drifting translucent pools and
 flowing ribbons for an organic, colour-shifting background.
