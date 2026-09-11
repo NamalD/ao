@@ -12,9 +12,6 @@
            (for/list ([i (in-range 28)])
              (define angle (* i (/ (* 2 pi) 28)))
              (define level (list-ref (audio-frame-spectrum a) (modulo (* i 2) 48)))
-             ;; Give each orb a stable colour identity and a little independent
-             ;; movement, while the spectrum and impulse still drive the main
-             ;; ring shape.
              (define orb-phase (+ (* .08 i) (* .35 level)))
              (define wobble (sin (+ (* .7 i) (* .9 t))))
              (define orb-hue (+ hue orb-phase))
@@ -26,7 +23,9 @@
              (gradient-circle (+ .5 (* orbit (cos angle)))
                               (+ .5 (* orbit (sin angle)))
                               radius
-                              (color-scale (color-cycle orb-hue) (+ .55 (* .45 level)) .95)
-                              (color-cycle orb-hue 0)))
+                              (color-scale (color-cycle orb-hue) (+ .65 (* .35 level)) .98)
+                              ;; Retaining colour and opacity at the rim gives each
+                              ;; stretched orb a defined, bead-like silhouette.
+                              (color-scale (color-cycle orb-hue) (+ .16 (* .16 level)) .7)))
            0 0 (+ 1 (* .16 impulse)) (* .11 t) 1 "add")
           )))
