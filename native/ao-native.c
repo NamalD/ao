@@ -156,8 +156,13 @@ static void render(SDL_Renderer *renderer) {
     } else if (c->type == CMD_CIRCLE) draw_circle(renderer, c);
     else if (c->type == CMD_LIGHT) draw_light(renderer, c);
     else if (c->type == CMD_LINE) draw_ribbon_segment(renderer,c->x1,c->y1,c->x2,c->y2,c->width,color(c->r,c->g,c->b,c->a));
-    else if (c->type == CMD_POLYLINE && c->count > 1)
+    else if (c->type == CMD_POLYLINE && c->count > 1) {
+      /* A joined strip has shared triangles at corners.  Additive blending
+         exposes those overlaps as white seams at high-impact amplitudes;
+         alpha compositing keeps the strip's color stable across each join. */
+      SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
       draw_ribbon_polyline(renderer, c->points, c->count, c->width, color(c->r,c->g,c->b,c->a));
+    }
   }
   if (layer) {
     SDL_SetRenderTarget(renderer, NULL);
