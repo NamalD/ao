@@ -15,22 +15,39 @@
 (define (save-name! name) (call-with-output-file (state-path) #:exists 'truncate (lambda (out) (write name out))))
 (define (u8 x) (inexact->exact (round (* 255 (clamp x)))))
 (define (color-lines c) (format "~a ~a ~a ~a" (u8 (rgba-r c)) (u8 (rgba-g c)) (u8 (rgba-b c)) (u8 (rgba-a c))))
-(define (point->xy p width height) (values (* width (car p)) (* height (cdr p))))
-(define (node->line n width height [opacity 1.0])
-  (define (c-line tag c) (string-append tag " " (color-lines (struct-copy rgba c [a (* opacity (rgba-a c))]))))
+(define (apply-transform x y tx ty scale rotation)
+  (values (+ tx (* scale (- (* x (cos rotation)) (* y (sin rotation)))))
+          (+ ty (* scale (+ (* x (sin rotation)) (* y (cos rotation)))))))
+(define (node->lines n width height [tx 0.0] [ty 0.0] [scale 1.0] [rotation 0.0] [opacity 1.0] [blend "normal"])
+  (define (color c) (color-lines (struct-copy rgba c [a (* opacity (rgba-a c))])))
+  (define (xy x y) (define-values (u v) (apply-transform x y tx ty scale rotation)) (values (* width u) (* height v)))
+  (define prefix (format "blend ~a\n" blend))
   (cond
-    [(rect? n) (format "~a\n" (c-line (format "rect ~a ~a ~a ~a" (* width (rect-x n)) (* height (rect-y n)) (* width (rect-width n)) (* height (rect-height n))) (rect-color n)))]
-    [(circle? n) (format "circle ~a ~a ~a ~a\n" (* width (circle-x n)) (* height (circle-y n)) (* (min width height) (circle-radius n)) (color-lines (struct-copy rgba (circle-color n) [a (* opacity (rgba-a (circle-color n)))])))]
-    [(line? n) (format "line ~a ~a ~a ~a ~a ~a\n" (* width (line-x1 n)) (* height (line-y1 n)) (* width (line-x2 n)) (* height (line-y2 n)) (* (min width height) (line-width n)) (color-lines (struct-copy rgba (line-color n) [a (* opacity (rgba-a (line-color n)))])))]
+    [(group? n)
+     (define-values (next-tx next-ty) (apply-transform (group-tx n) (group-ty n) tx ty scale rotation))
+     (apply string-append (for/list ([child (group-nodes n)])
+       (node->lines child width height next-tx next-ty (* scale (group-scale n)) (+ rotation (group-rotation n)) (* opacity (group-opacity n)) (group-blend n))))]
+    [(rect? n)
+     (define-values (x y) (xy (rect-x n) (rect-y n)))
+     (string-append prefix (format "rect ~a ~a ~a ~a ~a\n" x y (* width scale (rect-width n)) (* height scale (rect-height n)) (color (rect-color n))))]
+    [(circle? n)
+     (define-values (x y) (xy (circle-x n) (circle-y n)))
+     (string-append prefix (format "circle ~a ~a ~a ~a ~a\n" x y (* (min width height) (abs scale) (circle-radius n)) (color (circle-color n)) (color (struct-copy rgba (circle-color n) [a 0.0]))))]
+    [(gradient-circle? n)
+     (define-values (x y) (xy (gradient-circle-x n) (gradient-circle-y n)))
+     (string-append prefix (format "circle ~a ~a ~a ~a ~a\n" x y (* (min width height) (abs scale) (gradient-circle-radius n)) (color (gradient-circle-inner n)) (color (gradient-circle-outer n))))]
+    [(line? n)
+     (define-values (x1 y1) (xy (line-x1 n) (line-y1 n))) (define-values (x2 y2) (xy (line-x2 n) (line-y2 n)))
+     (string-append prefix (format "line ~a ~a ~a ~a ~a ~a\n" x1 y1 x2 y2 (* (min width height) (abs scale) (line-width n)) (color (line-color n))))]
     [(polyline? n)
-     (string-append (format "polyline ~a ~a ~a" (length (polyline-points n)) (* (min width height) (polyline-width n)) (color-lines (struct-copy rgba (polyline-color n) [a (* opacity (rgba-a (polyline-color n)))])))
-                    (apply string-append (for/list ([p (polyline-points n)]) (define-values (x y) (point->xy p width height)) (format " ~a ~a" x y))) "\n")]
+     (string-append prefix (format "polyline ~a ~a ~a" (length (polyline-points n)) (* (min width height) (abs scale) (polyline-width n)) (color (polyline-color n)))
+                    (apply string-append (for/list ([p (polyline-points n)]) (define-values (x y) (xy (car p) (cdr p))) (format " ~a ~a" x y))) "\n")]
     [else (error 'scene "unknown node: ~e" n)]))
 (define (write-scene out s width height [old #f] [mix 1.0])
   (define bg (scene-background s))
   (fprintf out "clear ~a\n" (color-lines bg))
-  (when old (for ([n (scene-nodes old)]) (display (node->line n width height (- 1.0 mix)) out)))
-  (for ([n (scene-nodes s)]) (display (node->line n width height mix) out))
+  (when old (for ([n (scene-nodes old)]) (display (node->lines n width height 0.0 0.0 1.0 0.0 (- 1.0 mix)) out)))
+  (for ([n (scene-nodes s)]) (display (node->lines n width height 0.0 0.0 1.0 0.0 mix) out))
   (display "present\n" out) (flush-output out))
 
 (define started (current-inexact-milliseconds))
@@ -39,13 +56,23 @@
   (subprocess #f #f #f (path->string (build-path root "build" "ao-native"))))
 (thread (lambda () (let loop () (define line (read-line native-err 'any)) (unless (eof-object? line) (log! "native: ~a" line) (loop)))))
 (start-audio-capture started (lambda (message) (log! "audio: ~a" message)))
-(define plugins (discover-plugins (build-path root "plugins")))
+(define plugin-dir (build-path root "plugins"))
+(define plugins (discover-plugins plugin-dir))
 (define selected (or (saved-name) "Rings"))
 (define index (or (index-where plugins (lambda (p) (equal? selected (plugin-name p)))) 0))
 (define previous #f) (define transition-start -1.0) (define help-until 0.0) (define status-until 0.0)
 (define render-width 1280) (define render-height 720)
 (define (title! text) (fprintf to-native "title ~a\n" text) (flush-output to-native))
 (define (status! text) (fprintf to-native "status ~a\n" text) (flush-output to-native))
+(define next-plugin-scan 0.0)
+(define (rescan-plugins!)
+  (define selected-name (plugin-name (list-ref plugins index)))
+  (define-values (found errors) (rescan-plugins plugin-dir plugins))
+  (for ([err errors]) (log! "plugin discovery: ~a" err))
+  (unless (null? found)
+    (set! plugins found)
+    (set! index (or (index-where plugins (lambda (p) (equal? selected-name (plugin-name p))))
+                    (min index (sub1 (length plugins)))))))
 (define (switch! delta)
   (set! previous (list-ref plugins index))
   (set! index (modulo (+ index delta) (length plugins)))
@@ -59,7 +86,7 @@
       (cond [(equal? event "key j") (switch! -1)]
             [(equal? event "key k") (switch! 1)]
             [(equal? event "key h") (set! help-until (+ (now) 4.0))]
-            [(equal? event "key r") (set! status-until (+ (now) 2.0))]
+            [(equal? event "key r") (rescan-plugins!) (set! status-until (+ (now) 2.0))]
             [(regexp-match #rx"^size ([0-9]+) ([0-9]+)$" event)
              => (lambda (m) (set! render-width (string->number (list-ref m 1)))
                             (set! render-height (string->number (list-ref m 2))))]
@@ -68,6 +95,9 @@
 (with-handlers ([exn:break? (lambda (_) (void))])
  (let loop ()
   (handle-events!)
+  (when (>= (now) next-plugin-scan)
+    (rescan-plugins!)
+    (set! next-plugin-scan (+ (now) 1.0)))
   (define p (list-ref plugins index))
   (define-values (new-p reload-error) (reload-plugin p))
   (when reload-error (log! "reload ~a: ~a" (plugin-name p) reload-error) (title! (format "Ao — reload failed: ~a" reload-error)) (status! (format "Reload failed: ~a" reload-error)))

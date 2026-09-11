@@ -1,7 +1,7 @@
 #lang racket
 
 (require racket/file racket/path racket/list racket/format "dsl.rkt")
-(provide (struct-out plugin) discover-plugins reload-plugin run-plugin)
+(provide (struct-out plugin) discover-plugins rescan-plugins reload-plugin run-plugin)
 
 (struct plugin (path name render modified last-scene) #:transparent #:mutable)
 
@@ -18,6 +18,22 @@
              #:when (regexp-match? #rx"\\.rkt$" (path->string path)))
     (define-values (p err) (load-plugin path #f))
     (if err (error 'discover-plugins "~a: ~a" path err) p)))
+
+;; Keep loaded plugins so their last scene survives a directory rescan.  New
+;; files that fail to load are reported without taking down the visualizer.
+(define (rescan-plugins dir old-plugins)
+  (define-values (found errors)
+    (for/fold ([found '()] [errors '()])
+              ([path (sort (directory-list dir #:build? #t) path<?)]
+               #:when (regexp-match? #rx"\\.rkt$" (path->string path)))
+      (define old (findf (lambda (p) (equal? path (plugin-path p))) old-plugins))
+      (if old
+          (values (cons old found) errors)
+          (let-values ([(p err) (load-plugin path #f)])
+            (if err
+                (values found (cons (format "~a: ~a" path err) errors))
+                (values (cons p found) errors))))))
+  (values (reverse found) (reverse errors)))
 
 (define (reload-plugin p)
   (if (> (file-or-directory-modify-seconds (plugin-path p)) (plugin-modified p))

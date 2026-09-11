@@ -1,5 +1,5 @@
 #lang racket
-(require rackunit "../ao/dsl.rkt" "../ao/audio.rkt")
+(require rackunit racket/file "../ao/dsl.rkt" "../ao/audio.rkt" "../ao/plugins.rkt")
 (check-equal? (clamp -1) 0.0)
 (check-equal? (clamp 2) 1.0)
 (check-equal? (lerp 0 10 .25) 2.5)
@@ -11,3 +11,17 @@
 (check-equal? (car capture) "/usr/bin/parec")
 (check-equal? (cadr capture) "--device")
 (check-equal? (caddr capture) "test.monitor")
+
+;; Newly added plugin files are discovered without replacing loaded plugins.
+(define plugin-dir (make-temporary-file "ao-plugin-test~a" 'directory (current-directory)))
+(define plugin-path (build-path plugin-dir "new.rkt"))
+(call-with-output-file plugin-path
+  (lambda (out)
+    (display "#lang racket\n(provide name render)\n(define name \"New\")\n(define (render a) #f)\n" out)))
+(define-values (discovered discovery-errors) (rescan-plugins plugin-dir '()))
+(check-equal? discovery-errors '())
+(check-equal? (map plugin-name discovered) '("New"))
+(define-values (rescanned rescan-errors) (rescan-plugins plugin-dir discovered))
+(check-equal? rescan-errors '())
+(check-true (eq? (car discovered) (car rescanned)))
+(delete-directory/files plugin-dir)
