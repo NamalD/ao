@@ -1,0 +1,6 @@
+.tooling/
+build/
+state/
+*.zo
+compiled/
+**/compiled/

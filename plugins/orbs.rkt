@@ -1,0 +1,13 @@
+#lang racket
+(require "../ao/dsl.rkt")
+(provide name render)
+(define name "Orbs")
+(define (render a)
+  (define t (audio-frame-time a))
+  (scene (rgb .018 .008 .025)
+         (for/list ([i (in-range 38)])
+           (define band (list-ref (audio-frame-spectrum a) (modulo i 48)))
+           (define x (+ .5 (* .42 (sin (+ (* .37 i) (* .19 t))))) )
+           (define y (+ .5 (* .42 (cos (+ (* .61 i) (* .13 t))))) )
+           (circle x y (+ .012 (* .04 band))
+                   (rgba* (+ .25 (* .4 band)) .12 (+ .6 (* .35 band)) .38)))))

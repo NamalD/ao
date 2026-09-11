@@ -1,0 +1,16 @@
+#lang racket
+(require "../ao/dsl.rkt")
+(provide name render)
+(define name "Rings")
+(define (render a)
+  (define pulse (+ .14 (* .13 (audio-frame-loudness a))))
+  (scene (rgb .012 .008 .03)
+         (append
+          (for/list ([i (in-range 20)])
+            (define angle (+ (* i (/ (* 2 pi) 20)) (* .15 (audio-frame-time a))))
+            (define level (list-ref (audio-frame-spectrum a) (modulo (* i 2) 48)))
+            (circle (+ .5 (* (+ .11 (* .2 level)) (cos angle)))
+                    (+ .5 (* (+ .11 (* .2 level)) (sin angle)))
+                    (+ .008 (* .025 level))
+                    (rgba* .25 (+ .2 (* .6 level)) 1.0 .72)))
+          (list (circle .5 .5 pulse (rgba* .35 .08 .9 .22))))))
