@@ -7,6 +7,7 @@
   (define t (audio-frame-time a))
   (define impulse (audio-frame-impulse a))
   (define hue (* .35 t))
+  (define loudness (audio-frame-loudness a))
   (scene (color-scale (color-cycle hue) .06)
          (list
           (gradient-circle .5 .5 (+ .65 (* .07 impulse))
@@ -21,4 +22,5 @@
              (gradient-circle x y (+ .01 (* .045 band) (* .018 impulse))
                               (color-scale (color-cycle phase) (+ .5 (* .45 band)) (+ .42 (* .25 band)))
                               (color-cycle phase 0)))
-           0 0 (+ 1 (* .12 impulse)) 0 1 "add"))))
+           0 0 (+ 1 (* .12 impulse)) 0 1 "add")
+          (light .5 .5 (+ .12 (* .12 loudness)) (color-cycle hue) (+ .35 (* .65 loudness))))))

@@ -3,7 +3,7 @@
 (provide (struct-out audio-frame) (struct-out scene)
          (struct-out rgba) (struct-out rect) (struct-out circle)
          (struct-out gradient-circle) (struct-out gradient-rect) (struct-out group)
-         (struct-out line) (struct-out polyline)
+         (struct-out line) (struct-out polyline) (struct-out light)
          rgb rgba* color-cycle color-scale clamp lerp)
 
 ;; Plugins use normalized coordinates: x/y/width/height are 0..1.
@@ -23,6 +23,10 @@
 (struct group (nodes tx ty scale rotation opacity blend) #:prefab)
 (struct line (x1 y1 x2 y2 width color) #:prefab)
 (struct polyline (points width color) #:prefab)
+;; A light is an additive radial source.  Its position and radius use the same
+;; normalized scene coordinates as the other primitives; intensity is a
+;; multiplier applied by the native renderer.
+(struct light (x y radius color intensity) #:prefab)
 
 (define (clamp x [low 0.0] [high 1.0]) (max low (min high x)))
 (define (rgb r g b) (rgba r g b 1.0))

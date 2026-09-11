@@ -14,8 +14,8 @@
 #define MAX_COMMANDS 8192
 #define MAX_POINTS 256
 
-typedef enum { CMD_RECT, CMD_CIRCLE, CMD_LINE, CMD_POLYLINE } CommandType;
-typedef struct { CommandType type; float x1,y1,x2,y2,radius,width; Uint8 r,g,b,a, r2,g2,b2,a2; SDL_BlendMode blend; int count; SDL_FPoint points[MAX_POINTS]; } Command;
+typedef enum { CMD_RECT, CMD_CIRCLE, CMD_LIGHT, CMD_LINE, CMD_POLYLINE } CommandType;
+typedef struct { CommandType type; float x1,y1,x2,y2,radius,width,intensity; Uint8 r,g,b,a, r2,g2,b2,a2; SDL_BlendMode blend; int count; SDL_FPoint points[MAX_POINTS]; } Command;
 static Command commands[MAX_COMMANDS];
 static int command_count = 0;
 static Uint8 clear_r = 2, clear_g = 2, clear_b = 8, clear_a = 255;
@@ -57,6 +57,13 @@ static void draw_circle(SDL_Renderer *renderer, const Command *c) {
   SDL_FColor glow = inner; glow.a *= 0.18f;
   draw_fan(renderer, c->x1, c->y1, c->radius * 2.7f, glow, (SDL_FColor){inner.r,inner.g,inner.b,0});
   draw_fan(renderer, c->x1, c->y1, c->radius, inner, outer);
+}
+
+static void draw_light(SDL_Renderer *renderer, const Command *c) {
+  SDL_FColor inner = color(c->r,c->g,c->b,c->a);
+  inner.a *= fmaxf(0.0f, c->intensity);
+  draw_fan(renderer, c->x1, c->y1, c->radius, inner,
+           (SDL_FColor){inner.r,inner.g,inner.b,0});
 }
 
 static void draw_rect(SDL_Renderer *renderer, const Command *c) {
@@ -147,6 +154,7 @@ static void render(SDL_Renderer *renderer) {
     if (c->type == CMD_RECT) {
       draw_rect(renderer, c);
     } else if (c->type == CMD_CIRCLE) draw_circle(renderer, c);
+    else if (c->type == CMD_LIGHT) draw_light(renderer, c);
     else if (c->type == CMD_LINE) draw_ribbon_segment(renderer,c->x1,c->y1,c->x2,c->y2,c->width,color(c->r,c->g,c->b,c->a));
     else if (c->type == CMD_POLYLINE && c->count > 1)
       draw_ribbon_polyline(renderer, c->points, c->count, c->width, color(c->r,c->g,c->b,c->a));
@@ -183,6 +191,7 @@ static void parse_line(char *line, SDL_Window *window, SDL_Renderer *renderer, i
     Command *c = &commands[command_count]; memset(c, 0, sizeof(*c)); c->blend=active_blend;
     if (sscanf(line, "rect %f %f %f %f %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu", &c->x1,&c->y1,&c->x2,&c->y2,&c->r,&c->g,&c->b,&c->a,&c->r2,&c->g2,&c->b2,&c->a2) == 12) { c->type=CMD_RECT; command_count++; }
     else if (sscanf(line, "circle %f %f %f %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu", &c->x1,&c->y1,&c->radius,&c->r,&c->g,&c->b,&c->a,&c->r2,&c->g2,&c->b2,&c->a2) == 11) { c->type=CMD_CIRCLE; command_count++; }
+    else if (sscanf(line, "light %f %f %f %hhu %hhu %hhu %hhu %f", &c->x1,&c->y1,&c->radius,&c->r,&c->g,&c->b,&c->a,&c->intensity) == 8) { c->type=CMD_LIGHT; command_count++; }
     else if (sscanf(line, "line %f %f %f %f %f %hhu %hhu %hhu %hhu", &c->x1,&c->y1,&c->x2,&c->y2,&c->width,&c->r,&c->g,&c->b,&c->a) == 9) { c->type=CMD_LINE; command_count++; }
     else if (!strncmp(line, "polyline ", 9)) {
       char *at=line+9, *end; c->type=CMD_POLYLINE; c->count=(int)strtol(at,&end,10); at=end;

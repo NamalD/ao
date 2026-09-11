@@ -10,6 +10,10 @@
 (check-true (gradient-circle? (gradient-circle .5 .5 .1 (rgb 1 0 0) (rgba* 1 0 0 0))))
 (check-true (gradient-rect? (gradient-rect 0 0 1 1 (rgb 0 0 0) (rgb 1 1 1))))
 (check-true (group? (group '() 0 0 1 0 1 "add")))
+(define test-light (light .25 .75 .2 (rgba* 1 .5 0 .8) 1.5))
+(check-true (light? test-light))
+(check-equal? (light-radius test-light) .2)
+(check-equal? (light-intensity test-light) 1.5)
 
 ;; Orbs should cycle through colours over time rather than stay in one hue.
 (define-runtime-path orbs-plugin "../plugins/orbs.rkt")
