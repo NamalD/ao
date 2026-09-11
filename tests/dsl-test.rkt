@@ -33,6 +33,8 @@
 (check-equal? (gradient-circle-inner quiet-ring-orb)
               (gradient-circle-inner (second quiet-ring-orbs)))
 (check-not-equal? (gradient-circle-inner quiet-ring-orb) (gradient-circle-inner loud-ring-orb))
+(check-true (positive? (rgba-a (gradient-circle-outer quiet-ring-orb))))
+(check-equal? (group-blend (first (scene-nodes (rings-render quiet-frame)))) "normal")
 (check-equal? (length (scene-nodes (rings-render quiet-frame))) 1)
 (check-equal? (length (group-nodes (first (scene-nodes (rings-render quiet-frame))))) 28)
 (for ([plugin-path (list orbs-plugin rings-plugin wave-plugin rothko-plugin)])

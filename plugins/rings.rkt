@@ -13,8 +13,10 @@
              (define orb-hue (+ hue (* .35 level)))
              (gradient-circle (+ .5 (* (+ .14 (* .22 level)) (cos angle)))
                               (+ .5 (* (+ .14 (* .22 level)) (sin angle)))
-                              (+ .006 (* .027 level))
-                              (color-scale (color-cycle orb-hue) (+ .55 (* .45 level)) .95)
-                              (color-cycle orb-hue 0)))
-           0 0 1 (* .11 (audio-frame-time a)) 1 "add")
+                              (+ .009 (* .018 level))
+                              (color-scale (color-cycle orb-hue) (+ .65 (* .35 level)) .98)
+                              ;; Retaining colour and opacity at the rim gives each
+                              ;; stretched orb a defined, bead-like silhouette.
+                              (color-scale (color-cycle orb-hue) (+ .16 (* .16 level)) .7)))
+           0 0 1 (* .11 (audio-frame-time a)) 1 "normal")
           )))
