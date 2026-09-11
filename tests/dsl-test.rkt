@@ -24,6 +24,12 @@
 (define early-orb (first (group-nodes (second (scene-nodes (orbs-render quiet-frame))))))
 (define later-orb (first (group-nodes (second (scene-nodes (orbs-render later-frame))))))
 (check-not-equal? (gradient-circle-inner early-orb) (gradient-circle-inner later-orb))
+(define rings-render (dynamic-require rings-plugin 'render))
+(define loud-rings-frame
+  (audio-frame 0 '() '() (make-list 48 .9) 0 0 0 1280 720))
+(define quiet-ring-orb (first (group-nodes (first (scene-nodes (rings-render quiet-frame))))))
+(define loud-ring-orb (first (group-nodes (first (scene-nodes (rings-render loud-rings-frame))))))
+(check-not-equal? (gradient-circle-inner quiet-ring-orb) (gradient-circle-inner loud-ring-orb))
 (for ([plugin-path (list orbs-plugin rings-plugin wave-plugin rothko-plugin)])
   (define render (dynamic-require plugin-path 'render))
   (check-not-equal? (scene-background (render quiet-frame))
