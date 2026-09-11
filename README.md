@@ -19,8 +19,9 @@ make dev
 ```
 
 `make` builds the narrow C bridge in `native/`. A project-local Racket runtime
-is used automatically when present. Ao opens windowed and restores only the
-last selected visualizer from `state/last-plugin.rktd`.
+is used automatically when present. Ao opens windowed and restores the last
+selected visualizer from `state/last-plugin.rktd` and the last window position
+from `state/window-position.rktd`.
 
 Keys: `j` previous visualizer, `k` next visualizer, `f` fullscreen, `i` toggle
 the FPS counter, `h` show the four-second help overlay, `r` rescan plugins,

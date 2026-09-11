@@ -38,6 +38,13 @@ static void report_size(SDL_Window *window) {
   }
 }
 
+static void report_position(SDL_Window *window) {
+  int x = 0, y = 0;
+  SDL_GetWindowPosition(window, &x, &y);
+  printf("position %d %d\n", x, y);
+  fflush(stdout);
+}
+
 static SDL_FColor color(Uint8 r, Uint8 g, Uint8 b, Uint8 a) {
   return (SDL_FColor){r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
 }
@@ -227,6 +234,10 @@ static void parse_line(char *line, SDL_Window *window, SDL_Renderer *renderer, i
   if (!strncmp(line, "clear ", 6)) { sscanf(line+6, "%hhu %hhu %hhu %hhu", &clear_r,&clear_g,&clear_b,&clear_a); command_count=0; active_blend=SDL_BLENDMODE_BLEND; }
   else if (!strncmp(line, "blend ", 6)) active_blend = !strcmp(line+6,"add") || !strcmp(line+6,"screen") ? SDL_BLENDMODE_ADD : SDL_BLENDMODE_BLEND;
   else if (!strncmp(line, "title ", 6)) SDL_SetWindowTitle(window, line+6);
+  else if (!strncmp(line, "position ", 9)) {
+    int x = 0, y = 0;
+    if (sscanf(line + 9, "%d %d", &x, &y) == 2) SDL_SetWindowPosition(window, x, y);
+  }
   else if (!strncmp(line, "help ", 5)) show_help = atoi(line+5) != 0;
   else if (!strncmp(line, "status ", 7)) { snprintf(status_text, sizeof(status_text), "%s", line+7); status_until = SDL_GetTicks() + 3000; }
   else if (!strcmp(line, "present")) *present = 1;
@@ -275,6 +286,7 @@ int main(void) {
       if (e.type == SDL_EVENT_QUIT) running=0;
       if (e.type == SDL_EVENT_WINDOW_RESIZED || e.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED ||
           e.type == SDL_EVENT_WINDOW_ENTER_FULLSCREEN || e.type == SDL_EVENT_WINDOW_LEAVE_FULLSCREEN) report_size(window);
+      if (e.type == SDL_EVENT_WINDOW_MOVED) report_position(window);
       if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat) {
         SDL_Keycode k=e.key.key;
         if (k == SDLK_J) puts("key j"); else if (k == SDLK_K) puts("key k");
