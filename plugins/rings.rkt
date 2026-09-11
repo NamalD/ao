@@ -7,7 +7,6 @@
   (define pulse (+ .14 (* .13 (audio-frame-loudness a))))
   (scene (color-scale (color-cycle hue) .045)
          (list
-          (gradient-circle .5 .5 (* 2.4 pulse) (color-scale (color-cycle hue) .45 .12) (color-cycle hue 0))
           (group
            (for/list ([i (in-range 28)])
              (define angle (* i (/ (* 2 pi) 28)))
