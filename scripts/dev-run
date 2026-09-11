@@ -1,0 +1,9 @@
+#!/bin/sh
+
+# watchexec stops the previous process before restarting it. Keep development
+# usable when a rebuild fails by letting the host use the last good bridge.
+if ! make all; then
+	printf '%s\n' 'Ao build failed; running the previous successful build.' >&2
+fi
+
+exec "${RACKET:-racket}" main.rkt
