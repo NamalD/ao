@@ -14,7 +14,7 @@
 ;; Orbs should cycle through colours over time rather than stay in one hue.
 (define-runtime-path orbs-plugin "../plugins/orbs.rkt")
 (define-runtime-path rings-plugin "../plugins/rings.rkt")
-(define-runtime-path ribbon-plugin "../plugins/ribbon.rkt")
+(define-runtime-path wave-plugin "../plugins/wave.rkt")
 (define-runtime-path rothko-plugin "../plugins/rothko.rkt")
 (define orbs-render (dynamic-require orbs-plugin 'render))
 (define quiet-frame
@@ -24,14 +24,13 @@
 (define early-orb (first (group-nodes (second (scene-nodes (orbs-render quiet-frame))))))
 (define later-orb (first (group-nodes (second (scene-nodes (orbs-render later-frame))))))
 (check-not-equal? (gradient-circle-inner early-orb) (gradient-circle-inner later-orb))
-(for ([plugin-path (list orbs-plugin rings-plugin ribbon-plugin rothko-plugin)])
+(for ([plugin-path (list orbs-plugin rings-plugin wave-plugin rothko-plugin)])
   (define render (dynamic-require plugin-path 'render))
   (check-not-equal? (scene-background (render quiet-frame))
                     (scene-background (render later-frame))))
 
 ;; Wave uses the full capture resolution and filters the raw waveform so its
 ;; animated sine line remains visually continuous instead of faceting.
-(define-runtime-path wave-plugin "../plugins/wave.rkt")
 (define wave-render (dynamic-require wave-plugin 'render))
 (define jagged-frame
   (audio-frame 0 (for/list ([i (in-range 256)]) (if (even? i) -1.0 1.0)) '()

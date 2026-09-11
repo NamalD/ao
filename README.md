@@ -10,6 +10,14 @@ made by small, hot-reloadable Racket plugins.
 make run
 ```
 
+For development, install [`watchexec`](https://github.com/watchexec/watchexec)
+and use `make dev`. It restarts Ao automatically when host, plugin, native, or
+build files change:
+
+```sh
+make dev
+```
+
 `make` builds the narrow C bridge in `native/`. A project-local Racket runtime
 is used automatically when present. Ao opens windowed and restores only the
 last selected visualizer from `state/last-plugin.rktd`.
