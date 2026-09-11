@@ -21,7 +21,11 @@ the four-second help overlay, `r` rescan plugins, `q` or `Esc` quit.
 
 Drop a `.rkt` module into `plugins/`. A plugin exports `name` and `render`.
 `render` receives an `audio-frame` and returns a `scene` with high-level
-primitives. See the included plugins and `ao/dsl.rkt` for the compact API.
+primitives. The compact API includes filled radial-gradient circles, linear-gradient rectangles,
+thick polylines, and composable `group` layers with translation, scale,
+rotation, opacity, and normal/additive blending. The Vulkan-backed renderer
+adds soft bloom to circles and draws polylines as smooth triangle ribbons. See
+the included plugins and `ao/dsl.rkt`.
 Ao watches source timestamps, retains the last working plugin if a reload or
 frame fails, and appends diagnostics to `state/ao.log`.
 

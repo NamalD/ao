@@ -16,20 +16,27 @@
 (define (u8 x) (inexact->exact (round (* 255 (clamp x)))))
 (define (color-lines c) (format "~a ~a ~a ~a" (u8 (rgba-r c)) (u8 (rgba-g c)) (u8 (rgba-b c)) (u8 (rgba-a c))))
 (define (apply-transform x y tx ty scale rotation)
-  (values (+ tx (* scale (- (* x (cos rotation)) (* y (sin rotation)))))
-          (+ ty (* scale (+ (* x (sin rotation)) (* y (cos rotation)))))))
+  ;; Scene transforms are centered on the viewport so rotating a layer of
+  ;; objects around (.5,.5) does not fling it toward the top-left corner.
+  (define dx (- x .5)) (define dy (- y .5))
+  (values (+ .5 tx (* scale (- (* dx (cos rotation)) (* dy (sin rotation)))))
+          (+ .5 ty (* scale (+ (* dx (sin rotation)) (* dy (cos rotation)))))))
 (define (node->lines n width height [tx 0.0] [ty 0.0] [scale 1.0] [rotation 0.0] [opacity 1.0] [blend "normal"])
   (define (color c) (color-lines (struct-copy rgba c [a (* opacity (rgba-a c))])))
   (define (xy x y) (define-values (u v) (apply-transform x y tx ty scale rotation)) (values (* width u) (* height v)))
   (define prefix (format "blend ~a\n" blend))
   (cond
     [(group? n)
-     (define-values (next-tx next-ty) (apply-transform (group-tx n) (group-ty n) tx ty scale rotation))
+     (define next-tx (+ tx (group-tx n))) (define next-ty (+ ty (group-ty n)))
      (apply string-append (for/list ([child (group-nodes n)])
        (node->lines child width height next-tx next-ty (* scale (group-scale n)) (+ rotation (group-rotation n)) (* opacity (group-opacity n)) (group-blend n))))]
     [(rect? n)
      (define-values (x y) (xy (rect-x n) (rect-y n)))
-     (string-append prefix (format "rect ~a ~a ~a ~a ~a\n" x y (* width scale (rect-width n)) (* height scale (rect-height n)) (color (rect-color n))))]
+     (define c (color (rect-color n)))
+     (string-append prefix (format "rect ~a ~a ~a ~a ~a ~a\n" x y (* width scale (rect-width n)) (* height scale (rect-height n)) c c))]
+    [(gradient-rect? n)
+     (define-values (x y) (xy (gradient-rect-x n) (gradient-rect-y n)))
+     (string-append prefix (format "rect ~a ~a ~a ~a ~a ~a\n" x y (* width scale (gradient-rect-width n)) (* height scale (gradient-rect-height n)) (color (gradient-rect-top n)) (color (gradient-rect-bottom n))))]
     [(circle? n)
      (define-values (x y) (xy (circle-x n) (circle-y n)))
      (string-append prefix (format "circle ~a ~a ~a ~a ~a\n" x y (* (min width height) (abs scale) (circle-radius n)) (color (circle-color n)) (color (struct-copy rgba (circle-color n) [a 0.0]))))]

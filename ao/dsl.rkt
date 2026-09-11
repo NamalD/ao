@@ -2,6 +2,7 @@
 
 (provide (struct-out audio-frame) (struct-out scene)
          (struct-out rgba) (struct-out rect) (struct-out circle)
+         (struct-out gradient-circle) (struct-out gradient-rect) (struct-out group)
          (struct-out line) (struct-out polyline)
          rgb rgba* clamp lerp)
 
@@ -13,6 +14,11 @@
 (struct rgba (r g b a) #:prefab)
 (struct rect (x y width height color) #:prefab)
 (struct circle (x y radius color) #:prefab)
+(struct gradient-circle (x y radius inner outer) #:prefab)
+(struct gradient-rect (x y width height top bottom) #:prefab)
+;; A layer is a composable subtree.  Coordinates inside it are transformed in
+;; normalized scene space before the GPU sees them.
+(struct group (nodes tx ty scale rotation opacity blend) #:prefab)
 (struct line (x1 y1 x2 y2 width color) #:prefab)
 (struct polyline (points width color) #:prefab)
 

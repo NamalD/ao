@@ -4,6 +4,9 @@
 (check-equal? (clamp 2) 1.0)
 (check-equal? (lerp 0 10 .25) 2.5)
 (check-true (scene? (scene (rgb 0 0 0) '())))
+(check-true (gradient-circle? (gradient-circle .5 .5 .1 (rgb 1 0 0) (rgba* 1 0 0 0))))
+(check-true (gradient-rect? (gradient-rect 0 0 1 1 (rgb 0 0 0) (rgb 1 1 1))))
+(check-true (group? (group '() 0 0 1 0 1 "add")))
 
 ;; Regression for the idle-only bug: subprocess must receive /usr/bin/parec
 ;; (or equivalent), not the bare string that a shell would resolve via PATH.
