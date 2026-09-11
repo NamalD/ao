@@ -69,6 +69,16 @@
                             (sphere3d-z n)
                             (* (abs scale) (sphere3d-radius n))
                             (color (sphere3d-color n))))]
+    [(varying-polyline? n)
+     (define widths (varying-polyline-widths n))
+     (unless (= (length widths) (length (varying-polyline-points n)))
+       (error 'scene "varying-polyline needs one width per point: ~e" n))
+     (string-append prefix
+                    (format "polyline-varying ~a ~a" (length (varying-polyline-points n)) (color (varying-polyline-color n)))
+                    (apply string-append (for/list ([w widths]) (format " ~a" (* (min width height) (abs scale) w))))
+                    (apply string-append (for/list ([p (varying-polyline-points n)])
+                                           (define-values (x y) (xy (car p) (cdr p)))
+                                           (format " ~a ~a" x y))) "\n")]
     [else (error 'scene "unknown node: ~e" n)]))
 (define (write-scene out s width height [old #f] [mix 1.0])
   (define bg (scene-background s))

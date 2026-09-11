@@ -88,7 +88,7 @@
   (audio-frame 0 (for/list ([i (in-range 256)]) (if (even? i) -1.0 1.0)) '()
                (make-list 48 0.0) 0 0 0 0 1280 720))
 (define wave-line (first (group-nodes (third (scene-nodes (wave-render jagged-frame))))))
-(define wave-points (polyline-points wave-line))
+(define wave-points (varying-polyline-points wave-line))
 (check-equal? (length wave-points) 256)
 ;; At an alternating peak, the centre-weighted filter yields 0.2 rather than
 ;; the raw 1.0 sample.
@@ -96,8 +96,12 @@
 (check-= (cdr (list-ref wave-points 3))
          (+ .5 (* .24 .2) (* .08 (sin (* 9 peak-x))))
          1e-9)
-(define impact-wave-line (first (group-nodes (third (scene-nodes (wave-render impact-frame))))))
-(check-true (> (polyline-width impact-wave-line) (polyline-width wave-line)))
+(define wave-widths (varying-polyline-widths wave-line))
+(define later-wave-line (first (group-nodes (third (scene-nodes (wave-render later-frame))))))
+(check-not-equal? wave-widths (varying-polyline-widths later-wave-line))
+(check-true (> (max (apply max (varying-polyline-widths
+                                (first (group-nodes (third (scene-nodes (wave-render impact-frame))))))))
+               (max (apply max wave-widths))))
 (define quiet-rothko-first (first (scene-nodes (rothko-render quiet-frame))))
 (define impact-rothko-first (first (scene-nodes (rothko-render impact-frame))))
 (check-true (> (rect-width impact-rothko-first)

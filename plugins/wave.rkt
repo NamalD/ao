@@ -25,12 +25,20 @@
       (define x (/ i (sub1 sample-count)))
       (define s (smoothed-sample wave i))
       (cons x (+ .5 (* .24 s) (* .08 (sin (+ (* 9 x) t)))))))
+  ;; Let the captured waveform breathe through the ribbon itself.  Peaks get
+  ;; heavier strokes, while the time phase keeps the quiet portions moving.
+  (define base-width (+ .005 (* .018 (audio-frame-loudness a)) (* .012 impulse)))
+  (define widths
+    (for/list ([i (in-range sample-count)])
+      (define x (/ i (sub1 sample-count)))
+      (define s (abs (smoothed-sample wave i)))
+      (* base-width (+ .55 (* .65 s) (* .15 (+ 1 (sin (+ (* 6 x) (* 1.7 t)))))))))
   (scene (color-scale (color-cycle hue) .035)
          (list
           (gradient-rect 0 0 1 1 (color-scale (color-cycle hue) .035) (color-scale (color-cycle (+ hue .7)) .10))
           (gradient-circle .5 .5 (+ .35 (* .25 (audio-frame-loudness a)) (* .12 impulse))
                            (color-scale (color-cycle (+ hue .3)) (+ .55 (* .25 impulse)) .12)
                            (color-cycle hue 0))
-          (group (list (polyline points (+ .005 (* .018 (audio-frame-loudness a)) (* .012 impulse))
-                                      (color-scale (color-cycle (+ hue 1.2)) .95 .88)))
+          (group (list (varying-polyline points widths
+                                          (color-scale (color-cycle (+ hue 1.2)) .95 .88)))
                  0 0 (+ 1 (* .1 impulse)) 0 1 "add"))))

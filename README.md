@@ -48,7 +48,9 @@ Drop a `.rkt` module into `plugins/`. A plugin exports `name` and `render`.
 primitives. The compact API includes filled radial-gradient circles, additive
 radial `light` sources, linear-gradient rectangles, thick polylines, and composable `group` layers with translation, scale,
 rotation, opacity, and normal/additive blending. The Vulkan-backed renderer
-adds soft bloom to circles and draws polylines as smooth triangle ribbons. See
+adds soft bloom to circles and draws polylines as smooth triangle ribbons;
+`varying-polyline` lets plugins give each point its own animated stroke width.
+See
 the included plugins and `ao/dsl.rkt`. Audio frames expose both `loudness` for
 the sustained level and `impulse` for a short-lived transient envelope, so
 plugins can make hard hits feel like a physical punch without staying maxed

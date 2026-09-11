@@ -14,8 +14,10 @@
 #define MAX_COMMANDS 8192
 #define MAX_POINTS 256
 
-typedef enum { CMD_RECT, CMD_CIRCLE, CMD_LIGHT, CMD_LINE, CMD_POLYLINE, CMD_SPHERE3D } CommandType;
-typedef struct { CommandType type; float x1,y1,x2,y2,radius,width,intensity; Uint8 r,g,b,a, r2,g2,b2,a2; SDL_BlendMode blend; int count; SDL_FPoint points[MAX_POINTS]; } Command;
+/* 3D spheres share the screen-space command storage; varying ribbons add
+   one width per point. */
+typedef enum { CMD_RECT, CMD_CIRCLE, CMD_LIGHT, CMD_LINE, CMD_POLYLINE, CMD_SPHERE3D, CMD_POLYLINE_VARYING } CommandType;
+typedef struct { CommandType type; float x1,y1,x2,y2,radius,width,intensity; Uint8 r,g,b,a, r2,g2,b2,a2; SDL_BlendMode blend; int count; float widths[MAX_POINTS]; SDL_FPoint points[MAX_POINTS]; } Command;
 static Command commands[MAX_COMMANDS];
 static int command_count = 0;
 static Uint8 clear_r = 2, clear_g = 2, clear_b = 8, clear_a = 255;
@@ -126,7 +128,7 @@ static void draw_ribbon_segment(SDL_Renderer *renderer, float x1, float y1, floa
   int idx[] = {0,1,2,0,2,3}; SDL_RenderGeometry(renderer,NULL,v,4,idx,6);
 }
 
-static void draw_ribbon_polyline(SDL_Renderer *renderer, const SDL_FPoint *points, int count, float width, SDL_FColor c) {
+static void draw_ribbon_polyline(SDL_Renderer *renderer, const SDL_FPoint *points, const float *widths, int count, float width, SDL_FColor c) {
   SDL_Vertex vertices[MAX_POINTS * 2];
   int indices[(MAX_POINTS - 1) * 6];
   float half_width = width * .5f;
@@ -168,8 +170,9 @@ static void draw_ribbon_polyline(SDL_Renderer *renderer, const SDL_FPoint *point
       }
     }
 
-    vertices[i * 2] = (SDL_Vertex){{points[i].x + nx * half_width, points[i].y + ny * half_width}, c, {0,0}};
-    vertices[i * 2 + 1] = (SDL_Vertex){{points[i].x - nx * half_width, points[i].y - ny * half_width}, c, {0,0}};
+    float point_half_width = (widths ? widths[i] : width) * .5f;
+    vertices[i * 2] = (SDL_Vertex){{points[i].x + nx * point_half_width, points[i].y + ny * point_half_width}, c, {0,0}};
+    vertices[i * 2 + 1] = (SDL_Vertex){{points[i].x - nx * point_half_width, points[i].y - ny * point_half_width}, c, {0,0}};
   }
   for (int i = 0; i < count - 1; i++) {
     int base = i * 6;
@@ -219,7 +222,8 @@ static void render(SDL_Renderer *renderer) {
          exposes those overlaps as white seams at high-impact amplitudes;
          alpha compositing keeps the strip's color stable across each join. */
       SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-      draw_ribbon_polyline(renderer, c->points, c->count, c->width, color(c->r,c->g,c->b,c->a));
+      draw_ribbon_polyline(renderer, c->points, c->type == CMD_POLYLINE_VARYING ? c->widths : NULL,
+                           c->count, c->width, color(c->r,c->g,c->b,c->a));
     }
   }
   if (layer) {
@@ -277,6 +281,14 @@ static void parse_line(char *line, SDL_Window *window, SDL_Renderer *renderer, i
       c->width=strtof(at,&end); at=end;
       c->r=(Uint8)strtoul(at,&end,10); at=end; c->g=(Uint8)strtoul(at,&end,10); at=end; c->b=(Uint8)strtoul(at,&end,10); at=end; c->a=(Uint8)strtoul(at,&end,10); at=end;
       if (c->count < 2 || c->count > MAX_POINTS) return;
+      for (int i=0;i<c->count;i++) { c->points[i].x=strtof(at,&end); at=end; c->points[i].y=strtof(at,&end); at=end; }
+      command_count++;
+    }
+    else if (!strncmp(line, "polyline-varying ", 18)) {
+      char *at=line+18, *end; c->type=CMD_POLYLINE_VARYING; c->count=(int)strtol(at,&end,10); at=end;
+      c->r=(Uint8)strtoul(at,&end,10); at=end; c->g=(Uint8)strtoul(at,&end,10); at=end; c->b=(Uint8)strtoul(at,&end,10); at=end; c->a=(Uint8)strtoul(at,&end,10); at=end;
+      if (c->count < 2 || c->count > MAX_POINTS) return;
+      for (int i=0;i<c->count;i++) { c->widths[i]=strtof(at,&end); at=end; if (c->widths[i] > c->width) c->width=c->widths[i]; }
       for (int i=0;i<c->count;i++) { c->points[i].x=strtof(at,&end); at=end; c->points[i].y=strtof(at,&end); at=end; }
       command_count++;
     }
