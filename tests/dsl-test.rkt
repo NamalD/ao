@@ -9,6 +9,7 @@
 (check-true (scene? (scene (rgb 0 0 0) '())))
 (check-true (gradient-circle? (gradient-circle .5 .5 .1 (rgb 1 0 0) (rgba* 1 0 0 0))))
 (check-true (gradient-rect? (gradient-rect 0 0 1 1 (rgb 0 0 0) (rgb 1 1 1))))
+(check-true (sphere3d? (sphere3d 0 0 .5 .1 (rgb 1 0 0))))
 (check-true (group? (group '() 0 0 1 0 1 "add")))
 (define test-light (light .25 .75 .2 (rgba* 1 .5 0 .8) 1.5))
 (check-true (light? test-light))
@@ -21,6 +22,7 @@
 (define-runtime-path wave-plugin "../plugins/wave.rkt")
 (define-runtime-path rothko-plugin "../plugins/rothko.rkt")
 (define-runtime-path ink-plugin "../plugins/ink.rkt")
+(define-runtime-path depth-plugin "../plugins/depth.rkt")
 (define orbs-render (dynamic-require orbs-plugin 'render))
 (define rings-render (dynamic-require rings-plugin 'render))
 (define rothko-render (dynamic-require rothko-plugin 'render))
@@ -69,10 +71,15 @@
 (check-not-equal? (gradient-circle-x early-orb-2) (gradient-circle-x active-orb-2))
 (check-not-equal? (gradient-circle-y early-orb-2) (gradient-circle-y active-orb-2))
 
-(for ([plugin-path (list orbs-plugin rings-plugin wave-plugin rothko-plugin ink-plugin)])
+(for ([plugin-path (list orbs-plugin rings-plugin wave-plugin rothko-plugin ink-plugin depth-plugin)])
   (define render (dynamic-require plugin-path 'render))
   (check-not-equal? (scene-background (render quiet-frame))
                     (scene-background (render later-frame))))
+
+(define depth-render (dynamic-require depth-plugin 'render))
+(define depth-scene (depth-render quiet-frame))
+(check-equal? (length (scene-nodes depth-scene)) 43)
+(check-true (sphere3d? (second (scene-nodes depth-scene))))
 
 ;; Wave uses the full capture resolution and filters the raw waveform so its
 ;; animated sine line remains visually continuous instead of faceting.

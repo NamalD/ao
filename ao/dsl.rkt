@@ -3,7 +3,7 @@
 (provide (struct-out audio-frame) (struct-out scene)
          (struct-out rgba) (struct-out rect) (struct-out circle)
          (struct-out gradient-circle) (struct-out gradient-rect) (struct-out group)
-         (struct-out line) (struct-out polyline) (struct-out light)
+         (struct-out line) (struct-out polyline) (struct-out sphere3d) (struct-out light)
          rgb rgba* color-cycle color-scale clamp lerp)
 
 ;; Plugins use normalized coordinates: x/y/width/height are 0..1.
@@ -23,6 +23,9 @@
 (struct group (nodes tx ty scale rotation opacity blend) #:prefab)
 (struct line (x1 y1 x2 y2 width color) #:prefab)
 (struct polyline (points width color) #:prefab)
+;; A perspective-projected sphere. x/y are centered scene coordinates (-1..1),
+;; z is depth (0 is far, 1 is near), and radius is scene-height relative.
+(struct sphere3d (x y z radius color) #:prefab)
 ;; A light is an additive radial source.  Its position and radius use the same
 ;; normalized scene coordinates as the other primitives; intensity is a
 ;; multiplier applied by the native renderer.
