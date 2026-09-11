@@ -24,6 +24,13 @@
 (define early-orb (first (group-nodes (second (scene-nodes (orbs-render quiet-frame))))))
 (define later-orb (first (group-nodes (second (scene-nodes (orbs-render later-frame))))))
 (check-not-equal? (gradient-circle-inner early-orb) (gradient-circle-inner later-orb))
+;; Orbs take gently irregular, audio-reactive paths rather than repeating one
+;; fixed left-to-right track.  A stronger first band shifts its first orb.
+(define active-frame
+  (audio-frame 0 '() '() (cons .9 (make-list 47 .2)) 0 0 0 1280 720))
+(define active-orb (first (group-nodes (second (scene-nodes (orbs-render active-frame))))))
+(check-not-equal? (gradient-circle-x early-orb) (gradient-circle-x active-orb))
+(check-not-equal? (gradient-circle-y early-orb) (gradient-circle-y active-orb))
 (for ([plugin-path (list orbs-plugin rings-plugin wave-plugin rothko-plugin)])
   (define render (dynamic-require plugin-path 'render))
   (check-not-equal? (scene-background (render quiet-frame))
