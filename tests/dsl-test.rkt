@@ -16,6 +16,7 @@
 (define-runtime-path rings-plugin "../plugins/rings.rkt")
 (define-runtime-path wave-plugin "../plugins/wave.rkt")
 (define-runtime-path rothko-plugin "../plugins/rothko.rkt")
+(define-runtime-path ink-plugin "../plugins/ink.rkt")
 (define orbs-render (dynamic-require orbs-plugin 'render))
 (define rings-render (dynamic-require rings-plugin 'render))
 (define quiet-frame
@@ -35,10 +36,20 @@
 (check-not-equal? (gradient-circle-inner quiet-ring-orb) (gradient-circle-inner loud-ring-orb))
 (check-equal? (length (scene-nodes (rings-render quiet-frame))) 1)
 (check-equal? (length (group-nodes (first (scene-nodes (rings-render quiet-frame))))) 28)
-(for ([plugin-path (list orbs-plugin rings-plugin wave-plugin rothko-plugin)])
+(for ([plugin-path (list orbs-plugin rings-plugin wave-plugin rothko-plugin ink-plugin)])
   (define render (dynamic-require plugin-path 'render))
   (check-not-equal? (scene-background (render quiet-frame))
                     (scene-background (render later-frame))))
+
+;; Ink is made from several soft pools and flowing ribbons, rather than a
+;; single geometric foreground.
+(define ink-render (dynamic-require ink-plugin 'render))
+(define ink-scene (ink-render quiet-frame))
+(check-equal? (length (scene-nodes ink-scene)) 2)
+(check-equal? (length (group-nodes (first (scene-nodes ink-scene)))) 9)
+(check-equal? (length (group-nodes (second (scene-nodes ink-scene)))) 5)
+(check-true (gradient-circle? (first (group-nodes (first (scene-nodes ink-scene))))))
+(check-true (polyline? (first (group-nodes (second (scene-nodes ink-scene))))))
 
 ;; Wave uses the full capture resolution and filters the raw waveform so its
 ;; animated sine line remains visually continuous instead of faceting.
