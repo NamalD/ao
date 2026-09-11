@@ -29,6 +29,23 @@
   (check-not-equal? (scene-background (render quiet-frame))
                     (scene-background (render later-frame))))
 
+;; Wave uses the full capture resolution and filters the raw waveform so its
+;; animated sine line remains visually continuous instead of faceting.
+(define-runtime-path wave-plugin "../plugins/wave.rkt")
+(define wave-render (dynamic-require wave-plugin 'render))
+(define jagged-frame
+  (audio-frame 0 (for/list ([i (in-range 256)]) (if (even? i) -1.0 1.0)) '()
+               (make-list 48 0.0) 0 0 0 1280 720))
+(define wave-line (first (group-nodes (third (scene-nodes (wave-render jagged-frame))))))
+(define wave-points (polyline-points wave-line))
+(check-equal? (length wave-points) 256)
+;; At an alternating peak, the centre-weighted filter yields 0.2 rather than
+;; the raw 1.0 sample.
+(define peak-x (/ 3.0 255.0))
+(check-= (cdr (list-ref wave-points 3))
+         (+ .5 (* .24 .2) (* .08 (sin (* 9 peak-x))))
+         1e-9)
+
 ;; Regression for the idle-only bug: subprocess must receive /usr/bin/parec
 ;; (or equivalent), not the bare string that a shell would resolve via PATH.
 (define capture (parec-command "test.monitor" "/usr/bin/parec"))
