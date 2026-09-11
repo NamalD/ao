@@ -53,9 +53,12 @@ static void draw_fan(SDL_Renderer *renderer, float x, float y, float radius, SDL
 static void draw_circle(SDL_Renderer *renderer, const Command *c) {
   SDL_FColor inner = color(c->r,c->g,c->b,c->a);
   SDL_FColor outer = color(c->r2,c->g2,c->b2,c->a2);
-  /* A large transparent radial pass is an inexpensive, resolution-independent bloom. */
-  SDL_FColor glow = inner; glow.a *= 0.18f;
-  draw_fan(renderer, c->x1, c->y1, c->radius * 2.7f, glow, (SDL_FColor){inner.r,inner.g,inner.b,0});
+  /* Split the glow into restrained near and far falloffs.  A single strong,
+     oversized bloom makes larger circles read as blurry discs. */
+  SDL_FColor near_glow = inner; near_glow.a *= 0.075f;
+  SDL_FColor far_glow = inner; far_glow.a *= 0.020f;
+  draw_fan(renderer, c->x1, c->y1, c->radius * 2.15f, far_glow, (SDL_FColor){inner.r,inner.g,inner.b,0});
+  draw_fan(renderer, c->x1, c->y1, c->radius * 1.45f, near_glow, (SDL_FColor){inner.r,inner.g,inner.b,0});
   draw_fan(renderer, c->x1, c->y1, c->radius, inner, outer);
 }
 
