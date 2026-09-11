@@ -38,16 +38,26 @@ static SDL_FColor color(Uint8 r, Uint8 g, Uint8 b, Uint8 a) {
   return (SDL_FColor){r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
 }
 
+static int fan_steps(float radius) {
+  /* Keep the arc of each wedge below roughly six pixels.  A fixed 64-step
+     fan is visibly faceted by the large background gradients. */
+  int steps = (int)ceilf(2.0f * (float)M_PI * radius / 6.0f);
+  if (steps < 64) steps = 64;
+  if (steps > 512) steps = 512;
+  return steps;
+}
+
 static void draw_fan(SDL_Renderer *renderer, float x, float y, float radius, SDL_FColor inner, SDL_FColor outer) {
-  enum { STEPS = 64 };
-  SDL_Vertex vertices[STEPS + 1]; int indices[STEPS * 3];
+  enum { MAX_STEPS = 512 };
+  int steps = fan_steps(radius);
+  SDL_Vertex vertices[MAX_STEPS + 1]; int indices[MAX_STEPS * 3];
   vertices[0] = (SDL_Vertex){{x,y}, inner, {0,0}};
-  for (int i = 0; i < STEPS; i++) {
-    float angle = (float)i * 2.0f * (float)M_PI / STEPS;
+  for (int i = 0; i < steps; i++) {
+    float angle = (float)i * 2.0f * (float)M_PI / steps;
     vertices[i+1] = (SDL_Vertex){{x + cosf(angle)*radius, y + sinf(angle)*radius}, outer, {0,0}};
-    indices[i*3] = 0; indices[i*3+1] = i+1; indices[i*3+2] = (i+1) % STEPS + 1;
+    indices[i*3] = 0; indices[i*3+1] = i+1; indices[i*3+2] = (i+1) % steps + 1;
   }
-  SDL_RenderGeometry(renderer, NULL, vertices, STEPS + 1, indices, STEPS * 3);
+  SDL_RenderGeometry(renderer, NULL, vertices, steps + 1, indices, steps * 3);
 }
 
 static void draw_circle(SDL_Renderer *renderer, const Command *c) {

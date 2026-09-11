@@ -10,6 +10,9 @@ all: $(BUILD)/ao-native
 $(BUILD)/ao-native: native/ao-native.c Makefile | $(BUILD)
 	$(CC) -std=c11 -O2 -Wall -Wextra -o $@ $< $$(pkg-config --cflags --libs sdl3 libpipewire-0.3) -lm
 
+$(BUILD)/ao-native-test: tests/native-renderer-test.c native/ao-native.c | $(BUILD)
+	$(CC) -std=c11 -O2 -Wall -Wextra -o $@ $< $$(pkg-config --cflags --libs sdl3 libpipewire-0.3) -lm
+
 $(BUILD):
 	mkdir -p $(BUILD)
 
@@ -25,6 +28,8 @@ dev:
 
 test:
 	$(RACKET) tests/dsl-test.rkt
+	$(MAKE) $(BUILD)/ao-native-test
+	$(BUILD)/ao-native-test
 
 clean:
 	rm -rf $(BUILD)
