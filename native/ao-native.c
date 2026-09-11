@@ -72,6 +72,58 @@ static void draw_ribbon_segment(SDL_Renderer *renderer, float x1, float y1, floa
   int idx[] = {0,1,2,0,2,3}; SDL_RenderGeometry(renderer,NULL,v,4,idx,6);
 }
 
+static void draw_ribbon_polyline(SDL_Renderer *renderer, const SDL_FPoint *points, int count, float width, SDL_FColor c) {
+  SDL_Vertex vertices[MAX_POINTS * 2];
+  int indices[(MAX_POINTS - 1) * 6];
+  float half_width = width * .5f;
+
+  /* Build one strip. Independent segment quads overlap at joins and become
+     bright, star-shaped spikes when the polyline uses additive blending. */
+  for (int i = 0; i < count; i++) {
+    int previous = i > 0 ? i - 1 : i;
+    int next = i + 1 < count ? i + 1 : i;
+    float dx = points[next].x - points[previous].x;
+    float dy = points[next].y - points[previous].y;
+    float length = sqrtf(dx * dx + dy * dy);
+    if (length < .01f) length = 1.0f;
+    float nx = -dy / length;
+    float ny = dx / length;
+
+    if (i > 0 && i + 1 < count) {
+      float pdx = points[i].x - points[i - 1].x;
+      float pdy = points[i].y - points[i - 1].y;
+      float plen = sqrtf(pdx * pdx + pdy * pdy);
+      float ndx = points[i + 1].x - points[i].x;
+      float ndy = points[i + 1].y - points[i].y;
+      float nlen = sqrtf(ndx * ndx + ndy * ndy);
+      if (plen >= .01f && nlen >= .01f) {
+        float pnx = -pdy / plen, pny = pdx / plen;
+        float nnx = -ndy / nlen, nny = ndx / nlen;
+        float mx = pnx + nnx, my = pny + nny;
+        float mlen = sqrtf(mx * mx + my * my);
+        if (mlen >= .01f) {
+          mx /= mlen; my /= mlen;
+          float scale = half_width / (mx * nnx + my * nny);
+          /* Limit very acute joins so a sharp sample cannot create a spike. */
+          if (fabsf(scale) > half_width * 2.0f)
+            scale = copysignf(half_width * 2.0f, scale);
+          nx = mx * scale / half_width;
+          ny = my * scale / half_width;
+        }
+      }
+    }
+
+    vertices[i * 2] = (SDL_Vertex){{points[i].x + nx * half_width, points[i].y + ny * half_width}, c, {0,0}};
+    vertices[i * 2 + 1] = (SDL_Vertex){{points[i].x - nx * half_width, points[i].y - ny * half_width}, c, {0,0}};
+  }
+  for (int i = 0; i < count - 1; i++) {
+    int base = i * 6;
+    indices[base] = i * 2; indices[base + 1] = i * 2 + 1; indices[base + 2] = i * 2 + 2;
+    indices[base + 3] = i * 2 + 2; indices[base + 4] = i * 2 + 1; indices[base + 5] = i * 2 + 3;
+  }
+  SDL_RenderGeometry(renderer, NULL, vertices, count * 2, indices, (count - 1) * 6);
+}
+
 static SDL_Texture *ensure_scene_layer(SDL_Renderer *renderer) {
   int width = 0, height = 0;
   if (!SDL_GetRenderOutputSize(renderer, &width, &height) || width < 1 || height < 1) return NULL;
@@ -97,7 +149,7 @@ static void render(SDL_Renderer *renderer) {
     } else if (c->type == CMD_CIRCLE) draw_circle(renderer, c);
     else if (c->type == CMD_LINE) draw_ribbon_segment(renderer,c->x1,c->y1,c->x2,c->y2,c->width,color(c->r,c->g,c->b,c->a));
     else if (c->type == CMD_POLYLINE && c->count > 1)
-      for (int p=1;p<c->count;p++) draw_ribbon_segment(renderer,c->points[p-1].x,c->points[p-1].y,c->points[p].x,c->points[p].y,c->width,color(c->r,c->g,c->b,c->a));
+      draw_ribbon_polyline(renderer, c->points, c->count, c->width, color(c->r,c->g,c->b,c->a));
   }
   if (layer) {
     SDL_SetRenderTarget(renderer, NULL);
