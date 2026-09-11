@@ -4,6 +4,7 @@
 (define name "Rings")
 (define (render a)
   (define hue (* .35 (audio-frame-time a)))
+  (define impulse (audio-frame-impulse a))
   (scene (color-scale (color-cycle hue) .045)
          (list
           (group
@@ -11,10 +12,11 @@
              (define angle (* i (/ (* 2 pi) 28)))
              (define level (list-ref (audio-frame-spectrum a) (modulo (* i 2) 48)))
              (define orb-hue (+ hue (* .35 level)))
-             (gradient-circle (+ .5 (* (+ .14 (* .22 level)) (cos angle)))
-                              (+ .5 (* (+ .14 (* .22 level)) (sin angle)))
-                              (+ .006 (* .027 level))
+             (define orbit (+ .14 (* .22 level) (* .06 impulse)))
+             (gradient-circle (+ .5 (* orbit (cos angle)))
+                              (+ .5 (* orbit (sin angle)))
+                              (+ .006 (* .027 level) (* .014 impulse))
                               (color-scale (color-cycle orb-hue) (+ .55 (* .45 level)) .95)
                               (color-cycle orb-hue 0)))
-           0 0 1 (* .11 (audio-frame-time a)) 1 "add")
+           0 0 (+ 1 (* .16 impulse)) (* .11 (audio-frame-time a)) 1 "add")
           )))

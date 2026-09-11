@@ -47,7 +47,10 @@ primitives. The compact API includes filled radial-gradient circles, linear-grad
 thick polylines, and composable `group` layers with translation, scale,
 rotation, opacity, and normal/additive blending. The Vulkan-backed renderer
 adds soft bloom to circles and draws polylines as smooth triangle ribbons. See
-the included plugins and `ao/dsl.rkt`.
+the included plugins and `ao/dsl.rkt`. Audio frames expose both `loudness` for
+the sustained level and `impulse` for a short-lived transient envelope, so
+plugins can make hard hits feel like a physical punch without staying maxed
+out during a loud passage.
 Ao watches source timestamps, retains the last working plugin if a reload or
 frame fails, and appends diagnostics to `state/ao.log`.
 
