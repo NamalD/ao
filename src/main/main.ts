@@ -1,0 +1,119 @@
+import { app, BrowserWindow, ipcMain } from "electron";
+import { watch, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { Capture, startCapture, startFakeCapture } from "./capture";
+import { Store } from "./store";
+
+interface WindowState { x?: number; y?: number; width: number; height: number; fullscreen: boolean }
+interface Options { fakeAudio: boolean; sketch?: string; screenshot?: string; delay: number; hideEditor: boolean }
+
+function parseOptions(argv: string[]): Options {
+  const value = (flag: string) => argv.find((a) => a.startsWith(`--${flag}=`))?.split("=").slice(1).join("=");
+  return {
+    fakeAudio: argv.includes("--fake-audio"),
+    sketch: value("sketch"),
+    screenshot: value("screenshot"),
+    delay: Number(value("screenshot-delay") ?? 3000),
+    hideEditor: argv.includes("--hide-editor"),
+  };
+}
+
+const options = parseOptions(process.argv);
+const store = new Store(app.getAppPath());
+app.commandLine.appendSwitch("ozone-platform-hint", "auto");
+// Live coding needs eval, which is exactly what this warning is about.
+process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
+
+function createWindow(): BrowserWindow {
+  const saved = store.read<WindowState>("window", { width: 1280, height: 720, fullscreen: false });
+  const win = new BrowserWindow({
+    ...saved,
+    title: "Ao",
+    backgroundColor: "#020208",
+    autoHideMenuBar: true,
+    show: !options.screenshot,
+    webPreferences: {
+      preload: join(__dirname, "preload.cjs"),
+      contextIsolation: true,
+      sandbox: true,
+      backgroundThrottling: false,
+      // Screenshots render offscreen: hidden windows are throttled to ~1 fps.
+      offscreen: Boolean(options.screenshot),
+    },
+  });
+  if (options.screenshot) win.webContents.setFrameRate(60);
+  const remember = () => {
+    if (win.isDestroyed()) return;
+    const fullscreen = win.isFullScreen();
+    store.write("window", fullscreen ? { ...saved, fullscreen } : { ...win.getNormalBounds(), fullscreen });
+  };
+  win.on("moved", remember);
+  win.on("resized", remember);
+  win.on("enter-full-screen", remember);
+  win.on("leave-full-screen", remember);
+
+  const query: Record<string, string> = {};
+  if (options.sketch) query.sketch = options.sketch;
+  if (options.hideEditor) query.hideEditor = "1";
+  const devUrl = process.env.AO_RENDERER_URL;
+  if (devUrl) void win.loadURL(`${devUrl}?${new URLSearchParams(query)}`);
+  else void win.loadFile(join(__dirname, "../renderer/index.html"), { query });
+  return win;
+}
+
+function registerIpc(win: () => BrowserWindow | null): void {
+  ipcMain.handle("sketches:list", () => store.listSketches());
+  ipcMain.handle("sketches:read", (_e, name: string) => store.readSketch(name));
+  ipcMain.handle("sketches:write", (_e, name: string, code: string) => store.writeSketch(name, code));
+  ipcMain.handle("state:last-sketch", () => store.read("session", { sketch: "" }).sketch);
+  ipcMain.on("state:set-last-sketch", (_e, sketch: string) => store.write("session", { sketch }));
+  ipcMain.on("window:fullscreen", () => { const w = win(); w?.setFullScreen(!w.isFullScreen()); });
+  ipcMain.on("app:quit", () => app.quit());
+  ipcMain.on("log", (_e, message: string) => store.log(message));
+}
+
+function watchSketches(send: (name: string) => void): void {
+  const timers = new Map<string, NodeJS.Timeout>();
+  watch(store.sketchDir, (_event, file) => {
+    if (!file?.endsWith(".js")) return;
+    const name = file.slice(0, -3);
+    // Editors often write a file in several steps; report once it settles.
+    clearTimeout(timers.get(name));
+    timers.set(name, setTimeout(() => send(name), 80));
+  });
+}
+
+void app.whenReady().then(() => {
+  let win: BrowserWindow | null = createWindow();
+  win.on("closed", () => { win = null; });
+  const send = (channel: string, ...args: unknown[]) => {
+    if (win && !win.isDestroyed()) win.webContents.send(channel, ...args);
+  };
+  registerIpc(() => win);
+  watchSketches((name) => send("sketches:changed", name));
+
+  const report = (message: string) => { store.log(message); send("status", message); };
+  win.webContents.on("console-message", ({ level, message, sourceId, lineNumber }) => {
+    if (level === "warning" || level === "error") store.log(`renderer ${level}: ${message} (${sourceId}:${lineNumber})`);
+  });
+  let capture: Capture;
+  win.webContents.once("did-finish-load", () => {
+    capture = options.fakeAudio || options.screenshot
+      ? startFakeCapture((f) => send("audio", f))
+      : startCapture((f) => send("audio", f), report);
+  });
+  app.on("before-quit", () => capture?.stop());
+
+  if (options.screenshot) {
+    const path = options.screenshot;
+    win.webContents.once("did-finish-load", () => setTimeout(async () => {
+      const fps = await win!.webContents.executeJavaScript("document.getElementById('fps').textContent");
+      console.log(`screenshot ${path} at ${fps}`);
+      const image = await win!.webContents.capturePage();
+      writeFileSync(path, image.toPNG());
+      app.quit();
+    }, options.delay));
+  }
+});
+
+app.on("window-all-closed", () => app.quit());

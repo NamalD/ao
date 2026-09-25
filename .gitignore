@@ -1,7 +1,4 @@
-.tooling/
-.worktrees/
-build/
+node_modules/
+dist/
 state/
-*.zo
-compiled/
-**/compiled/
+.worktrees/

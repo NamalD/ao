@@ -1,0 +1,38 @@
+{
+  "name": "ao",
+  "private": true,
+  "version": "0.2.0",
+  "description": "Live-coded ambient audio visualizer",
+  "main": "dist/electron/main.cjs",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "node scripts/build.mjs && electron .",
+    "dev": "node scripts/dev.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "^6.20.3",
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/lang-javascript": "^6.2.5",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.13",
+    "@lezer/highlight": "^1.2.4",
+    "codemirror": "^6.0.2",
+    "hydra-synth": "^1.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "electron": "^44.4.5",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2"
+  },
+  "allowScripts": {
+    "electron@44.4.5": true,
+    "esbuild@0.28.2": true
+  },
+  "type": "module"
+}

@@ -1,39 +1,32 @@
-# Worktrees do not copy the ignored project-local runtime. Reuse the runtime
-# from the primary checkout when this checkout is an isolated worktree.
-RACKET := $(or $(wildcard .tooling/racket/bin/racket),$(wildcard ../../ao/.tooling/racket/bin/racket),racket)
-BUILD := build
+.PHONY: all run dev test screenshot clean worktree worktree-create worktree-list worktree-remove worktree-prune
 
-.PHONY: all run dev test clean worktree worktree-create worktree-list worktree-remove worktree-prune
+all: node_modules
+	npm run build
 
-all: $(BUILD)/ao-native
+# Worktrees do not share node_modules; the first build in one installs them.
+node_modules: package.json package-lock.json
+	npm install
+	@touch node_modules
 
-$(BUILD)/ao-native: native/ao-native.c Makefile | $(BUILD)
-	$(CC) -std=c11 -O2 -Wall -Wextra -o $@ $< $$(pkg-config --cflags --libs sdl3 libpipewire-0.3) -lm
+run: node_modules
+	npm start
 
-$(BUILD)/ao-native-test: tests/native-renderer-test.c native/ao-native.c | $(BUILD)
-	$(CC) -std=c11 -O2 -Wall -Wextra -o $@ $< $$(pkg-config --cflags --libs sdl3 libpipewire-0.3) -lm
+# Development mode: Vite hot-reloads the renderer and Electron restarts when
+# main-process code changes. Sketches reload themselves without either.
+dev: node_modules
+	npm run dev
 
-$(BUILD):
-	mkdir -p $(BUILD)
+test: node_modules
+	npm run typecheck
+	npm test
+	npm run build
 
-run: all
-	$(RACKET) main.rkt
-
-# Development mode: restart the whole app when host, plugin, native, or build
-# files change. Plugin edits still reload in-process during normal `make run`.
-dev:
-	@command -v watchexec >/dev/null 2>&1 || (echo "make dev requires watchexec (https://github.com/watchexec/watchexec)" >&2; exit 1)
-	RACKET="$(RACKET)" watchexec --restart --watch main.rkt --watch ao --watch plugins --watch native --watch scripts --watch Makefile \
-		--ignore 'ao/compiled/**' --ignore 'plugins/compiled/**' --ignore 'state/**' -- ./scripts/dev-run
-
-test:
-	$(RACKET) tests/dsl-test.rkt
-	tests/dev-run-test.sh
-	$(MAKE) $(BUILD)/ao-native-test
-	$(BUILD)/ao-native-test
+# Render a sketch offscreen with synthetic audio: make screenshot SKETCH=dunes
+screenshot: all
+	npx electron . --sketch=$(SKETCH) --hide-editor --screenshot=state/$(SKETCH).png
 
 clean:
-	rm -rf $(BUILD)
+	rm -rf dist
 
 # Create an isolated feature checkout at .worktrees/<NAME> on agent/<NAME>.
 # Example: make worktree-create NAME=audio-smoothing
