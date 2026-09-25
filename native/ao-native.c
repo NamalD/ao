@@ -182,29 +182,88 @@ static void draw_ribbon_polyline(SDL_Renderer *renderer, const SDL_FPoint *point
   SDL_RenderGeometry(renderer, NULL, vertices, count * 2, indices, (count - 1) * 6);
 }
 
-static SDL_Texture *ensure_scene_layer(SDL_Renderer *renderer) {
-  int width = 0, height = 0;
-  if (!SDL_GetRenderOutputSize(renderer, &width, &height) || width < 1 || height < 1) return NULL;
+static SDL_Texture *dither_tile = NULL;
+
+static SDL_Texture *create_scene_layer(SDL_Renderer *renderer, int width, int height) {
+  /* Dark gradients span only a few 8-bit levels across the whole window, so
+     an 8-bit layer shows hard colour bands.  Draw at half-float precision
+     and quantise once, after dithering.  The layer stays in sRGB so vertex
+     colour interpolation looks the same as in the 8-bit fallback. */
+  SDL_PropertiesID props = SDL_CreateProperties();
+  SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_CREATE_FORMAT_NUMBER, SDL_PIXELFORMAT_RGBA64_FLOAT);
+  SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_CREATE_ACCESS_NUMBER, SDL_TEXTUREACCESS_TARGET);
+  SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_CREATE_COLORSPACE_NUMBER, SDL_COLORSPACE_SRGB);
+  SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_CREATE_WIDTH_NUMBER, width);
+  SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_CREATE_HEIGHT_NUMBER, height);
+  SDL_Texture *layer = SDL_CreateTextureWithProperties(renderer, props);
+  SDL_DestroyProperties(props);
+  if (!layer) layer = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_TARGET, width, height);
+  return layer;
+}
+
+static SDL_Texture *ensure_scene_layer(SDL_Renderer *renderer, int width, int height) {
+  if (width < 1 || height < 1) return NULL;
   if (scene_layer && width == scene_width && height == scene_height) return scene_layer;
   if (scene_layer) SDL_DestroyTexture(scene_layer);
-  scene_layer = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_TARGET, width, height);
+  if (dither_tile) SDL_DestroyTexture(dither_tile);
+  scene_layer = create_scene_layer(renderer, width, height);
   scene_width = width; scene_height = height;
   if (!scene_layer) fprintf(stderr, "offscreen layer: %s\n", SDL_GetError());
   return scene_layer;
 }
 
-static void render(SDL_Renderer *renderer) {
-  Uint64 frame_time = SDL_GetTicks();
-  if (fps_window_start == 0) fps_window_start = frame_time;
-  fps_frames++;
-  Uint64 elapsed = frame_time - fps_window_start;
-  if (elapsed >= 500) {
-    fps_value = (float)fps_frames * 1000.0f / (float)elapsed;
-    fps_frames = 0;
-    fps_window_start = frame_time;
-  }
-  SDL_Texture *layer = ensure_scene_layer(renderer);
-  if (layer) SDL_SetRenderTarget(renderer, layer);
+enum { DITHER_SIZE = 64 };
+
+static float dither_noise(int x, int y) {
+  /* Interleaved gradient noise: a static, evenly spread threshold in [0,1). */
+  float v = 52.9829189f * fmodf(0.06711056f * (float)x + 0.00583715f * (float)y, 1.0f);
+  return v - floorf(v);
+}
+
+static SDL_Texture *ensure_dither_tile(SDL_Renderer *renderer) {
+  if (dither_tile) return dither_tile;
+  static Uint8 pixels[DITHER_SIZE * DITHER_SIZE * 4];
+  for (int y = 0; y < DITHER_SIZE; y++)
+    for (int x = 0; x < DITHER_SIZE; x++) {
+      Uint8 *p = &pixels[(y * DITHER_SIZE + x) * 4];
+      /* Offset each channel so the noise does not tint a single hue. */
+      p[0] = (Uint8)(dither_noise(x, y) * 255.0f);
+      p[1] = (Uint8)(dither_noise(x + 23, y + 41) * 255.0f);
+      p[2] = (Uint8)(dither_noise(x + 47, y + 13) * 255.0f);
+      p[3] = 255;
+    }
+  dither_tile = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, DITHER_SIZE, DITHER_SIZE);
+  if (!dither_tile) return NULL;
+  SDL_UpdateTexture(dither_tile, NULL, pixels, DITHER_SIZE * 4);
+  SDL_SetTextureScaleMode(dither_tile, SDL_SCALEMODE_NEAREST);
+  SDL_SetTextureBlendMode(dither_tile, SDL_BLENDMODE_ADD);
+  /* Scale the tile to one 8-bit output step. */
+  SDL_SetTextureColorModFloat(dither_tile, 1.0f / 255.0f, 1.0f / 255.0f, 1.0f / 255.0f);
+  return dither_tile;
+}
+
+static void dither_layer(SDL_Renderer *renderer, SDL_Texture *layer) {
+  if (layer->format != SDL_PIXELFORMAT_RGBA64_FLOAT) return;
+  SDL_Texture *tile = ensure_dither_tile(renderer);
+  if (!tile) return;
+  SDL_RenderTextureTiled(renderer, tile, NULL, 1.0f, NULL);
+  /* Remove the noise's mean half step so rounding to 8 bits stays unbiased. */
+  SDL_BlendMode subtract = SDL_ComposeCustomBlendMode(
+      SDL_BLENDFACTOR_ONE, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_REV_SUBTRACT,
+      SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD);
+  SDL_SetRenderDrawBlendMode(renderer, subtract);
+  SDL_SetRenderDrawColorFloat(renderer, .5f / 255.0f, .5f / 255.0f, .5f / 255.0f, 1.0f);
+  SDL_RenderFillRect(renderer, NULL);
+}
+
+/* Draw the scene commands into the offscreen layer and composite it into
+   `output` (NULL for the window). */
+static void draw_scene(SDL_Renderer *renderer, SDL_Texture *output) {
+  int width = 0, height = 0;
+  if (output) { width = output->w; height = output->h; }
+  else SDL_GetRenderOutputSize(renderer, &width, &height);
+  SDL_Texture *layer = ensure_scene_layer(renderer, width, height);
+  SDL_SetRenderTarget(renderer, layer ? layer : output);
   SDL_SetRenderDrawColor(renderer, clear_r, clear_g, clear_b, clear_a);
   SDL_RenderClear(renderer);
   for (int i=0; i<command_count; i++) {
@@ -227,10 +286,24 @@ static void render(SDL_Renderer *renderer) {
     }
   }
   if (layer) {
-    SDL_SetRenderTarget(renderer, NULL);
+    dither_layer(renderer, layer);
+    SDL_SetRenderTarget(renderer, output);
     SDL_SetTextureBlendMode(layer, SDL_BLENDMODE_NONE);
     SDL_RenderTexture(renderer, layer, NULL, NULL);
   }
+}
+
+static void render(SDL_Renderer *renderer) {
+  Uint64 frame_time = SDL_GetTicks();
+  if (fps_window_start == 0) fps_window_start = frame_time;
+  fps_frames++;
+  Uint64 elapsed = frame_time - fps_window_start;
+  if (elapsed >= 500) {
+    fps_value = (float)fps_frames * 1000.0f / (float)elapsed;
+    fps_frames = 0;
+    fps_window_start = frame_time;
+  }
+  draw_scene(renderer, NULL);
   /* The UI is composited after the scene layer, preserving crisp help/status text. */
   if (show_help || SDL_GetTicks() < status_until) {
     SDL_SetRenderDrawColor(renderer, 8, 10, 22, 220);
@@ -344,5 +417,6 @@ int main(void) {
     SDL_Delay(1);
   }
   if (scene_layer) SDL_DestroyTexture(scene_layer);
+  if (dither_tile) SDL_DestroyTexture(dither_tile);
   SDL_DestroyRenderer(renderer); if (gpu) SDL_DestroyGPUDevice(gpu); SDL_DestroyWindow(window); SDL_Quit(); return 0;
 }
