@@ -1,0 +1,80 @@
+:root {
+  --ink: #f2f2f7;
+  --shade: rgb(4 4 12 / 0.62);
+  --accent: #8fd8ff;
+  --error: #ff8a8a;
+  --mono: "JetBrains Mono", "Fira Code", "DejaVu Sans Mono", monospace;
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #020208;
+  color: var(--ink);
+  font: 14px/1.5 var(--mono);
+}
+
+#stage {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* The editor floats over the visuals; each line gets its own dark backing,
+   as in Hydra, so the scene stays visible between lines. */
+#editor {
+  position: fixed;
+  inset: 0 0 28px 0;
+  overflow: auto;
+}
+#editor .cm-editor { background: transparent; height: 100%; }
+#editor .cm-editor.cm-focused { outline: none; }
+#editor .cm-scroller { font-family: var(--mono); font-size: 15px; line-height: 1.6; padding: 24px 28px; }
+#editor .cm-content { caret-color: var(--accent); max-width: 110ch; }
+#editor .cm-line { width: fit-content; background: var(--shade); padding: 0 6px; }
+#editor .cm-cursor { border-left: 2px solid var(--accent); }
+#editor .cm-selectionBackground,
+#editor .cm-focused .cm-selectionBackground { background: rgb(143 216 255 / 0.28) !important; }
+#editor .cm-matchingBracket { outline: 1px solid rgb(143 216 255 / 0.6); background: none; }
+#editor .cm-evaluated { background: rgb(143 216 255 / 0.35); transition: background 0.25s; }
+
+#bar {
+  position: fixed;
+  inset: auto 0 0 0;
+  height: 28px;
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  padding: 0 28px;
+  background: var(--shade);
+  font-size: 12px;
+}
+#sketch { color: var(--accent); }
+#status { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; opacity: 0.8; }
+#status.error { color: var(--error); opacity: 1; }
+#fps { opacity: 0.6; }
+
+body.ambient #editor { display: none; }
+body.ambient #bar { background: none; }
+body.ambient #sketch, body.ambient #fps:not(.shown) { display: none; }
+body.ambient #status:not(.error) { display: none; }
+
+#help {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 20px 28px;
+  background: rgb(4 4 12 / 0.85);
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: 10px;
+}
+#help[hidden] { display: none; }
+#help h1 { margin: 0 0 12px; font-size: 16px; color: var(--accent); }
+#help dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 20px; margin: 0; }
+#help dt { color: var(--accent); }
+#help dd { margin: 0; }
+#help p { margin: 14px 0 0; opacity: 0.75; }
+kbd { color: var(--accent); font-family: inherit; }

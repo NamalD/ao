@@ -1,14 +1,19 @@
 # Ao contributor notes
 
-Ao is a personal Linux/Wayland ambient audio visualizer. Keep the Racket host
-and plugin DSL separate from the narrow C bridge in `native/`.
+Ao is a personal Linux/Wayland ambient audio visualizer you live-code. It is
+an Electron app in TypeScript: the main process captures and analyses audio,
+the renderer hosts Hydra, the GLSL scene runner, and the overlay editor. Keep
+the preload bridge in `src/preload/` narrow, and keep audio analysis in
+`src/shared/` pure so it stays unit-testable.
 
 Commit completed, coherent work without asking for permission. At the end of
 the task, merge the completed branch into `master` from the primary checkout
-without waiting for approval. Do not commit generated binaries, the
-project-local Racket runtime, or anything in `state/`. Run the relevant build
-and test checks before each commit. Keep plugin files small, readable examples
-of the public DSL.
+without waiting for approval. Do not commit `node_modules/`, `dist/`, or
+anything in `state/`. Run `make test` before each commit. Keep sketches in
+`sketches/` small, readable examples of what Ao can do.
+
+Check visual changes with `make screenshot SKETCH=<name>`, which renders
+offscreen with synthetic audio, rather than assuming a shader looks right.
 
 ## Concurrent-agent workflow
 
@@ -48,5 +53,6 @@ that worktree and commit or otherwise resolve them first.
 
 Every bug fix must include a focused regression test when the failing behavior
 can be tested locally. For output capture specifically, retain a test that
-the `parec` command uses an absolute executable path: Racket's
-`subprocess` does not search `PATH` for a bare program name.
+the `parec` command is spawned by absolute executable path, so a missing tool
+is reported clearly rather than depending on how the child process searches
+`PATH`.

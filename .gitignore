@@ -1,7 +1,9 @@
-.tooling/
-.worktrees/
-build/
+node_modules/
+dist/
 state/
-*.zo
+.worktrees/
+
+# Leftovers from the Racket version; safe to delete locally.
+.tooling/
+build/
 compiled/
-**/compiled/
