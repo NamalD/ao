@@ -11,6 +11,12 @@ declare module "hydra-synth" {
   }
 }
 
+declare module "hydra-synth/src/glsl/glsl-functions.js" {
+  interface HydraFunctionInput { name: string; type: string; default?: number | string | null }
+  interface HydraFunctionDefinition { name: string; type: string; inputs: HydraFunctionInput[] }
+  export default function hydraFunctions(): HydraFunctionDefinition[];
+}
+
 interface HydraSource {
   src: unknown;
   dynamic: boolean;
