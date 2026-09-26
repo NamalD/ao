@@ -117,6 +117,16 @@ async function save(): Promise<void> {
   updateLabel();
 }
 
+async function createSketch(): Promise<void> {
+  if (dirty()) await save();
+  sketches = await host.listSketches();
+  let name = "untitled";
+  for (let suffix = 2; sketches.includes(name); suffix++) name = `untitled-${suffix}`;
+  await host.writeSketch(name, "");
+  sketches.push(name);
+  await open(name);
+}
+
 async function step(offset: number): Promise<void> {
   sketches = await host.listSketches();
   if (!sketches.length) return;
@@ -162,6 +172,7 @@ addEventListener("keydown", (e) => {
   const handled = () => { e.preventDefault(); e.stopPropagation(); };
   if (e.key === "F11") { handled(); host.toggleFullscreen(); return; }
   if (e.key === "F1") { handled(); toggleHelp(); return; }
+  if (ctrl && !e.shiftKey && e.key.toLowerCase() === "n") { handled(); void createSketch(); return; }
   if (ctrl && e.shiftKey && e.key.toLowerCase() === "h") { handled(); setEditorVisible(!editorVisible()); return; }
   if (ctrl && e.key === "PageDown") { handled(); void step(1); return; }
   if (ctrl && e.key === "PageUp") { handled(); void step(-1); return; }
