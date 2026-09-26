@@ -52,6 +52,7 @@ html, body {
   font-size: 12px;
 }
 #sketch { color: var(--accent); }
+#vim-mode { color: var(--accent); min-width: 6ch; }
 #status { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; opacity: 0.8; }
 #status.error { color: var(--error); opacity: 1; }
 #fps { opacity: 0.6; }
