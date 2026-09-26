@@ -5,6 +5,7 @@ import { bracketMatching, HighlightStyle, syntaxHighlighting } from "@codemirror
 import { EditorState, Prec, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, drawSelection, EditorView, keymap } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
+import { getCM, vim } from "@replit/codemirror-vim";
 import { blockAt } from "./blocks";
 
 export interface EditorActions {
@@ -64,6 +65,7 @@ export function createEditor(parent: HTMLElement, actions: EditorActions): Edito
           { key: "Alt-Enter", run: runAll },
           { key: "Mod-s", run: () => { actions.save(); return true; } },
         ])),
+        vim({ status: false }),
         history(),
         drawSelection(),
         closeBrackets(),
@@ -76,6 +78,11 @@ export function createEditor(parent: HTMLElement, actions: EditorActions): Edito
         EditorView.updateListener.of((u) => { if (u.docChanged) actions.changed(); }),
       ],
     }),
+  });
+  const cm = getCM(view);
+  cm?.on("vim-mode-change", (event: { mode: string; subMode?: string }) => {
+    const mode = parent.ownerDocument.getElementById("vim-mode");
+    if (mode) mode.textContent = event.mode === "insert" ? "INSERT" : event.mode.toUpperCase();
   });
   return view;
 }
