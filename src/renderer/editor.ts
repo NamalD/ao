@@ -1,9 +1,10 @@
-import { closeBrackets } from "@codemirror/autocomplete";
+import { autocompletion, closeBrackets, type Completion, type CompletionContext } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { javascript } from "@codemirror/lang-javascript";
-import { bracketMatching, HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { bracketMatching, HighlightStyle, syntaxHighlighting, syntaxTree } from "@codemirror/language";
 import { EditorState, Prec, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, drawSelection, EditorView, keymap } from "@codemirror/view";
+import type { SyntaxNode } from "@lezer/common";
 import { tags } from "@lezer/highlight";
 import { getCM, vim } from "@replit/codemirror-vim";
 import { blockAt } from "./blocks";
@@ -40,6 +41,51 @@ const highlight = HighlightStyle.define([
   { tag: [tags.operator, tags.punctuation], color: "#e6e6f0" },
 ]);
 
+const generators = [
+  "osc", "noise", "shape", "gradient", "voronoi", "solid", "src",
+];
+const transforms = [
+  "rotate", "scale", "pixelate", "kaleid", "scrollX", "scrollY", "repeat",
+  "repeatX", "repeatY", "modulateRepeat", "modulateRepeatX", "modulateRepeatY",
+  "modulateKaleid", "modulateScrollX", "modulateScrollY", "modulate", "modulateScale",
+  "modulatePixelate", "modulateRotate", "posterize", "shift", "color", "saturate",
+  "contrast", "brightness", "luma", "thresh", "invert", "hue",
+  "colorama", "r", "g", "b", "a", "add", "sub", "layer", "blend", "mult",
+  "diff", "mask", "out",
+].map((name) => name.trim());
+const audioMembers = ["features", "time", "loudness", "impulse", "beat", "bass", "mid", "high", "fft", "map"];
+const sourceMembers = ["init", "initScene", "src", "dynamic"];
+const completions = (names: string[], detail: string): Completion[] => names.map((label) => ({ label, type: "function", detail }));
+const topLevelCompletions = [
+  ...completions(generators, "Hydra generator"),
+  ...["s0", "s1", "s2", "s3"].map((label) => ({ label, type: "variable", detail: "Hydra source" })),
+  { label: "ao", type: "variable", detail: "Audio features" },
+  ...completions(["render", "hush"], "Hydra control"),
+];
+
+function hydraCompletions(context: CompletionContext) {
+  const node = syntaxTree(context.state).resolveInner(context.pos, -1);
+  for (let current: SyntaxNode | null = node; current; current = current.parent) {
+    if (["String", "TemplateString", "LineComment", "BlockComment"].includes(current.name)) return null;
+  }
+
+  const word = context.matchBefore(/[\w$]+/);
+  const justTypedDot = context.state.doc.sliceString(Math.max(0, context.pos - 1), context.pos) === ".";
+  if (!word && !context.explicit && !justTypedDot) return null;
+  const from = word?.from ?? context.pos;
+  const before = context.state.doc.sliceString(Math.max(0, from - 100), from);
+  const member = before.match(/(?:\b(ao|s[0-3])|\))\.$/);
+  if (member || /\.\s*$/.test(before)) {
+    const owner = member?.[1];
+    const options = owner === "ao"
+      ? completions(audioMembers, "Ao audio API")
+      : owner?.startsWith("s") ? completions(sourceMembers, "Hydra source") : completions(transforms, "Hydra chain method");
+    return { from, options, validFor: /^[\w$]*$/ };
+  }
+
+  return { from, options: topLevelCompletions, validFor: /^[\w$]*$/ };
+}
+
 /** The live-coding editor drawn over the visuals. */
 export function createEditor(parent: HTMLElement, actions: EditorActions): EditorView {
   let view: EditorView;
@@ -69,6 +115,7 @@ export function createEditor(parent: HTMLElement, actions: EditorActions): Edito
         history(),
         drawSelection(),
         closeBrackets(),
+        autocompletion({ override: [hydraCompletions], activateOnTyping: true }),
         bracketMatching(),
         javascript(),
         syntaxHighlighting(highlight),
