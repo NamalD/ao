@@ -86,11 +86,17 @@ async function run(code: string): Promise<void> {
   }
 }
 
+let autosaveTimer: ReturnType<typeof setTimeout>;
+let pendingWrites = Promise.resolve();
 const editorRoot = $("editor");
 const editor = createEditor(editorRoot, {
   run: (code) => void run(code),
   save: () => void save(),
-  changed: () => updateLabel(),
+  changed: () => {
+    updateLabel();
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(() => void save(), 700);
+  },
 });
 
 const dirty = () => editor.state.doc.toString() !== saved;
@@ -100,6 +106,8 @@ function updateLabel() {
 
 async function open(name: string): Promise<void> {
   if (!name) return;
+  clearTimeout(autosaveTimer);
+  if (current && dirty()) await save();
   current = name;
   saved = await host.readSketch(name);
   setText(editor, saved);
@@ -112,9 +120,18 @@ async function open(name: string): Promise<void> {
 async function save(): Promise<void> {
   if (!current) return;
   const code = editor.state.doc.toString();
-  await host.writeSketch(current, code);
-  saved = code;
-  updateLabel();
+  const name = current;
+  const write = pendingWrites.then(() => host.writeSketch(name, code));
+  pendingWrites = write.catch(() => {});
+  try {
+    await write;
+    if (current === name) {
+      saved = code;
+      updateLabel();
+    }
+  } catch (error) {
+    showStatus(`Autosave failed: ${error instanceof Error ? error.message : String(error)}`, true);
+  }
 }
 
 async function createSketch(): Promise<void> {

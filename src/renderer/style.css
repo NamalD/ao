@@ -3,7 +3,7 @@
   --shade: rgb(4 4 12 / 0.62);
   --accent: #8fd8ff;
   --error: #ff8a8a;
-  --mono: "JetBrains Mono", "Fira Code", "DejaVu Sans Mono", monospace;
+  --mono: "JetBrains Mono", monospace;
 }
 
 html, body {
