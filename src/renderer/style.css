@@ -48,6 +48,20 @@ html, body {
 }
 #editor .cm-tooltip-autocomplete ul li[aria-selected] { background: #273747; color: var(--ink); }
 #editor .cm-tooltip-autocomplete ul li span.cm-completionDetail { color: #aab7c8; font-style: normal; }
+#editor .cm-tooltip.cm-signature-help {
+  max-width: min(560px, calc(100vw - 56px));
+  padding: 8px 11px;
+  background: #10111b;
+  color: var(--ink);
+  border: 1px solid rgb(143 216 255 / 0.35);
+  border-radius: 4px;
+  font: 12px/1.5 var(--mono);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.45);
+  white-space: normal;
+}
+#editor .cm-signature-name { color: #d7c7ff; white-space: nowrap; }
+#editor .cm-signature-active { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+#editor .cm-signature-description { margin-top: 4px; color: #b7c3d2; }
 
 #bar {
   position: fixed;
