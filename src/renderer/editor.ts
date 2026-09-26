@@ -137,22 +137,29 @@ function documentedCompletions(names: string[], detail: string): Completion[] {
   });
 }
 
-function signatureTooltip(state: EditorState, pos: number): Tooltip | null {
-  if (!state.selection.main.empty) return null;
+export function callParameterContext(state: EditorState, pos: number): { name: string; activeParameter: number } | null {
   let args: SyntaxNode | null = syntaxTree(state).resolveInner(pos, -1);
   while (args && args.name !== "ArgList") args = args.parent;
   if (!args || pos < args.from || pos > args.to || (pos === args.to && state.sliceDoc(pos - 1, pos) === ")")) return null;
   const call = args.parent;
   if (!call || call.name !== "CallExpression") return null;
-  const name = state.sliceDoc(call.from, args.from).trim().match(/([\w$]+)$/)?.[1];
+  // ArgList.from points at the opening parenthesis; strip it before reading the callee.
+  const name = state.sliceDoc(call.from, args.from).trim().replace(/\($/, "").trim().match(/([\w$]+)$/)?.[1];
   if (!name) return null;
-  const docs = functionDoc(name);
-  if (!docs) return null;
-
   let activeParameter = 0;
   for (let child = args.firstChild; child; child = child.nextSibling) {
     if (child.name === "," && child.from < pos) activeParameter++;
   }
+  return { name, activeParameter };
+}
+
+function signatureTooltip(state: EditorState, pos: number): Tooltip | null {
+  if (!state.selection.main.empty) return null;
+  const context = callParameterContext(state, pos);
+  if (!context) return null;
+  const { name, activeParameter } = context;
+  const docs = functionDoc(name);
+  if (!docs) return null;
   return {
     pos,
     above: true,
