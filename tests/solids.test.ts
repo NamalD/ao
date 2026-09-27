@@ -61,6 +61,13 @@ describe("solid chains", () => {
     expect(code).toMatch(/float aoSlope\(\) \{ return \(0\.0 \+ 0\.5 \* abs\(spikes_length \* spikes_density\)/);
   });
 
+  it("saturates the colour the chain had before it", () => {
+    const { code, uniforms } = compileSolid(sphere().color(0.4, 0.8, 1).saturate(0.2));
+    expect(code).toContain("vec4 s1 = vec4(vec3(color_r, color_g, color_b), s0.a);");
+    expect(code).toContain("vec4 s2 = vec4(mix(vec3(dot(s1.rgb, vec3(0.2125, 0.7154, 0.0721))), s1.rgb, saturate_amount), s1.a);");
+    expect(uniforms.saturate_amount).toBe(0.2);
+  });
+
   it("pipes a chain through a function, passing the extra arguments", () => {
     const spikey = (s: Chain, length: number) => s.spikes(length).spin(0.5, 0);
     const piped = torus().pipe(spikey, 0.4).add(sphere());

@@ -32,7 +32,7 @@ export interface SolidFunction {
   point?: string;
   /** modify: the new distance, from the chain's distance `{d}` at point `{p}`. */
   distance?: string;
-  /** modify: the new colour, replacing the chain's. */
+  /** modify: the new colour, from the chain's colour `{c}`. */
   color?: string;
   /**
    * modify: how far from the chain's `{reach}` the surface may now lie from
@@ -113,6 +113,9 @@ export const solidFunctions: SolidFunction[] = [
   { name: "color", type: "modify", description: "Colours the solid; values above 1 glow brighter.",
     params: [param("r", 1, "Red."), param("g", 1, "Green."), param("b", 1, "Blue.")],
     color: "vec3({r}, {g}, {b})" },
+  { name: "saturate", type: "modify", description: "Scales the solid's colour saturation.",
+    params: [param("amount", 2, "Saturation factor: 0 is greyscale, 1 unchanged, above 1 more vivid.")],
+    color: "mix(vec3(dot({c}, vec3(0.2125, 0.7154, 0.0721))), {c}, {amount})" },
   // Combining
   { name: "add", type: "combine", description: "Joins another solid to this one; smooth melts them together like liquid.",
     params: [param("smooth", 0, "Blend distance; 0 is a hard join, 0.5 is very blobby.")],
@@ -262,7 +265,7 @@ for (const fn of solidFunctions) {
             compiler.lines.push(`vec3 ${inner} = ${fill(fn.point, { ...names, p: point })};`);
           }
           const before = this.emit(compiler, inner);
-          const color = fn.color ? fill(fn.color, names) : `${before.value}.rgb`;
+          const color = fn.color ? fill(fn.color, { ...names, c: `${before.value}.rgb` }) : `${before.value}.rgb`;
           const distance = fn.distance ? fill(fn.distance, { ...names, p: inner, d: `${before.value}.a` }) : `${before.value}.a`;
           const out = compiler.temp("s");
           compiler.lines.push(`vec4 ${out} = vec4(${color}, ${distance});`);
