@@ -1,15 +1,16 @@
-import Hydra from "hydra-synth";
 import type { Bridge } from "../preload/preload";
 import { ao, updateAudio } from "./audio";
+import { Autopilot } from "./autopilot";
 import { ChallengeMode } from "./challenges/challenge-mode";
+import { Mixer } from "./crossfade";
 import { createEditor, setText } from "./editor";
 import { flashStatus } from "./flash";
 import { Meter } from "./meter";
 import { NightFade } from "./night";
+import { defaultAutopilot } from "../shared/autopilot";
 import { describeNight } from "../shared/night";
 import { Recorder } from "./recorder";
 import { describeError, ErrorReporter, installRuntimeErrorReporting } from "./runtime-errors";
-import { Scene, SceneOptions } from "./scenes";
 import { SketchWriter } from "./sketch-writer";
 import "./style.css";
 
@@ -45,28 +46,10 @@ const night = new NightFade(canvas);
 const meter = new Meter(document.body);
 const pixelSize = (): [number, number] => [Math.round(innerWidth * devicePixelRatio), Math.round(innerHeight * devicePixelRatio)];
 const [width, height] = pixelSize();
-const hydra = new Hydra({
-  canvas, width, height,
-  detectAudio: false, autoLoop: false, makeGlobal: true,
-  enableStreamCapture: false, precision: "highp",
-});
+// Two Hydra decks, so switches can crossfade; #stage mirrors them for recording.
+const mixer = new Mixer(canvas, width, height, (message) => runtimeErrors.report(message));
 // Follow the canvas's real size; the window may not have its final size yet.
-new ResizeObserver(() => {
-  const [w, h] = pixelSize();
-  if (w > 0 && h > 0 && (w !== hydra.width || h !== hydra.height)) hydra.setResolution(w, h);
-}).observe(canvas);
-
-// Each Hydra source can also host a GLSL scene: `s0.initScene(glsl)`.
-const scenes = new Map<HydraSource, Scene>();
-for (const source of hydra.s) {
-  source.initScene = (code: string, options?: SceneOptions) => {
-    let scene = scenes.get(source);
-    if (!scene) scenes.set(source, (scene = new Scene((message) => runtimeErrors.report(message))));
-    scene.load(code, options);
-    if (source.src !== scene.canvas) source.init({ src: scene.canvas });
-    source.dynamic = true;
-  };
-}
+new ResizeObserver(() => mixer.resize(...pixelSize())).observe(canvas);
 window.ao = ao;
 host.onAudio(updateAudio);
 
@@ -77,19 +60,10 @@ function frame(now: number) {
   // Night fade may slow time a little; it is 1 unless configured.
   const dt = (now - last) * night.timeScale;
   last = now;
-  const time = hydra.synth.time + dt * 0.001 * hydra.synth.speed;
-  for (const [source, scene] of scenes) {
-    if (source.src !== scene.canvas) continue;
-    try {
-      scene.render(hydra.width, hydra.height, time, dt / 1000, ao.features);
-    } catch (e) {
-      runtimeErrors.report(`scene: ${describeError(e)}`);
-    }
-  }
   try {
-    hydra.tick(dt);
+    mixer.frame(dt, ao.features, now);
   } catch (e) {
-    runtimeErrors.report(`Hydra: ${describeError(e)}`);
+    runtimeErrors.report(`render: ${describeError(e)}`);
   }
   frames++;
   if (now - fpsWindow > 500) {
@@ -107,18 +81,24 @@ let saved = "";
 // Ordered writes that skip content already on disk.
 const writer = new SketchWriter((name, code) => host.writeSketch(name, code));
 
-async function run(code: string): Promise<void> {
+/** Runs code on the current deck; resolves to whether it ran without throwing. */
+async function run(code: string): Promise<boolean> {
   // A still-broken sketch reports its runtime errors again after this run.
   runtimeErrors.reset();
   try {
     // Each evaluation gets its own scope so re-running `const` blocks works.
-    // Hydra's functions, `ao`, and scene sources are globals.
-    await new Function(`return (async () => {\n${code}\n})()`)();
+    // Hydra's functions and scene sources come from the deck (see deck.ts);
+    // `ao` and everything else are globals.
+    await mixer.current.evaluate(code);
     showStatus("");
     // Errors reported while an async sketch was running were just cleared.
     runtimeErrors.reset();
+    return true;
   } catch (e) {
     showStatus(e instanceof Error ? e.message : String(e), true);
+    return false;
+  } finally {
+    mixer.exposeGlobals();
   }
 }
 
@@ -127,9 +107,10 @@ let autosaveTimer: ReturnType<typeof setTimeout>;
 let renaming: Promise<void> | undefined;
 const editorRoot = $("editor");
 const editor = createEditor(editorRoot, {
-  run: (code) => void run(code),
+  run: (code) => { autopilot.edited(); void run(code); },
   save: () => void save(),
   changed: () => {
+    if (!loadingText) autopilot.edited();
     updateLabel();
     clearTimeout(autosaveTimer);
     autosaveTimer = setTimeout(() => void save(), 700);
@@ -143,18 +124,48 @@ function updateLabel() {
   sketchLabel.textContent = `${current}${dirty() ? " ●" : ""}`;
 }
 
-async function open(name: string): Promise<void> {
-  if (!name) return;
+// Set while a sketch's text is loaded into the editor: that isn't typing.
+let loadingText = false;
+// Sketch switches run one at a time, in order.
+let switching: Promise<unknown> = Promise.resolve();
+/** How long a switch waits for an async sketch before fading anyway, ms. */
+const RUN_WAIT_MS = 1500;
+
+/**
+ * Opens a sketch and runs it. `fade` crossfades from the current one over
+ * the autopilot's fadeSeconds (0 cuts); otherwise it's a cut, as always.
+ * Resolves to false when the sketch threw while starting.
+ */
+function open(name: string, options: { fade?: boolean } = {}): Promise<boolean> {
+  const task = switching.then(() => openNow(name, options.fade ? autopilot.fadeSeconds : 0));
+  switching = task.catch(() => {});
+  return task;
+}
+
+async function openNow(name: string, fadeSeconds: number): Promise<boolean> {
+  if (!name) return false;
   clearTimeout(autosaveTimer);
   if (current && dirty()) await save();
+  const code = await host.readSketch(name);
   current = name;
-  saved = await host.readSketch(name);
+  saved = code;
   writer.known(name, saved);
-  setText(editor, saved);
+  loadingText = true;
+  try {
+    setText(editor, saved);
+  } finally {
+    loadingText = false;
+  }
   host.setLastSketch(name);
   updateLabel();
-  hydra.synth.hush();
-  await run(saved);
+  autopilot.switched(name);
+  if (fadeSeconds > 0) mixer.beginCrossfade();
+  else mixer.cut();
+  // An async sketch may take a while (or forever); don't hold the switch up.
+  const ran = run(saved);
+  const ok = await Promise.race([ran, new Promise<boolean>((resolve) => setTimeout(() => resolve(true), RUN_WAIT_MS))]);
+  mixer.startFade(fadeSeconds);
+  return ok;
 }
 
 async function save(): Promise<void> {
@@ -214,11 +225,24 @@ async function createSketch(): Promise<void> {
   await open(name);
 }
 
+/** The next or previous sketch by name, crossfading unless fadeSeconds is 0. */
 async function step(offset: number): Promise<void> {
   sketches = await host.listSketches();
   if (!sketches.length) return;
   const index = sketches.indexOf(current);
-  await open(sketches[(index + offset + sketches.length) % sketches.length]);
+  await open(sketches[(index + offset + sketches.length) % sketches.length], { fade: true });
+}
+
+// With autopilot on, next is the next sketch in the shuffle and previous
+// goes back through what it showed.
+function next(): void {
+  if (autopilot.enabled) void autopilot.skip();
+  else void step(1);
+}
+function previous(): void {
+  const back = autopilot.enabled ? autopilot.previous() : undefined;
+  if (back) void open(back, { fade: true });
+  else void step(-1);
 }
 
 host.onSketchChanged(async (name) => {
@@ -251,6 +275,7 @@ host.onStatus((message) => {
 
 // Records the canvas (never the overlay) with the system audio: F9, or `r`.
 const recorder = new Recorder(host, canvas, () => current);
+mixer.capturing = () => recorder.capturing;
 fpsLabel.before(recorder.indicator);
 
 // --- Overlay and keys --------------------------------------------------------
@@ -265,6 +290,7 @@ function toggleHelp() {
 
 function setEditorVisible(visible: boolean) {
   document.body.classList.toggle("ambient", !visible);
+  autopilot.setEditorVisible(visible);
   if (visible) editor.focus();
   else editor.contentDOM.blur();
 }
@@ -279,9 +305,18 @@ function cycleNight() {
   host.updateSettings({ night: { mode } });
   flashStatus(status, describeNight(night.current));
 }
+// Shuffles through the sketches on drops, section changes and a timer.
+const autopilot = new Autopilot({
+  listSketches: host.listSketches, readSketch: host.readSketch, current: () => current,
+  switchTo: (name) => open(name, { fade: true }), fading: () => mixer.fading,
+  flash: (message) => flashStatus(status, message), log: host.log,
+  save: (patch) => host.updateSettings({ autopilot: patch }),
+}, defaultAutopilot);
+host.onAudio((features) => autopilot.feed(features));
+
 const challenges = new ChallengeMode({
   listSketches: host.listSketches, writeSketch: host.writeSketch, finishChallenge: host.finishChallenge,
-  open, save, notify: showStatus, focus: () => { if (editorVisible()) editor.focus(); },
+  open: async (name) => { await open(name); }, save, notify: showStatus, focus: () => { if (editorVisible()) editor.focus(); },
 });
 
 addEventListener("keydown", (e) => {
@@ -295,13 +330,14 @@ addEventListener("keydown", (e) => {
   if (ctrl && e.shiftKey && e.key.toLowerCase() === "h") { handled(); setEditorVisible(!editorVisible()); return; }
   if (ctrl && e.shiftKey && e.key.toLowerCase() === "m") { handled(); toggleMeter(); return; }
   if (ctrl && e.shiftKey && e.key.toLowerCase() === "n") { handled(); cycleNight(); return; }
-  if (ctrl && e.key === "PageDown") { handled(); void step(1); return; }
-  if (ctrl && e.key === "PageUp") { handled(); void step(-1); return; }
+  if (ctrl && e.shiftKey && e.key.toLowerCase() === "a") { handled(); autopilot.toggle(); return; }
+  if (ctrl && e.key === "PageDown") { handled(); next(); return; }
+  if (ctrl && e.key === "PageUp") { handled(); previous(); return; }
   if (ctrl && e.key.toLowerCase() === "q") { handled(); host.quit(); return; }
   if (editorVisible() || ctrl || e.altKey) return;
   // Ambient mode keeps Ao's original single-key controls.
   const actions: Record<string, () => void> = {
-    j: () => void step(-1), k: () => void step(1), f: host.toggleFullscreen,
+    j: previous, k: next, a: () => autopilot.toggle(), f: host.toggleFullscreen,
     e: () => setEditorVisible(true), h: toggleHelp, i: () => fpsLabel.classList.toggle("shown"),
     m: toggleMeter, n: cycleNight, q: host.quit, Escape: host.quit,
     c: () => challenges.toggle(),
@@ -317,6 +353,7 @@ setEditorVisible(params.get("hideEditor") !== "1");
 const settings = await host.settings();
 meter.setVisible(settings.meter);
 night.set(settings.night);
+autopilot.configure(settings.autopilot);
 sketches = await host.listSketches();
 const initial = params.get("sketch") || (await host.lastSketch());
 await open(sketches.includes(initial) ? initial : sketches[0] ?? "");

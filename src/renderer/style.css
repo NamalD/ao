@@ -197,3 +197,13 @@ body.challenge-capture #night { display: none; }
 #recording.saved { color: var(--accent); max-width: 50%; overflow: hidden; text-overflow: ellipsis; }
 #recording.error { color: var(--error); max-width: 50%; overflow: hidden; text-overflow: ellipsis; }
 @keyframes ao-rec-pulse { 50% { opacity: 0.55; } }
+
+/* Autopilot */
+/* The two Hydra decks (crossfade.ts) stack under #stage, which shows only
+   while recording; the incoming deck fades in above the outgoing one. */
+canvas.deck {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
