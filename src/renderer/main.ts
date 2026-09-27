@@ -4,6 +4,7 @@ import { ao, updateAudio } from "./audio";
 import { ChallengeMode } from "./challenges/challenge-mode";
 import { createEditor, setText } from "./editor";
 import { flashStatus } from "./flash";
+import { setLiveValues, toggleLiveValues } from "./live-values";
 import { Meter } from "./meter";
 import { NightFade } from "./night";
 import { describeNight } from "../shared/night";
@@ -294,6 +295,7 @@ addEventListener("keydown", (e) => {
   if (ctrl && !e.shiftKey && e.key.toLowerCase() === "n") { handled(); void createSketch(); return; }
   if (ctrl && e.shiftKey && e.key.toLowerCase() === "h") { handled(); setEditorVisible(!editorVisible()); return; }
   if (ctrl && e.shiftKey && e.key.toLowerCase() === "m") { handled(); toggleMeter(); return; }
+  if (ctrl && e.shiftKey && e.key.toLowerCase() === "l") { handled(); host.updateSettings({ liveValues: toggleLiveValues(editor) }); return; }
   if (ctrl && e.shiftKey && e.key.toLowerCase() === "n") { handled(); cycleNight(); return; }
   if (ctrl && e.key === "PageDown") { handled(); void step(1); return; }
   if (ctrl && e.key === "PageUp") { handled(); void step(-1); return; }
@@ -316,6 +318,7 @@ addEventListener("keydown", (e) => {
 setEditorVisible(params.get("hideEditor") !== "1");
 const settings = await host.settings();
 meter.setVisible(settings.meter);
+setLiveValues(editor, settings.liveValues);
 night.set(settings.night);
 sketches = await host.listSketches();
 const initial = params.get("sketch") || (await host.lastSketch());

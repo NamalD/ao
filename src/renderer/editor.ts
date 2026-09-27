@@ -12,6 +12,7 @@ import hydraFunctions from "hydra-synth/src/glsl/glsl-functions.js";
 import HydraSourceClass from "hydra-synth/src/hydra-source.js";
 import { ao, aoDocs } from "./audio";
 import { blockAt } from "./blocks";
+import { keepLiveValues, liveValues } from "./live-values";
 import { remix, remixRunRange } from "./remix";
 import { joinsScrub, scrubbing } from "./scrub";
 
@@ -478,6 +479,7 @@ function extensionsFor(actions: EditorActions): Extension[] {
     syntaxHighlighting(highlight),
     keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
     flashField,
+    liveValues(),
     EditorView.lineWrapping,
     EditorView.updateListener.of((u) => { if (u.docChanged) actions.changed(); }),
     editorActions.of(actions),
@@ -491,9 +493,12 @@ export function createEditorState(doc: string, actions: EditorActions): EditorSt
   return EditorState.create({ doc, extensions: extensionsFor(actions) });
 }
 
-/** A fresh state for another document, reusing `state`'s extensions but none of its history. */
+/**
+ * A fresh state for another document, reusing `state`'s extensions but none
+ * of its history. Whether live values show carries over.
+ */
 export function documentState(state: EditorState, doc: string): EditorState {
-  return EditorState.create({ doc, extensions: [...state.facet(editorExtensions)] });
+  return EditorState.create({ doc, extensions: [keepLiveValues(state), ...state.facet(editorExtensions)] });
 }
 
 /** Mirror vim's mode in the status bar. The vim plugin is recreated with each new state. */

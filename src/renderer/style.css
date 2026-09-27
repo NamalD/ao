@@ -197,3 +197,25 @@ body.challenge-capture #night { display: none; }
 #recording.saved { color: var(--accent); max-width: 50%; overflow: hidden; text-overflow: ellipsis; }
 #recording.error { color: var(--error); max-width: 50%; overflow: hidden; text-overflow: ellipsis; }
 @keyframes ao-rec-pulse { 50% { opacity: 0.55; } }
+/* Live values */
+/* A sparkline and number after each ao expression (live-values.ts). Fixed
+   size, so the text never moves as the values change. */
+#editor .cm-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 16px;
+  margin: 0 2px 0 6px;
+  padding: 0 5px 0 4px;
+  vertical-align: -3px;
+  border-radius: 3px;
+  background: rgb(143 216 255 / 0.1);
+  box-shadow: inset 0 0 0 1px rgb(143 216 255 / 0.16);
+  color: var(--accent);
+  font: 10.5px/1 var(--mono);
+  user-select: none;
+  cursor: default;
+}
+#editor .cm-live canvas { display: block; }
+#editor .cm-live-value { min-width: 5ch; text-align: right; white-space: pre; }
+#editor .cm-live-list .cm-live-value { display: none; }

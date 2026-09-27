@@ -33,6 +33,7 @@ past 1 MB the log moves to `ao.log.1`.
 | Ctrl+PgUp / Ctrl+PgDn | previous / next sketch |
 | Ctrl+Shift+H | hide or show the editor (ambient mode) |
 | Ctrl+Shift+M | show or hide the audio meter |
+| Ctrl+Shift+L | show or hide live values beside `ao` expressions in the code |
 | Ctrl+Shift+N | night fade: follow the schedule, force on, force off |
 | Ctrl+Shift+C | challenge: draw a prompt, or finish the running one |
 | F11 | fullscreen |
@@ -160,6 +161,24 @@ values for `ao.loudness`, `ao.impulse`, `ao.beat`, `ao.bass`, `ao.mid` and
 window, not part of the visuals, and draws nothing while hidden. Ao remembers
 whether it was showing.
 
+## Live values
+
+The meter's information, where you're writing: after each `ao` expression in
+the code, a small sparkline of its last 2.5 seconds and its current value.
+`ao.bass`, `ao.hz(40, 100)` and `ao.fftAt(0.2)` show what they read, and
+`ao.map("bass", 0, 2)` shows the mapped value. An argument Hydra re-reads,
+such as `() => 4 * ao.hz(6000, 12000)`, shows as one value, the one Hydra
+sees. `ao.fft` shows a tiny spectrum. Hover a value for its full precision.
+Ctrl+Shift+L turns them off or back on, and Ao remembers.
+
+Nothing you write is run to get these values. Expressions are read from the
+syntax tree, and only literals, arithmetic, a few `Math` functions and `ao`'s
+own getters and methods (called with literal arguments) count: anything
+else, such as `() => spin + ao.bass`, shows just the `ao` reads inside it.
+Strings and comments are skipped. New `ao` members show up automatically.
+Values are drawn only on visible lines, at most 40 of them, and nothing is
+drawn while they're off or the editor is hidden.
+
 ## Night fade
 
 Late at night the visuals ease down to a dimmer brightness so they aren't
@@ -186,6 +205,7 @@ the defaults:
 ```json
 {
   "meter": false,
+  "liveValues": true,
   "night": {
     "mode": "schedule",
     "start": "22:00",
@@ -198,6 +218,7 @@ the defaults:
 ```
 
 - `meter`: whether the audio meter is showing.
+- `liveValues`: whether live values show beside `ao` expressions in the code.
 - `night.mode`: `"schedule"`, `"on"` (always night), or `"off"` (never).
 - `night.start`, `night.end`: local 24-hour `HH:MM` times of the window;
   equal times make it empty.
@@ -283,6 +304,7 @@ change without watching the screen, and it prints the frame rate it reached.
 Screenshots ignore `settings.json`, so the meter and night fade stay out of
 them unless you ask: add `--meter` or `--night=on` to the `electron` command
 (`npx electron . --sketch=dunes --hide-editor --meter --screenshot=state/dunes.png`).
+Live values keep their default (on) whenever the editor shows.
 
 ## Layout
 
