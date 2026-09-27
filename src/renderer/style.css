@@ -219,3 +219,112 @@ body.challenge-capture #night { display: none; }
 #editor .cm-live canvas { display: block; }
 #editor .cm-live-value { min-width: 5ch; text-align: right; white-space: pre; }
 #editor .cm-live-list .cm-live-value { display: none; }
+
+/* Sketch browser */
+#browser {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(2 2 8 / 0.45);
+}
+#browser[hidden], body.challenge-capture #browser { display: none; }
+.browser-panel {
+  width: min(1180px, calc(100vw - 56px));
+  height: calc(100vh - 72px);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 24px 14px;
+  background: rgb(4 4 12 / 0.82);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: 10px;
+}
+.browser-bar { display: flex; align-items: baseline; gap: 18px; font-size: 12px; }
+.browser-bar h1 { margin: 0; font-size: 16px; color: var(--accent); }
+.browser-search { flex: 1; font-size: 15px; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.browser-query { color: var(--ink); }
+.browser-query:not(.placeholder)::after { content: ""; border-left: 2px solid var(--accent); margin-left: 1px; animation: ao-browser-caret 1s steps(1) infinite; }
+.browser-query.placeholder { opacity: 0.4; }
+@keyframes ao-browser-caret { 50% { opacity: 0; } }
+.browser-count { opacity: 0.6; }
+.browser-hints { flex: 1; opacity: 0.7; }
+.browser-grid {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 14px -8px 12px;
+  padding: 4px 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+  align-content: start;
+  gap: 14px;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(255 255 255 / 0.2) transparent;
+}
+.browser-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
+  font: 12px/1.4 var(--mono);
+  color: var(--ink);
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.browser-thumb {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 6px;
+  outline: 1px solid rgb(255 255 255 / 0.12);
+  background: linear-gradient(135deg, hsl(var(--h1) 55% 30%), hsl(var(--h2) 65% 12%));
+  transition: outline-color 0.12s, transform 0.12s;
+}
+.browser-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 0 12px;
+  font-size: 15px;
+  text-align: center;
+  overflow-wrap: anywhere;
+  color: rgb(255 255 255 / 0.72);
+  text-shadow: 0 1px 8px rgb(0 0 0 / 0.5);
+}
+.browser-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.2s; }
+.browser-thumb.loaded img { opacity: 1; }
+.browser-name { padding: 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.8; }
+.browser-name b { color: var(--accent); font-weight: normal; text-decoration: underline; text-underline-offset: 3px; }
+.browser-card:hover .browser-thumb { outline-color: rgb(143 216 255 / 0.5); }
+.browser-card.selected .browser-thumb { outline: 2px solid var(--accent); outline-offset: 2px; transform: scale(1.02); }
+.browser-card.selected .browser-name { opacity: 1; color: var(--accent); }
+.browser-card.current .browser-thumb::after {
+  content: "● playing";
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 0 6px;
+  font-size: 11px;
+  color: #d7c7ff;
+  background: rgb(4 4 12 / 0.7);
+  border-radius: 3px;
+}
+.browser-empty { margin: 24px 0; text-align: center; opacity: 0.7; }
+.browser-empty[hidden] { display: none; }
+#browser button:not(.browser-card) {
+  font: 12px/1.5 var(--mono);
+  color: var(--ink);
+  background: rgb(255 255 255 / 0.06);
+  border: 1px solid rgb(255 255 255 / 0.14);
+  border-radius: 4px;
+  padding: 2px 10px;
+  cursor: pointer;
+}
+#browser button:not(.browser-card):hover { border-color: rgb(143 216 255 / 0.6); }
+#browser button.selected:not(.browser-card) { border-color: var(--accent); background: rgb(143 216 255 / 0.16); }
+#browser button[hidden] { display: none; }

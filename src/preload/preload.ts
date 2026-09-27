@@ -19,6 +19,10 @@ const bridge = {
   settings: (): Promise<Settings> => ipcRenderer.invoke("settings:read"),
   updateSettings: (patch: { meter?: boolean; liveValues?: boolean; night?: Partial<Settings["night"]> }) => ipcRenderer.send("settings:update", patch),
   finishChallenge: (result: ChallengeResult): Promise<ChallengeRecord> => ipcRenderer.invoke("challenge:finish", result),
+  // Sketch browser: recently opened names, and thumbnail PNGs by sketch name.
+  recentSketches: (): Promise<string[]> => ipcRenderer.invoke("sketches:recent"),
+  thumbnail: (name: string): Promise<Uint8Array | null> => ipcRenderer.invoke("thumbnails:read", name),
+  saveThumbnail: (name: string, png: ArrayBuffer) => ipcRenderer.send("thumbnails:save", name, png),
   onAudio: (fn: (f: AudioFeatures) => void) => ipcRenderer.on("audio", (_e, f) => fn(f)),
   onSketchChanged: (fn: (name: string) => void) => ipcRenderer.on("sketches:changed", (_e, n) => fn(n)),
   onStatus: (fn: (message: string) => void) => ipcRenderer.on("status", (_e, m) => fn(m)),

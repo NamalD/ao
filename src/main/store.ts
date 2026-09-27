@@ -1,5 +1,6 @@
 import { appendFileSync, linkSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
+import { sketchRenamed } from "./thumbnails";
 
 export interface StoreOptions {
   /** Once `ao.log` would grow past this many bytes it moves to `ao.log.1`. */
@@ -109,6 +110,8 @@ export class Store {
       // An unsaved sketch whose file is already gone just gains its new name.
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
+    // The thumbnail and recent-list entry follow; failing that never undoes the rename.
+    try { sketchRenamed(this, from, name); } catch (error) { this.log(`thumbnail rename failed: ${String(error)}`); }
     return name;
   }
 }
