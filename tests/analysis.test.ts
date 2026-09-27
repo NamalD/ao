@@ -28,6 +28,23 @@ describe("fft", () => {
     expect(mags[5]).toBeCloseTo(n / 2, 6);
     expect(mags[7]).toBeCloseTo(0, 6);
   });
+
+  it("matches a direct DFT at every size, whichever size ran before", () => {
+    for (const n of [2, 8, 256, 8, 1024]) {
+      const input = Array.from({ length: n }, (_, i) => Math.sin(i * 1.7) + 0.3 * Math.cos(i * 0.2));
+      const re = Float64Array.from(input), im = new Float64Array(n);
+      fft(re, im);
+      for (const k of [0, 1, n >> 2, n - 1]) {
+        let dr = 0, di = 0;
+        input.forEach((x, i) => {
+          dr += x * Math.cos((-2 * Math.PI * k * i) / n);
+          di += x * Math.sin((-2 * Math.PI * k * i) / n);
+        });
+        expect(re[k]).toBeCloseTo(dr, 8);
+        expect(im[k]).toBeCloseTo(di, 8);
+      }
+    }
+  });
 });
 
 describe("Analyser", () => {
