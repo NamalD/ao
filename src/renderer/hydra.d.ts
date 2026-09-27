@@ -17,6 +17,11 @@ declare module "hydra-synth/src/glsl/glsl-functions.js" {
   export default function hydraFunctions(): HydraFunctionDefinition[];
 }
 
+declare module "hydra-synth/src/hydra-source.js" {
+  const HydraSource: { prototype: object };
+  export default HydraSource;
+}
+
 interface HydraSource {
   src: unknown;
   dynamic: boolean;

@@ -24,12 +24,17 @@ system audio, never the microphone. Window geometry, the last sketch, and
 | --- | --- |
 | Ctrl+Enter | run the block under the cursor (lines between blank lines) |
 | Ctrl+Shift+Enter, Alt+Enter | run the whole sketch |
-| Ctrl+S | save the sketch |
+| Ctrl+S, `:w` | save the sketch |
+| Ctrl+N | create a new sketch |
 | Ctrl+PgUp / Ctrl+PgDn | previous / next sketch |
 | Ctrl+Shift+H | hide or show the editor (ambient mode) |
 | F11 | fullscreen |
 | F1 | help |
 | Ctrl+Q | quit |
+
+The editor uses vim keys: `i` inserts, `Esc` returns to normal mode, `v`/`V`
+select, `u` undoes, and `:w` saves. Undo history starts fresh with each sketch
+you open.
 
 With the editor hidden, the old single keys work: `j`/`k` switch sketches,
 `f` fullscreen, `e` brings the editor back, `i` toggles the FPS counter, and

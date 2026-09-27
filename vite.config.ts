@@ -1,7 +1,9 @@
 import { defineConfig } from "vite";
+import { hydraAlias } from "./hydra-alias.ts";
 
 export default defineConfig({
   root: "src/renderer",
+  resolve: { alias: hydraAlias },
   base: "./",
   // hydra-synth's dependencies still reference Node's `global`.
   define: { global: "globalThis" },
