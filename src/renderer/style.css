@@ -118,3 +118,12 @@ kbd { color: var(--accent); font-family: inherit; }
 #notice:empty { display: none; }
 #notice.error { color: var(--error); opacity: 1; }
 body.ambient #notice:not(.error) { display: none; }
+
+/* Recording: the indicator lives in the DOM overlay, so it never appears in
+   the recorded canvas, and it stays visible in ambient mode. */
+#recording { white-space: nowrap; }
+#recording:empty { display: none; }
+#recording.live { color: #ff5c5c; font-weight: bold; animation: ao-rec-pulse 2s ease-in-out infinite; }
+#recording.saved { color: var(--accent); max-width: 50%; overflow: hidden; text-overflow: ellipsis; }
+#recording.error { color: var(--error); max-width: 50%; overflow: hidden; text-overflow: ellipsis; }
+@keyframes ao-rec-pulse { 50% { opacity: 0.55; } }

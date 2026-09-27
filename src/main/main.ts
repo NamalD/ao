@@ -3,6 +3,7 @@ import { watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Capture, startCapture, startFakeCapture } from "./capture";
 import { isAppNavigation } from "./navigation";
+import { setupRecording } from "./recording";
 import { Store } from "./store";
 
 interface WindowState { x?: number; y?: number; width: number; height: number; fullscreen: boolean }
@@ -109,11 +110,12 @@ void app.whenReady().then(() => {
   win.webContents.on("console-message", ({ level, message, sourceId, lineNumber }) => {
     if (level === "warning" || level === "error") store.log(`renderer ${level}: ${message} (${sourceId}:${lineNumber})`);
   });
+  const recording = setupRecording(() => win, (message) => store.log(message));
   let capture: Capture;
   win.webContents.once("did-finish-load", () => {
     capture = options.fakeAudio || options.screenshot
-      ? startFakeCapture((f) => send("audio", f))
-      : startCapture((f) => send("audio", f), report);
+      ? startFakeCapture((f) => send("audio", f), recording.pcm)
+      : startCapture((f) => send("audio", f), report, recording.pcm);
   });
   app.on("before-quit", () => capture?.stop());
 

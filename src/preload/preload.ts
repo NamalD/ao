@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { AudioFeatures } from "../shared/features";
+import type { RecordingCommand, RecordingResult, RecordingStart } from "../shared/recording";
 
 /** The only bridge between the renderer and the machine. */
 const bridge = {
@@ -14,7 +15,19 @@ const bridge = {
   onAudio: (fn: (f: AudioFeatures) => void) => ipcRenderer.on("audio", (_e, f) => fn(f)),
   onSketchChanged: (fn: (name: string) => void) => ipcRenderer.on("sketches:changed", (_e, n) => fn(n)),
   onStatus: (fn: (message: string) => void) => ipcRenderer.on("status", (_e, m) => fn(m)),
+  // The main process picks the file; the renderer only streams encoded chunks.
+  recording: {
+    start: (sketch: string): Promise<RecordingStart> => ipcRenderer.invoke("recording:start", sketch),
+    chunk: (id: number, data: ArrayBuffer): Promise<void> => ipcRenderer.invoke("recording:chunk", id, data),
+    stop: (id: number, durationMs: number): Promise<RecordingResult> => ipcRenderer.invoke("recording:stop", id, durationMs),
+    onCommand: (fn: (command: RecordingCommand) => void) => ipcRenderer.on("recording:command", (_e, c) => fn(c)),
+  },
 };
 
 export type Bridge = typeof bridge;
+
+// The recording's PCM port goes to the page, which hands it to its
+// AudioWorklet. contextBridge can't carry MessagePorts, so this uses
+// Electron's documented window.postMessage route.
+ipcRenderer.on("recording:pcm-port", (e, id: number) => window.postMessage({ aoRecordingPcm: id }, "*", e.ports));
 contextBridge.exposeInMainWorld("aoHost", bridge);
