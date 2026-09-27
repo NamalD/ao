@@ -15,8 +15,9 @@ make test     # typecheck, unit tests, production build
 
 It needs Node 22+, and `parec`/`pactl` (PipeWire's PulseAudio tools) for
 capture. Ao listens to the default output's `.monitor` source, so it hears
-system audio, never the microphone. Window geometry, the last sketch, and
-`ao.log` live in `state/`; past 1 MB the log moves to `ao.log.1`.
+system audio, never the microphone. Window geometry, the last sketch,
+`settings.json` (see [Settings](#settings)), and `ao.log` live in `state/`;
+past 1 MB the log moves to `ao.log.1`.
 
 ## Keys
 
@@ -28,6 +29,8 @@ system audio, never the microphone. Window geometry, the last sketch, and
 | Ctrl+N | create a new sketch |
 | Ctrl+PgUp / Ctrl+PgDn | previous / next sketch |
 | Ctrl+Shift+H | hide or show the editor (ambient mode) |
+| Ctrl+Shift+M | show or hide the audio meter |
+| Ctrl+Shift+N | night fade: follow the schedule, force on, force off |
 | F11 | fullscreen |
 | F1 | help |
 | Ctrl+Q | quit |
@@ -37,8 +40,8 @@ select, `u` undoes, and `:w` saves. Undo history starts fresh with each sketch
 you open.
 
 With the editor hidden, the old single keys work: `j`/`k` switch sketches,
-`f` fullscreen, `e` brings the editor back, `i` toggles the FPS counter, and
-`q` or `Esc` quits.
+`f` fullscreen, `e` brings the editor back, `i` toggles the FPS counter, `m`
+the audio meter, `n` cycles the night fade, and `q` or `Esc` quits.
 
 ## Sketches
 
@@ -128,11 +131,72 @@ sample media whose host sends CORS headers (`Access-Control-Allow-Origin`).
 Scripts still load only from Ao itself, and a sketch can't navigate the
 window away from Ao or open new windows.
 
+## Audio meter
+
+Ctrl+Shift+M (`m` with the editor hidden) shows a small meter in the top-right
+corner, so you can see what you're mapping instead of guessing: bars and
+values for `ao.loudness`, `ao.impulse`, `ao.beat`, `ao.bass`, `ao.mid` and
+`ao.high`, and the 64 bands of `ao.fft` with `ao.peak` (white) and
+`ao.centroid` (lilac) marked on the spectrum. It is an overlay on top of the
+window, not part of the visuals, and draws nothing while hidden. Ao remembers
+whether it was showing.
+
+## Night fade
+
+Late at night the visuals ease down to a dimmer brightness so they aren't
+glaring. By default the fade runs from 22:00 to 07:00: over the first 45
+minutes after 22:00 the brightness eases down to 40%, and over the last 45
+minutes before 07:00 it eases back up. Windows may cross midnight. Only the
+visuals dim; the editor, status bar, and meter stay as they are.
+
+Ctrl+Shift+N (`n` with the editor hidden) cycles the mode: follow the schedule,
+force night on, force it off. The status bar briefly shows the new mode, for
+example `night fade: scheduled (active 22:00–07:00)`, and the mode is saved.
+The schedule, brightness, and fade length are set in `state/settings.json`.
+
+The fade is a dark layer over the window, so it doesn't reach recordings of the
+canvas stream: a recording made at night is captured at full brightness.
+
+## Settings
+
+`state/settings.json` holds your preferences. Ao reads it at startup, so
+restart after editing it; toggling the meter or night fade updates just that
+field and keeps the rest of the file. Missing or invalid values fall back to
+the defaults:
+
+```json
+{
+  "meter": false,
+  "night": {
+    "mode": "schedule",
+    "start": "22:00",
+    "end": "07:00",
+    "brightness": 0.4,
+    "fadeMinutes": 45,
+    "speed": 1
+  }
+}
+```
+
+- `meter`: whether the audio meter is showing.
+- `night.mode`: `"schedule"`, `"on"` (always night), or `"off"` (never).
+- `night.start`, `night.end`: local 24-hour `HH:MM` times of the window;
+  equal times make it empty.
+- `night.brightness`: brightness at full night, `0..1`.
+- `night.fadeMinutes`: how long the fade takes at each end of the window,
+  inside it; a window shorter than two fades never reaches full night.
+- `night.speed`: optionally slow Hydra and scene time at night, `0.1..1`, eased
+  in with the fade; `1` (the default) leaves speed alone. Audio levels are
+  unaffected.
+
 ## Screenshots
 
 `make screenshot SKETCH=dunes` renders a sketch offscreen with a synthetic
 kick-and-pad signal and writes `state/dunes.png`. Useful for checking a
 change without watching the screen, and it prints the frame rate it reached.
+Screenshots ignore `settings.json`, so the meter and night fade stay out of
+them unless you ask: add `--meter` or `--night=on` to the `electron` command
+(`npx electron . --sketch=dunes --hide-editor --meter --screenshot=state/dunes.png`).
 
 ## Layout
 
