@@ -42,12 +42,15 @@ past 1 MB the log moves to `ao.log.1`.
 | F11 | fullscreen |
 | F9 | start or stop recording video with audio |
 | F1 | help |
+| F2 | code explorer: `ao`, Hydra and recipes, with live examples |
 | Ctrl+Q | quit |
 
 The editor uses vim keys: `i` inserts, `Esc` returns to normal mode, `v`/`V`
 select, `u` undoes, and `:w` saves. Undo history starts fresh with each sketch
 you open. `:w <name>` renames the open sketch, keeping its undo history; it
 refuses a name that's taken unless you write `:w! <name>`.
+
+`K` in normal mode opens the code explorer on the word under the cursor.
 
 With the editor hidden, the old single keys work: `j`/`k` switch sketches,
 `a` toggles autopilot, `f` fullscreen, `e` brings the editor back, `i` toggles the FPS counter, `m`
@@ -341,6 +344,37 @@ shrunk to a couple of pixels. During a fade both render, the incoming canvas
 over the outgoing one. The recorder captures `#stage`, so while recording
 Ao draws the same blend into it every frame. Hydra's names stay available on
 `window` for the DevTools console, pointing at the current deck.
+
+## Code explorer
+
+F2 opens a reference panel on the left, and `K` in the editor's normal mode
+opens it on the word under the cursor (`osc`, `ao.hz`, `s0.initScene`, `o1`,
+…), or searches for a word it doesn't know. It covers every `ao` member, each
+with a live reading of its value, every Hydra function by kind (sources,
+geometry, colour, blend, modulate), Hydra's globals (`out`, outputs,
+`render`, `speed`, `bpm`, arrays, `update`, `setFunction`, …), the `s0`–`s3`
+methods, and a few recipes for mapping audio.
+
+Each entry has its signature, parameters and one example, which plays on
+the visuals as you move to it; while the panel is open the visuals shrink to
+its right so the example is centred where you can see it. Examples that would
+turn on the camera or screen capture, fetch a URL, or blank everything are
+marked `·` and play only on Enter. Closing the explorer puts your sketch
+back, re-running it; `i` instead inserts the example into your sketch as a
+new block after the one under the cursor and runs the whole sketch.
+
+| Key | Action |
+| --- | --- |
+| `j`/`k`, arrows | move |
+| Tab, Shift+Tab | next / previous section |
+| `/` | search names, then descriptions; Enter or Esc returns to the list |
+| Enter | play the example |
+| `i` | insert the example into the sketch |
+| Esc, F2 | close and restore the sketch |
+
+Examples play on the canvas, so a recording running meanwhile captures them.
+Content lives in `src/renderer/explorer/content.ts`; a test checks every
+Hydra function, `ao` member and source method has an example.
 
 ## Audio meter
 
