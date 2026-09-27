@@ -1,5 +1,6 @@
 import { AudioFeatures, silentFeatures } from "../shared/features";
 import { centroidPosition, hzLevel, peakPosition, spectrumAt } from "../shared/spectrum";
+import { barNow, clock, followTempo, phaseNow, pulse, ramp } from "./tempo";
 
 type Level = "loudness" | "impulse" | "beat" | "bass" | "mid" | "high" | "peak" | "centroid";
 
@@ -34,6 +35,19 @@ export const ao = {
     const read = typeof level === "function" ? level : () => this[level];
     return () => lo + (hi - lo) * read();
   },
+  // Tempo (tempo.ts): a beat clock, unlike `beat`, which pulses on onsets.
+  /** Tempo in beats per minute, detected or tapped. */
+  get bpm() { return clock.bpm; },
+  /** 0..1 through the current beat, rising steadily and wrapping on each beat. */
+  get phase() { return phaseNow(); },
+  /** Beat within the 4-beat bar: 0, 1, 2 or 3. */
+  get bar() { return barNow(); },
+  /** 0..1: how sure the tempo is; 1 while tapped. */
+  get tempoConfidence() { return clock.confidence; },
+  /** 0..1 ramp over every n beats, aligned to the bar: ramp(4) runs once per bar. */
+  ramp(n = 1) { return ramp(n); },
+  /** 1 on every 1/div of a beat, easing to 0 by the next: pulse(2) on eighths. */
+  pulse(div = 1) { return pulse(div); },
 };
 
 /**
@@ -54,8 +68,15 @@ export const aoDocs: Record<string, { signature: string; description: string }> 
   hz: { signature: "ao.hz(lo, hi?)", description: "Average level between two frequencies in Hz, or at one frequency: ao.hz(40, 100) for kicks." },
   peak: { signature: "ao.peak", description: "Position of the loudest band, 0..1 from low to high; glides between bands." },
   centroid: { signature: "ao.centroid", description: "Spectral centroid, 0..1 from low to high: how bright the sound is. Steadier than peak." },
+  bpm: { signature: "ao.bpm", description: "Tempo in beats per minute, detected (70..180) or tapped (Ctrl+Shift+T); 120 until detected." },
+  phase: { signature: "ao.phase", description: "0..1 through the current beat, a steady ramp that wraps on each beat. Unlike ao.beat, it runs on the tempo clock." },
+  bar: { signature: "ao.bar", description: "Beat within the 4-beat bar: 0, 1, 2 or 3. Tap to put 0 on the one." },
+  tempoConfidence: { signature: "ao.tempoConfidence", description: "0..1: how sure the detected tempo is; fades while held through silence, 1 while tapped." },
+  ramp: { signature: "ao.ramp(n = 1)", description: "0..1 ramp over every n beats, aligned to the bar: ao.ramp(4) runs once per bar." },
+  pulse: { signature: "ao.pulse(div = 1)", description: "1 on every 1/div of a beat, easing to 0 by the next: ao.pulse(2) on eighths, ao.pulse(1/4) once a bar." },
 };
 
 export function updateAudio(features: AudioFeatures): void {
   ao.features = features;
+  followTempo(features.tempo);
 }
