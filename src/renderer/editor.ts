@@ -1,8 +1,8 @@
 import { autocompletion, closeBrackets, type Completion, type CompletionContext } from "@codemirror/autocomplete";
-import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { defaultKeymap, history, historyKeymap, indentWithTab, isolateHistory } from "@codemirror/commands";
 import { javascript } from "@codemirror/lang-javascript";
 import { bracketMatching, HighlightStyle, syntaxHighlighting, syntaxTree } from "@codemirror/language";
-import { EditorState, type Extension, Facet, Prec, type Range, StateEffect, StateField } from "@codemirror/state";
+import { EditorSelection, EditorState, type Extension, Facet, Prec, type Range, StateEffect, StateField, type TransactionSpec } from "@codemirror/state";
 import { Decoration, type DecorationSet, drawSelection, EditorView, keymap, showTooltip, type Tooltip } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 import { tags } from "@lezer/highlight";
@@ -14,8 +14,10 @@ import { ao, aoDocs } from "./audio";
 import { blockAt } from "./blocks";
 import { CATALOG } from "./extensions";
 import { keepLiveValues, liveValues } from "./live-values";
+import { formatCode, minimalChange } from "./format";
 import { remix, remixRunRange } from "./remix";
 import { joinsScrub, scrubbing } from "./scrub";
+import { solidFunctions, solidOutParams } from "./solids";
 
 export interface EditorActions {
   run(code: string): void;
@@ -25,6 +27,10 @@ export interface EditorActions {
   rename?(name: string, overwrite: boolean): void;
   /** Show a message in the status bar. */
   status?(message: string, error?: boolean): void;
+  /** K in normal mode: look up the word at `column` of `line` in the code explorer. */
+  help?(line: string, column: number): void;
+  /** Whether running code also formats it; formats when absent. */
+  autoFormat?(): boolean;
 }
 
 // --- Documentation -----------------------------------------------------------
@@ -181,6 +187,36 @@ export const sourceMembers = [
   "initScene",
 ];
 
+/** Help for solids, the 3D shapes that chain like Hydra (Ao). */
+const solidDocs = new Map<string, FunctionDoc>(solidFunctions.map((fn) => {
+  const params: ParameterDoc[] = [
+    ...(fn.type === "combine" ? [{ name: "solid", description: "The other solid, such as sphere(0.5).move(1)." }] : []),
+    ...fn.params.map((p) => ({ name: p.name, default: p.default, description: p.description })),
+  ];
+  return [fn.name, makeDoc(fn.name, params, `${fn.description} (Ao solid)`)] as const;
+}));
+solidDocs.set("out", makeDoc("out", solidOutParams.map((p) => ({ ...p, default: p.name === "source" ? p.default : null })),
+  "Raymarches this solid into a source; show it with src(s0).out().", "out(source = s0, options?)"));
+
+/** Solid functions that start a chain, such as sphere. */
+export const solidShapeNames = solidFunctions.filter((fn) => fn.type === "shape").map((fn) => fn.name);
+/** Methods that continue a solid chain, plus `out`. */
+export const solidMethods = [...solidFunctions.filter((fn) => fn.type !== "shape").map((fn) => fn.name), "out"];
+
+/**
+ * The name a method chain starts from, such as `sphere` in
+ * `sphere(1).spikes(0.3).spin()`, for a node anywhere in that chain.
+ */
+export function chainRoot(state: EditorState, node: SyntaxNode | null): string | undefined {
+  const chain = (n: SyntaxNode | null) => n?.name === "MemberExpression" || n?.name === "CallExpression";
+  while (node?.parent && chain(node.parent)) node = node.parent;
+  while (chain(node)) node = node!.firstChild;
+  return node?.name === "VariableName" ? state.sliceDoc(node.from, node.to) : undefined;
+}
+
+/** Whether the chain at a node is a solid, so its methods are the solid ones. */
+export const isSolidChain = (state: EditorState, node: SyntaxNode | null) => solidShapeNames.includes(chainRoot(state, node) ?? "");
+
 /** Hydra globals that aren't GLSL functions. */
 const globalDocs: Record<string, { type: string; doc: FunctionDoc }> = {
   ...Object.fromEntries([0, 1, 2, 3].map((i) => [`o${i}`, {
@@ -233,10 +269,11 @@ export function aoMemberDocs(docs: Record<string, AoDoc>): Map<string, FunctionD
 
 const aoFunctionDocs = aoMemberDocs(aoDocs);
 
-/** Documentation for `name`, preferring the object it's called on. */
-export function functionDoc(name: string, owner?: string): FunctionDoc | undefined {
+/** Documentation for `name`, preferring the object it's called on; `solid` for a solid chain. */
+export function functionDoc(name: string, owner?: string, solid = false): FunctionDoc | undefined {
   if (owner === "ao") return aoFunctionDocs.get(name);
   if (owner && /^s[0-3]$/.test(owner)) return sourceDocs[name];
+  if (solid || (!owner && solidShapeNames.includes(name))) return solidDocs.get(name);
   return hydraFunctionDocs.get(name) ?? globalDocs[name]?.doc;
 }
 
@@ -244,13 +281,14 @@ function documented(label: string, type: string, docs: FunctionDoc | undefined, 
   return { label, type, detail: docs?.signature ?? fallback, info: docs?.info };
 }
 
-/** Completion options after `ao.`, `s0.` and friends, or `.` on a chain. */
-export function memberCompletions(owner: string | undefined): Completion[] {
+/** Completion options after `ao.`, `s0.` and friends, or `.` on a chain; `solid` for a solid chain. */
+export function memberCompletions(owner: string | undefined, solid = false): Completion[] {
   if (owner === "ao") {
     return publicAoMembers().map(({ name, method }) =>
       documented(name, method ? "method" : "property", aoFunctionDocs.get(name), "Ao audio"));
   }
   if (owner && /^s[0-3]$/.test(owner)) return sourceMembers.map((name) => documented(name, "method", sourceDocs[name], "Hydra source"));
+  if (solid) return solidMethods.map((name) => documented(name, "method", solidDocs.get(name), "Solid method"));
   return chainMethods.map((name) => documented(name, "method", hydraFunctionDocs.get(name), "Hydra chain method"));
 }
 
@@ -258,6 +296,7 @@ export function memberCompletions(owner: string | undefined): Completion[] {
 export function topLevelCompletions(): Completion[] {
   return [
     ...generators.map((name) => documented(name, "function", hydraFunctionDocs.get(name), "Hydra generator")),
+    ...solidShapeNames.map((name) => documented(name, "function", solidDocs.get(name), "Ao solid")),
     ...Object.entries(globalDocs).map(([name, { type, doc }]) => documented(name, type, doc, "Hydra")),
     { label: "ao", type: "variable", detail: "Ao audio levels", info: "ao\nLive audio levels: ao.bass, ao.impulse, ao.fft, …" },
   ];
@@ -265,7 +304,7 @@ export function topLevelCompletions(): Completion[] {
 
 // --- Signature help ------------------------------------------------------------
 
-export function callParameterContext(state: EditorState, pos: number): { name: string; owner?: string; activeParameter: number } | null {
+export function callParameterContext(state: EditorState, pos: number): { name: string; owner?: string; solid: boolean; activeParameter: number } | null {
   let args: SyntaxNode | null = syntaxTree(state).resolveInner(pos, -1);
   while (args && args.name !== "ArgList") args = args.parent;
   if (!args || pos < args.from || pos > args.to || (pos === args.to && state.sliceDoc(pos - 1, pos) === ")")) return null;
@@ -278,15 +317,15 @@ export function callParameterContext(state: EditorState, pos: number): { name: s
   for (let child = args.firstChild; child; child = child.nextSibling) {
     if (child.name === "," && child.from < pos) activeParameter++;
   }
-  return { name: callee[2], owner: callee[1], activeParameter };
+  return { name: callee[2], owner: callee[1], solid: isSolidChain(state, call), activeParameter };
 }
 
 function signatureTooltip(state: EditorState, pos: number): Tooltip | null {
   if (!state.selection.main.empty) return null;
   const context = callParameterContext(state, pos);
   if (!context) return null;
-  const { name, owner, activeParameter } = context;
-  const docs = functionDoc(name, owner);
+  const { name, owner, solid, activeParameter } = context;
+  const docs = functionDoc(name, owner, solid);
   if (!docs || !docs.params.length) return null;
   return {
     pos,
@@ -337,7 +376,10 @@ function hydraCompletions(context: CompletionContext) {
   const from = word?.from ?? context.pos;
   const before = context.state.doc.sliceString(Math.max(0, from - 100), from);
   const member = before.match(/(?:\b(ao|s[0-3])|\))\.$/);
-  if (member || /\.\s*$/.test(before)) return { from, options: memberCompletions(member?.[1]), validFor: /^[\w$]*$/ };
+  if (member || /\.\s*$/.test(before)) {
+    const solid = !member?.[1] && isSolidChain(context.state, node);
+    return { from, options: memberCompletions(member?.[1], solid), validFor: /^[\w$]*$/ };
+  }
   return { from, options: topLevelCompletions(), validFor: /^[\w$]*$/ };
 }
 
@@ -388,7 +430,8 @@ const selectionField = StateField.define<DecorationSet>({
   provide: (field) => EditorView.decorations.from(field),
 });
 
-const highlight = HighlightStyle.define([
+/** Ao's syntax colours; the code explorer uses them for its examples too. */
+export const highlight = HighlightStyle.define([
   { tag: tags.keyword, color: "#ff9ecb" },
   { tag: [tags.string, tags.special(tags.string)], color: "#b8f5a0" },
   { tag: tags.number, color: "#ffd479" },
@@ -432,6 +475,35 @@ export function writeCommand(view: EditorView, argString?: string): void {
 }
 Vim.defineEx("write", "w", (cm, params: { argString?: string }) => writeCommand(cm.cm6 as EditorView, params.argString));
 
+/** K: open the code explorer on the word under the cursor, like vim's keyword lookup. */
+export function helpCommand(view: EditorView): void {
+  const head = view.state.selection.main.head;
+  const line = view.state.doc.lineAt(head);
+  view.state.facet(editorActions)?.help?.(line.text, head - line.from);
+}
+Vim.defineAction("aoHelp", (cm) => helpCommand(cm.cm6 as EditorView));
+Vim.mapCommand("K", "action", "aoHelp", {}, { context: "normal" });
+
+/**
+ * Inserts `code` as a new block after the block under the cursor, or at the
+ * cursor on a blank line, with blank lines around it; the cursor moves to it.
+ */
+export function insertBlock(state: EditorState, code: string): TransactionSpec {
+  const doc = state.doc.toString();
+  const head = state.selection.main.head;
+  const pos = blockAt(doc, head)?.to ?? state.doc.lineAt(head).from;
+  const before = doc.slice(0, pos), after = doc.slice(pos);
+  // Blank lines on either side keep the inserted code a block of its own.
+  const missing = (newlines: string) => "\n".repeat(2 - Math.min(2, newlines.length));
+  const lead = before.trim() ? missing(before.match(/\n*$/)![0]) : "";
+  const trail = after.trim() ? missing(after.match(/^\n*/)![0]) : after ? "" : "\n";
+  return {
+    changes: { from: pos, insert: lead + code + trail },
+    selection: EditorSelection.cursor(pos + lead.length),
+    scrollIntoView: true,
+  };
+}
+
 /** Alt+R: remix the numbers in the block under the cursor and re-run it. */
 export function remixCommand(view: EditorView, random: () => number = Math.random): boolean {
   const actions = view.state.facet(editorActions);
@@ -455,8 +527,39 @@ function runRange(view: EditorView, from: number, to: number): true {
   return true;
 }
 
+/**
+ * Formats the code between `from` and `to` with Prettier, as one undo step,
+ * keeping the cursor on the same code. Code that doesn't parse is left alone,
+ * and so is a document edited while formatting ran: the next run catches up.
+ */
+export async function formatRange(
+  view: { readonly state: EditorState; dispatch(spec: TransactionSpec): void }, from: number, to: number,
+): Promise<void> {
+  const { doc, selection } = view.state;
+  const code = doc.sliceString(from, to);
+  const head = selection.main.head;
+  const inside = selection.main.empty && head >= from && head <= to;
+  const result = await formatCode(code, inside ? head - from : 0);
+  if (!result || view.state.doc !== doc) return;
+  const changes = minimalChange(code, result.code, from);
+  if (!changes) return;
+  view.dispatch({
+    changes,
+    selection: inside ? { anchor: from + result.cursor } : undefined,
+    userEvent: "format",
+    annotations: isolateHistory.of("full"),
+  });
+}
+
+/** Ctrl+Enter and friends: run the code, then format what ran. */
+function runAndFormat(view: EditorView, from: number, to: number): true {
+  runRange(view, from, to);
+  if (view.state.facet(editorActions)?.autoFormat?.() !== false) void formatRange(view, from, to);
+  return true;
+}
+
 function extensionsFor(actions: EditorActions): Extension[] {
-  const evaluate = runRange;
+  const evaluate = runAndFormat;
   const runBlock = (view: EditorView) => {
     const block = blockAt(view.state.doc.toString(), view.state.selection.main.head);
     return block ? evaluate(view, block.from, block.to) : true;

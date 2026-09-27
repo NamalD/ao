@@ -4,6 +4,7 @@ import { ExtensionLoader, sharedPrototypes } from "./extensions";
 import { describeError } from "./runtime-errors";
 import { Scene, SceneOptions } from "./scenes";
 import { evaluateInScope, sketchScope } from "./scope";
+import { makeSolidShapes } from "./solids";
 
 /** Timer functions a sketch gets from its deck, so switching away can stop them. */
 const TIMERS = ["setTimeout", "setInterval", "clearTimeout", "clearInterval", "requestAnimationFrame", "cancelAnimationFrame"] as const;
@@ -50,7 +51,8 @@ export class Deck {
     this.synth = this.hydra.synth as unknown as Synth;
     for (const source of this.hydra.s) this.patchSource(source);
     this.timers = this.makeTimers();
-    const extras: Record<string, unknown> = { ...this.timers };
+    // Solids render into this deck's s0 when `.out()` is given no source.
+    const extras: Record<string, unknown> = { ...this.timers, ...makeSolidShapes(() => this.hydra.s[0]) };
     this.scope = sketchScope(this.synth, extras);
     const hydra = this.hydra as unknown as { o: object[]; s: object[] };
     this.extensions = new ExtensionLoader({ hydra: this.hydra, synth: this.synth, scope: this.scope, shared: sharedPrototypes(hydra, this.synth) });

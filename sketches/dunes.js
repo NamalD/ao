@@ -5,9 +5,12 @@
 
 // Shared with the scene block below, so it lives on the global object.
 globalThis.travel ??= 0
-update = (dt) => { travel += dt * 0.001 * (2.5 + 5 * ao.loudness) }
+update = (dt) => {
+  travel += dt * 0.001 * (2.5 + 5 * ao.loudness)
+}
 
-s0.initScene(`
+s0.initScene(
+  `
 uniform float travel;
 const vec3 SUN = normalize(vec3(-0.19, 0.1, 0.98));
 const vec3 SUN_COLOUR = vec3(1.0, 0.72, 0.45);
@@ -171,7 +174,9 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   col += (hash(fragCoord + fract(iTime) * 91.0) - 0.5) / 255.0;
   fragColor = vec4(col, 1.0);
 }
-`, { scale: 0.75, uniforms: { travel: () => travel } })
+`,
+  { scale: 0.75, uniforms: { travel: () => travel } },
+)
 
 src(s0)
   .scale(1.02)

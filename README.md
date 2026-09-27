@@ -23,8 +23,8 @@ past 1 MB the log moves to `ao.log.1`.
 
 | Key | Action |
 | --- | --- |
-| Ctrl+Enter | run the block under the cursor (lines between blank lines) |
-| Ctrl+Shift+Enter, Alt+Enter | run the whole sketch |
+| Ctrl+Enter | run and format the block under the cursor (lines between blank lines) |
+| Ctrl+Shift+Enter, Alt+Enter | run and format the whole sketch |
 | Ctrl+S, `:w` | save the sketch |
 | `:w <name>`, `:w! <name>` | save as `sketches/<name>.js` and rename the sketch (`!` replaces an existing one) |
 | Alt+scroll, Alt+drag | scrub the number under the pointer; Shift steps ten times coarser |
@@ -42,12 +42,15 @@ past 1 MB the log moves to `ao.log.1`.
 | F11 | fullscreen |
 | F9 | start or stop recording video with audio |
 | F1 | help |
+| F2 | code explorer: `ao`, Hydra and recipes, with live examples |
 | Ctrl+Q | quit |
 
 The editor uses vim keys: `i` inserts, `Esc` returns to normal mode, `v`/`V`
 select, `u` undoes, and `:w` saves. Undo history starts fresh with each sketch
 you open. `:w <name>` renames the open sketch, keeping its undo history; it
 refuses a name that's taken unless you write `:w! <name>`.
+
+`K` in normal mode opens the code explorer on the word under the cursor.
 
 With the editor hidden, the old single keys work: `j`/`k` switch sketches,
 `a` toggles autopilot, `f` fullscreen, `e` brings the editor back, `i` toggles the FPS counter, `m`
@@ -63,6 +66,14 @@ once; neither re-runs the sketch, and saving an unchanged sketch doesn't write
 anything. Saving the file from another editor does re-run it, unless the
 overlay has unsaved edits, in which case the status bar says so and Ctrl+S
 keeps your version.
+
+**Formatting.** Ctrl+Enter and Ctrl+Shift+Enter format the code they run
+with [Prettier](https://prettier.io/): double quotes, no semicolons, lines up
+to 100 columns. The code runs first, so formatting never delays it. The
+cursor stays on the same code, the formatting is its own undo step, and
+autosave saves it. Code that doesn't parse is left as you wrote it, and so is
+the inside of scene and `glsl:` strings. Scrubbing and remix don't format. Set `"format": false` in
+[`settings.json`](#settings) to turn this off.
 
 **Scrubbing and remix.** Hold Alt and scroll over a number, or Alt+drag it
 sideways, and the block around it re-runs as it changes. Each step is the
@@ -135,6 +146,33 @@ tempo as `aoBpm`, `aoPhase` and `aoBar` (see [Tempo](#tempo)), and
 resolution for heavy raymarchers; `uniforms` feeds extra values, declared in
 the shader as `uniform float name;`. Shader errors report line numbers within
 the scene string. `sketches/dunes.js` is a full raymarched landscape.
+
+**Solids** are 3D shapes written like Hydra chains, with no GLSL. A shape
+starts the chain, methods move, warp and colour it, and `.out(s0)` raymarches
+it, lit and shaded, into a source you then use like any other:
+
+```js
+sphere(1)
+  .wobble(0.1)                        // a slow liquid swell
+  .spikes(() => ao.impulse, 9, 5)     // bristles on hits
+  .spin(0.2, 0.4)
+  .color(1, 0.3, 0.6)
+  .out(s0, { glow: () => ao.bass })
+
+src(s0).blend(o0, 0.3).out()
+```
+
+Shapes are `sphere`, `box`, `torus`, `cylinder`, `octahedron` and `plane`.
+Methods place the solid (`move`, `rotate`, `spin`, `scale`, `repeat`,
+`twist`), shape its surface (`spikes`, `wobble`, `noise`, `spectrum`, `round`,
+`shell`), colour it (`color`), and combine it with another solid (`add`,
+`sub`, `intersect`), where a second argument such as `.add(sphere(0.5).move(1), 0.4)`
+melts the two together like liquid. As in Hydra, every argument can be a
+number or a function read each frame. Numbers become uniforms too, so
+scrubbing one never recompiles the shader. `out` takes `{ scale, camera,
+background, glow, step }`; lower `step` if very long spikes or strong twists
+tear. Completion and signature help know solid chains apart from Hydra ones.
+`sketches/urchin.js` is a ball that turns spiky when the song gets intense.
 
 Each evaluation runs in its own function scope, so re-running a block that
 declares `const` works; share values between blocks through globals.
@@ -363,6 +401,37 @@ over the outgoing one. The recorder captures `#stage`, so while recording
 Ao draws the same blend into it every frame. Hydra's names stay available on
 `window` for the DevTools console, pointing at the current deck.
 
+## Code explorer
+
+F2 opens a reference panel on the left, and `K` in the editor's normal mode
+opens it on the word under the cursor (`osc`, `ao.hz`, `s0.initScene`, `o1`,
+…), or searches for a word it doesn't know. It covers every `ao` member, each
+with a live reading of its value, every Hydra function by kind (sources,
+geometry, colour, blend, modulate), Hydra's globals (`out`, outputs,
+`render`, `speed`, `bpm`, arrays, `update`, `setFunction`, …), the `s0`–`s3`
+methods, and a few recipes for mapping audio.
+
+Each entry has its signature, parameters and one example, which plays on
+the visuals as you move to it; while the panel is open the visuals shrink to
+its right so the example is centred where you can see it. Examples that would
+turn on the camera or screen capture, fetch a URL, or blank everything are
+marked `·` and play only on Enter. Closing the explorer puts your sketch
+back, re-running it; `i` instead inserts the example into your sketch as a
+new block after the one under the cursor and runs the whole sketch.
+
+| Key | Action |
+| --- | --- |
+| `j`/`k`, arrows | move |
+| Tab, Shift+Tab | next / previous section |
+| `/` | search names, then descriptions; Enter or Esc returns to the list |
+| Enter | play the example |
+| `i` | insert the example into the sketch |
+| Esc, F2 | close and restore the sketch |
+
+Examples play on the canvas, so a recording running meanwhile captures them.
+Content lives in `src/renderer/explorer/content.ts`; a test checks every
+Hydra function, `ao` member and source method has an example.
+
 ## Audio meter
 
 Ctrl+Shift+M (`m` with the editor hidden) shows a small meter in the top-right
@@ -488,6 +557,7 @@ the defaults:
 {
   "meter": false,
   "liveValues": true,
+  "format": true,
   "night": {
     "mode": "schedule",
     "start": "22:00",
@@ -502,6 +572,7 @@ the defaults:
 
 - `meter`: whether the audio meter is showing.
 - `liveValues`: whether live values show beside `ao` expressions in the code.
+- `format`: whether running code in the editor also formats it.
 - `night.mode`: `"schedule"`, `"on"` (always night), or `"off"` (never).
 - `night.start`, `night.end`: local 24-hour `HH:MM` times of the window;
   equal times make it empty.
@@ -596,7 +667,7 @@ Live values keep their default (on) whenever the editor shows.
 - `src/main`: Electron main process, audio capture, state and sketch files.
 - `src/shared`: audio analysis (FFT, loudness, impulse, beat, tempo), kept pure.
 - `src/preload`: the narrow bridge the renderer may call.
-- `src/renderer`: Hydra host, GLSL scene runner, overlay editor.
+- `src/renderer`: Hydra host, GLSL scene runner, solids compiler, overlay editor.
 - `sketches`: the visualizers.
 
 ## Parallel development

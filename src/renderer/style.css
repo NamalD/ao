@@ -338,3 +338,69 @@ canvas.deck {
   width: 100%;
   height: 100%;
 }
+/* Code explorer (F2): a panel on the editor's side. While it's open the
+   visuals move to its right, so examples are centred where they can be seen. */
+:root { --explorer-width: min(820px, 48vw); }
+body.exploring #stage, body.exploring canvas.deck { left: var(--explorer-width); width: calc(100% - var(--explorer-width)); }
+#explorer {
+  position: fixed;
+  inset: 0 auto 28px 0;
+  width: var(--explorer-width);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  background: rgb(4 4 12 / 0.88);
+  border-right: 1px solid rgb(255 255 255 / 0.12);
+  font-size: 13px;
+}
+#explorer[hidden] { display: none; }
+body.exploring #editor { visibility: hidden; }
+.explorer-search {
+  margin: 14px 18px 8px;
+  padding: 5px 10px;
+  background: rgb(255 255 255 / 0.06);
+  color: var(--ink);
+  border: 1px solid rgb(255 255 255 / 0.14);
+  border-radius: 4px;
+  font: inherit;
+  outline: none;
+}
+.explorer-search:focus { border-color: var(--accent); }
+.explorer-body { display: grid; grid-template-columns: minmax(16ch, 24ch) 1fr; min-height: 0; }
+#explorer * { scrollbar-width: thin; scrollbar-color: rgb(255 255 255 / 0.18) transparent; }
+.explorer-list { overflow-y: auto; padding: 0 8px 16px 18px; border-right: 1px solid rgb(255 255 255 / 0.08); }
+.explorer-list h2 { margin: 12px 0 4px; font-size: 11px; font-weight: normal; color: #d7c7ff; text-transform: uppercase; letter-spacing: 0.08em; }
+.explorer-list a { display: block; padding: 1px 8px; border-radius: 3px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.explorer-list a:hover { background: rgb(255 255 255 / 0.06); }
+.explorer-list a.selected { background: var(--selection); }
+.explorer-list a.manual::after { content: " ·"; opacity: 0.5; }
+.explorer-empty { opacity: 0.6; }
+.explorer-detail { overflow-y: auto; padding: 4px 22px 20px; }
+.explorer-detail h1 { margin: 8px 0 2px; font-size: 18px; color: var(--accent); }
+.explorer-detail h3 { margin: 18px 0 6px; font-size: 11px; font-weight: normal; color: #d7c7ff; text-transform: uppercase; letter-spacing: 0.08em; }
+.explorer-signature { color: #d7c7ff; margin-bottom: 8px; }
+.explorer-detail p { margin: 8px 0; color: #dfe4ee; }
+.explorer-detail ul { margin: 4px 0; padding-left: 20px; }
+.explorer-detail code { color: #8fd8ff; }
+.explorer-detail dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 16px; margin: 10px 0 0; }
+.explorer-detail dt { color: #ffd479; white-space: nowrap; }
+.explorer-detail dd { margin: 0; color: #b7c3d2; }
+.explorer-code { margin: 0; padding: 10px 12px; background: rgb(255 255 255 / 0.05); border-radius: 4px; font: 13px/1.6 var(--mono); white-space: pre-wrap; }
+.explorer-actions { display: flex; gap: 8px; margin-top: 10px; }
+#explorer button {
+  font: 12px/1.5 var(--mono);
+  color: var(--ink);
+  background: rgb(255 255 255 / 0.06);
+  border: 1px solid rgb(255 255 255 / 0.14);
+  border-radius: 4px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+#explorer button:hover { border-color: rgb(143 216 255 / 0.6); }
+.explorer-live { display: flex; align-items: center; gap: 10px; margin: 6px 0 4px; }
+.explorer-live b { width: 180px; height: 8px; background: rgb(255 255 255 / 0.08); border-radius: 4px; overflow: hidden; }
+.explorer-live b i { display: block; height: 100%; background: var(--accent); }
+.explorer-live span { color: var(--accent); min-width: 4ch; }
+.explorer-live.spectrum { height: 48px; align-items: flex-end; gap: 1px; }
+.explorer-live.spectrum i { flex: 1; max-width: 5px; background: var(--accent); min-height: 1px; }
+.explorer-hints { padding: 6px 18px; border-top: 1px solid rgb(255 255 255 / 0.08); font-size: 11px; opacity: 0.75; white-space: pre; overflow: hidden; }
+body.challenge-capture #explorer { display: none; }
