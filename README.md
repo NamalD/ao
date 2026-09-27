@@ -57,6 +57,22 @@ onset pulse, `ao.bass`/`ao.mid`/`ao.high` band averages, and `ao.fft` 64
 log-spaced band levels. All run 0..1. `setFunction` registers custom GLSL
 functions that then chain like built-ins (see `sketches/aurora.js`).
 
+For finer control over the spectrum, `ao.hz(lo, hi)` averages any frequency
+range in Hz, `ao.fftAt(x)` samples it at a position 0..1 like GLSL `aoFFT`,
+and `ao.peak` and `ao.centroid` give the loudest band's position and the
+overall brightness on that same 0..1 axis, handy for colour. `ao.map` takes a
+level name or any function:
+
+```js
+shape(4, ao.map(() => ao.hz(40, 100), 0.2, 0.6))  // kick
+  .rotate(() => 2 * ao.hz(6000, 12000))           // hats
+  .color(1, 0.5, 0.2).hue(() => ao.centroid)
+  .out()
+```
+
+See `TYPES.md` for the full `ao` interface, and `sketches/prism.js` and
+`sketches/halo.js` for examples.
+
 **Scenes** are Shadertoy-style GLSL ES 3.0 fragment shaders loaded into a
 Hydra source, so they can be shown directly or remixed with patterns:
 
