@@ -1,5 +1,5 @@
 import arrayUtils from "hydra-synth/src/lib/array-utils.js";
-import { BpmDriver, describeTempo, TempoClock } from "../shared/tempo-clock";
+import { BpmDriver, describeTempo, TempoClock, msUntilNextBar } from "../shared/tempo-clock";
 import type { TempoState } from "../shared/tempo";
 
 /**
@@ -64,6 +64,12 @@ export function installHydraTempo(): void {
 }
 
 /** Called each frame before Hydra ticks. */
+/** Time until the next bar, so autopilot's fades start on the one; 0 until the tempo is trusted. */
+export function msToNextBar(): number {
+  const trusted = clock.source === "tap" || clock.confidence >= DRIVE_CONFIDENCE;
+  return msUntilNextBar(barNow(), phaseNow(), clock.bpm, trusted);
+}
+
 export function syncHydraBpm(): void {
   if (!driver) return;
   if (clock.source === "tap" || clock.confidence >= DRIVE_CONFIDENCE) confident = true;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BpmDriver, describeTempo, DOUBLE_TAP, TAP_GAP, TempoClock } from "../src/shared/tempo-clock";
+import { BpmDriver, describeTempo, DOUBLE_TAP, TAP_GAP, TempoClock, msUntilNextBar } from "../src/shared/tempo-clock";
 
 const near = (a: number, b: number, tolerance = 1e-9) => expect(Math.abs(a - b)).toBeLessThan(tolerance);
 
@@ -149,5 +149,18 @@ describe("describeTempo", () => {
     expect(describeTempo({ source: "tap", bpm: 120, confidence: 1, tapsInSequence: 1 })).toBe("tempo 120.0 (tap: bar reset; keep tapping each beat)");
     expect(describeTempo({ source: "auto", bpm: 127.94, confidence: 0.82, tapsInSequence: 0 })).toBe("tempo 127.9 (auto, 82%)");
     expect(describeTempo({ source: "auto", bpm: 120, confidence: 0, tapsInSequence: 0 })).toBe("tempo 120.0 (auto, listening)");
+  });
+});
+
+describe("msUntilNextBar", () => {
+  it("counts the beats left in the bar at the tempo", () => {
+    expect(msUntilNextBar(0, 0, 120, true)).toBeCloseTo(2000);
+    expect(msUntilNextBar(3, 0.5, 120, true)).toBeCloseTo(250);
+    expect(msUntilNextBar(2, 0.25, 60, true)).toBeCloseTo(1750);
+  });
+
+  it("switches at once when the tempo isn't trusted", () => {
+    expect(msUntilNextBar(1, 0.5, 120, false)).toBe(0);
+    expect(msUntilNextBar(1, 0.5, 0, true)).toBe(0);
   });
 });

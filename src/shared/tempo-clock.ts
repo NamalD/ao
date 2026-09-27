@@ -177,3 +177,13 @@ export function describeTempo(clock: { source: TempoSource; bpm: number; confide
   if (clock.confidence < 0.05) return `tempo ${bpm} (auto, listening)`;
   return `tempo ${bpm} (auto, ${Math.round(clock.confidence * 100)}%)`;
 }
+
+/**
+ * Milliseconds from now until the next bar starts, for lining a switch up
+ * with the one; 0 (switch now) when the tempo can't be trusted.
+ */
+export function msUntilNextBar(bar: number, phase: number, bpm: number, trusted: boolean, beatsPerBar = 4): number {
+  if (!trusted || !(bpm > 0)) return 0;
+  const beatsLeft = beatsPerBar - (((bar % beatsPerBar) + beatsPerBar) % beatsPerBar) - Math.min(Math.max(phase, 0), 1);
+  return (Math.max(0, beatsLeft) * 60000) / bpm;
+}

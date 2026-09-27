@@ -30,8 +30,9 @@ past 1 MB the log moves to `ao.log.1`.
 | Alt+scroll, Alt+drag | scrub the number under the pointer; Shift steps ten times coarser |
 | Alt+R | remix the numbers in the block under the cursor |
 | Ctrl+N | create a new sketch |
-| Ctrl+PgUp / Ctrl+PgDn | previous / next sketch |
+| Ctrl+PgUp / Ctrl+PgDn | previous / next sketch, crossfading |
 | Ctrl+O | browse sketches by thumbnail (see [Sketch browser](#sketch-browser)) |
+| Ctrl+Shift+A | autopilot on or off: shuffle sketches on drops, section changes and a timer |
 | Ctrl+Shift+H | hide or show the editor (ambient mode) |
 | Ctrl+Shift+M | show or hide the audio meter |
 | Ctrl+Shift+L | show or hide live values beside `ao` expressions in the code |
@@ -49,7 +50,7 @@ you open. `:w <name>` renames the open sketch, keeping its undo history; it
 refuses a name that's taken unless you write `:w! <name>`.
 
 With the editor hidden, the old single keys work: `j`/`k` switch sketches,
-`f` fullscreen, `e` brings the editor back, `i` toggles the FPS counter, `m`
+`a` toggles autopilot, `f` fullscreen, `e` brings the editor back, `i` toggles the FPS counter, `m`
 the audio meter, `n` cycles the night fade, `c` opens a challenge, `r` starts
 or stops recording, `o` opens the sketch browser, `t` taps the tempo, and `q` or `Esc` quits.
 
@@ -218,6 +219,94 @@ skipped, the rest carry on, and the run exits with status 1 if any failed.
 It also deletes thumbnails of sketches that no longer exist. The recently
 opened list is `state/recent.json`.
 
+## Autopilot
+
+Ctrl+Shift+A (`a` with the editor hidden) turns on autopilot, Ao's answer to
+MilkDrop's auto-switching: it shuffles through `sketches/`, crossfading to
+the next one when the music drops or changes section, or when the current
+sketch has had its time. The status bar flashes each switch, for example
+`autopilot → prism (drop)`, and `state/ao.log` records it with the reason.
+Whether it's on is saved, and the last sketch follows it as usual.
+
+**Shuffle, no playlists.** Every sketch plays once, in random order, before
+any repeats, and a new round never starts with the one just shown.
+Challenge attempts (`challenge-*`) and sketches with nothing but comments
+are left out; new and deleted sketches count from the next pick. A sketch
+that throws while starting is skipped for the next one. With autopilot on,
+`k` and Ctrl+PgDn crossfade to the next sketch in the shuffle at once, and
+`j` and Ctrl+PgUp go back to the one before.
+
+**When it switches.** Ao follows the energy (loudness and bass together) and
+the shape of the spectrum:
+
+- A **breakdown** is the energy falling well below its level of the last
+  quarter minute and staying there while the music plays on. It doesn't
+  switch by itself; it arms the drop.
+- A **drop** is the energy jumping back abruptly after a breakdown, or after
+  a pause of under three seconds, and holding. A slow return isn't a drop,
+  nor is a single hit in the lull.
+- A **section change** is the spectrum's shape over the last few seconds
+  differing clearly from that of the last half minute: new instruments, a
+  new part. Gradual change never counts. Music after three seconds of
+  silence counts too: it's probably a new track.
+
+A drop or a section change switches once `minSeconds` have passed since the
+last switch; a strong drop (after a long lull, with a big jump) may switch
+after only 15 seconds. When nothing happens in the music, the switch comes
+after `dwellSeconds`. Nothing fires during silence, and each kind of event
+has to settle before it can fire again, so beats never trigger anything.
+Autopilot also holds off while you're editing: while the editor is showing
+and you have typed or run code in the last minute, it doesn't switch, so a
+sketch never vanishes under you. Hide the editor, or leave it alone for a
+minute, and autopilot carries on; a switch that came due meanwhile happens
+then.
+
+**Crossfades.** Every switch to another sketch with Ctrl+PgUp/PgDn, `j`/`k`
+or autopilot crossfades over `fadeSeconds`, whether autopilot is on or not:
+both sketches keep animating while the new one fades in over the old. The
+editor shows the new sketch at once, and Ctrl+Enter runs code on it, even
+mid-fade. Opening a new, empty sketch or a challenge still cuts, and
+`fadeSeconds: 0` makes every switch a cut. Switching away from a sketch
+stops the timers it started and resets `speed`, so nothing of it lingers.
+Recordings and challenge snapshots capture the blend as you see it.
+
+The settings live under `autopilot` in `state/settings.json`:
+
+```json
+{
+  "autopilot": {
+    "enabled": false,
+    "dwellSeconds": 120,
+    "fadeSeconds": 4,
+    "switchOnSections": true,
+    "minSeconds": 45
+  }
+}
+```
+
+- `enabled`: whether autopilot is on; Ctrl+Shift+A saves it.
+- `dwellSeconds`: the longest one sketch stays, `5` and up.
+- `fadeSeconds`: crossfade length for every sketch switch, `0..60`; `0` cuts.
+- `switchOnSections`: switch on drops and section changes too; `false`
+  leaves only the timer.
+- `minSeconds`: the shortest time between a switch and a section-triggered
+  one, `5` and up.
+
+For trying it out, `--autopilot` turns it on for one session without saving,
+`--autopilot=10` also sets a 10 second dwell and minimum, and `--fade=8` sets
+the fade: `npx electron . --autopilot=10 --fade=8`.
+
+**How the crossfade works.** Hydra keeps its state in globals (one synth,
+`o0`–`o3`, `s0`–`s3`, `update`, `speed`), so two sketches can't share one
+instance. Ao runs two Hydra instances, the decks, each on its own canvas,
+and evaluates a sketch inside a scope that maps Hydra's names to its own
+deck, including in the functions it leaves behind, like `() => time` or
+`update`. While idle, only the current deck renders; the other is reset and
+shrunk to a couple of pixels. During a fade both render, the incoming canvas
+over the outgoing one. The recorder captures `#stage`, so while recording
+Ao draws the same blend into it every frame. Hydra's names stay available on
+`window` for the DevTools console, pointing at the current deck.
+
 ## Audio meter
 
 Ctrl+Shift+M (`m` with the editor hidden) shows a small meter in the top-right
@@ -335,8 +424,8 @@ canvas stream: a recording made at night is captured at full brightness.
 ## Settings
 
 `state/settings.json` holds your preferences. Ao reads it at startup, so
-restart after editing it; toggling the meter or night fade updates just that
-field and keeps the rest of the file. Missing or invalid values fall back to
+restart after editing it; toggling the meter, night fade or autopilot updates
+just that field and keeps the rest of the file. Missing or invalid values fall back to
 the defaults:
 
 ```json
@@ -350,7 +439,8 @@ the defaults:
     "brightness": 0.4,
     "fadeMinutes": 45,
     "speed": 1
-  }
+  },
+  "autopilot": { "enabled": false, "dwellSeconds": 120, "fadeSeconds": 4, "switchOnSections": true, "minSeconds": 45 }
 }
 ```
 
@@ -365,6 +455,7 @@ the defaults:
 - `night.speed`: optionally slow Hydra and scene time at night, `0.1..1`, eased
   in with the fade; `1` (the default) leaves speed alone. Audio levels are
   unaffected.
+- `autopilot`: see [Autopilot](#autopilot).
 
 ## Challenge mode
 

@@ -38,7 +38,7 @@ export interface BatchOptions {
 }
 
 /** Hides everything but the visuals: editor, bar, cards, meter and night layer. */
-const VISUALS_ONLY = "body > :not(#stage) { display: none !important; }";
+const VISUALS_ONLY = "body > :not(#stage):not(canvas.deck) { display: none !important; }";
 const LOAD_TIMEOUT_MS = 20_000;
 const CAPTURE_TIMEOUT_MS = 20_000;
 

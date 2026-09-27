@@ -17,7 +17,8 @@ const bridge = {
   quit: () => ipcRenderer.send("app:quit"),
   log: (message: string) => ipcRenderer.send("log", message),
   settings: (): Promise<Settings> => ipcRenderer.invoke("settings:read"),
-  updateSettings: (patch: { meter?: boolean; liveValues?: boolean; night?: Partial<Settings["night"]> }) => ipcRenderer.send("settings:update", patch),
+  updateSettings: (patch: { meter?: boolean; liveValues?: boolean; night?: Partial<Settings["night"]>; autopilot?: Partial<Settings["autopilot"]> }) =>
+    ipcRenderer.send("settings:update", patch),
   finishChallenge: (result: ChallengeResult): Promise<ChallengeRecord> => ipcRenderer.invoke("challenge:finish", result),
   // Sketch browser: recently opened names, and thumbnail PNGs by sketch name.
   recentSketches: (): Promise<string[]> => ipcRenderer.invoke("sketches:recent"),

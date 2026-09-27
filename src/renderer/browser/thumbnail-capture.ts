@@ -18,7 +18,7 @@ export interface ThumbnailCaptureOptions {
 
 /**
  * Live thumbnails: once a sketch has been on screen for a few seconds, and
- * then every minute while it stays, a 320×180 frame of the #stage canvas is
+ * then every minute while it stays, a 320×180 frame of the current deck's canvas is
  * encoded as PNG and sent to the main process.
  *
  * Only the canvas is read, so the editor, status bar, cards, meter and night
@@ -40,7 +40,7 @@ export class ThumbnailCapture {
   private last = 0;
   private busy = false;
 
-  constructor(private readonly stage: HTMLCanvasElement, private readonly host: ThumbnailCaptureHost, options: ThumbnailCaptureOptions = {}) {
+  constructor(private readonly source: () => HTMLCanvasElement, private readonly host: ThumbnailCaptureHost, options: ThumbnailCaptureOptions = {}) {
     this.firstMs = options.firstMs ?? 4000;
     this.everyMs = options.everyMs ?? 60_000;
     this.small.width = THUMB_WIDTH;
@@ -62,17 +62,18 @@ export class ThumbnailCapture {
     if (due) void this.capture(name);
   }
 
-  /** Captures the stage now (in the next frame) for `name`; true if a PNG was sent. */
+  /** Captures the current deck now (in the next frame) for `name`; true if a PNG was sent. */
   async capture(name = this.host.current()): Promise<boolean> {
     if (!name || this.busy) return false;
     this.busy = true;
     try {
       const blob = await new Promise<Blob | null>((resolve) => requestAnimationFrame(() => {
-        const { width, height } = this.stage;
+        const stage = this.source();
+        const { width, height } = stage;
         if (!width || !height) return resolve(null);
         const r = coverRect(width, height);
         this.context.clearRect(0, 0, THUMB_WIDTH, THUMB_HEIGHT);
-        this.context.drawImage(this.stage, r.x, r.y, r.width, r.height, 0, 0, THUMB_WIDTH, THUMB_HEIGHT);
+        this.context.drawImage(stage, r.x, r.y, r.width, r.height, 0, 0, THUMB_WIDTH, THUMB_HEIGHT);
         if (isBlankFrame(this.context.getImageData(0, 0, THUMB_WIDTH, THUMB_HEIGHT).data)) return resolve(null);
         this.small.toBlob(resolve, "image/png");
       }));

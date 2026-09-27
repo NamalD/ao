@@ -48,6 +48,11 @@ export class Recorder {
     });
   }
 
+  /** True from the moment a recording starts until it has stopped: the canvas is being captured. */
+  get capturing(): boolean {
+    return this.busy || this.active !== null;
+  }
+
   async toggle(): Promise<void> {
     if (this.busy) return;
     this.busy = true;

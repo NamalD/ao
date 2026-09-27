@@ -7,6 +7,7 @@ declare module "hydra-synth" {
     height: number;
     synth: { time: number; speed: number; hush(): void };
     tick(dt: number): void;
+    loadScript(url?: string): Promise<void>;
     setResolution(width: number, height: number): void;
   }
 }

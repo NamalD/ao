@@ -8,6 +8,7 @@ import { setupRecording } from "./recording";
 import { generateThumbnails, registerSketchLibraryIpc } from "./sketch-library";
 import { Store } from "./store";
 import { mergeSettings, normalizeSettings, Settings } from "../shared/settings";
+import { normalizeAutopilot } from "../shared/autopilot";
 
 interface WindowState { x?: number; y?: number; width: number; height: number; fullscreen: boolean }
 interface Options {
@@ -16,6 +17,8 @@ interface Options {
   meter: boolean; night?: string;
   /** `--thumbnails[=a,b]`: render missing sketch thumbnails offscreen, then quit. */
   thumbnails?: string[]; force: boolean;
+  /** `--autopilot[=dwellSeconds]` and `--fade=seconds`: this session only, never saved. */
+  autopilot?: string; fade?: string;
 }
 
 function parseOptions(argv: string[]): Options {
@@ -30,6 +33,8 @@ function parseOptions(argv: string[]): Options {
     night: value("night"),
     thumbnails: argv.includes("--thumbnails") ? [] : value("thumbnails")?.split(",").filter(Boolean),
     force: argv.includes("--force"),
+    autopilot: value("autopilot") ?? (argv.includes("--autopilot") ? "" : undefined),
+    fade: value("fade"),
   };
 }
 
@@ -101,7 +106,7 @@ function registerIpc(win: () => BrowserWindow | null): void {
   ipcMain.on("window:fullscreen", () => { const w = win(); w?.setFullScreen(!w.isFullScreen()); });
   ipcMain.on("app:quit", () => app.quit());
   ipcMain.on("log", (_e, message: string) => store.log(message));
-  ipcMain.handle("settings:read", () => readSettings());
+  ipcMain.handle("settings:read", () => withFlags(readSettings()));
   ipcMain.on("settings:update", (_e, patch: unknown) => {
     if (!headless) store.write("settings", mergeSettings(readSettings(), patch));
   });
@@ -114,6 +119,19 @@ function registerIpc(win: () => BrowserWindow | null): void {
 function readSettings(): Settings {
   if (headless) return normalizeSettings({ meter: options.meter, night: { mode: options.night ?? "off" } });
   return normalizeSettings(store.read("settings", {}));
+}
+
+/** Applies the autopilot flags for this session on top of the saved settings. */
+function withFlags(settings: Settings): Settings {
+  const patch: Record<string, unknown> = {};
+  if (options.autopilot !== undefined) {
+    patch.enabled = true;
+    const dwell = Number(options.autopilot);
+    // A short dwell for trying it out also shortens the section minimum.
+    if (options.autopilot && Number.isFinite(dwell)) Object.assign(patch, { dwellSeconds: dwell, minSeconds: dwell });
+  }
+  if (options.fade !== undefined) patch.fadeSeconds = Number(options.fade);
+  return { ...settings, autopilot: normalizeAutopilot({ ...settings.autopilot, ...patch }, settings.autopilot) };
 }
 
 function watchSketches(send: (name: string) => void): void {
