@@ -16,7 +16,7 @@ make test     # typecheck, unit tests, production build
 It needs Node 22+, and `parec`/`pactl` (PipeWire's PulseAudio tools) for
 capture. Ao listens to the default output's `.monitor` source, so it hears
 system audio, never the microphone. Window geometry, the last sketch, and
-`ao.log` live in `state/`.
+`ao.log` live in `state/`; past 1 MB the log moves to `ao.log.1`.
 
 ## Keys
 
