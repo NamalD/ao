@@ -2,7 +2,8 @@ import Hydra from "hydra-synth";
 import type { Bridge } from "../preload/preload";
 import { ao, updateAudio } from "./audio";
 import { ChallengeMode } from "./challenges/challenge-mode";
-import { createEditor, setText } from "./editor";
+import { createEditor, insertBlock, setText } from "./editor";
+import { CodeExplorer } from "./explorer/explorer";
 import { flashStatus } from "./flash";
 import { Meter } from "./meter";
 import { NightFade } from "./night";
@@ -136,6 +137,7 @@ const editor = createEditor(editorRoot, {
   },
   rename: (name, overwrite) => void rename(name, overwrite),
   status: showStatus,
+  help: (line, column) => { editor.contentDOM.blur(); explorer.lookUp(line, column); },
 });
 
 const dirty = () => editor.state.doc.toString() !== saved;
@@ -279,6 +281,23 @@ function cycleNight() {
   host.updateSettings({ night: { mode } });
   flashStatus(status, describeNight(night.current));
 }
+// Clears the visuals, and the speed and bpm an example may have changed.
+function resetVisuals() {
+  hydra.synth.hush();
+  Object.assign(window, { speed: 1, bpm: 30 });
+}
+// The code explorer: F2, or K on a word. Its examples play on the visuals.
+const explorer = new CodeExplorer({
+  play: (code) => { resetVisuals(); void run(code); },
+  restore: () => { resetVisuals(); void run(editor.state.doc.toString()); },
+  insert: (code) => {
+    editor.dispatch(insertBlock(editor.state, code));
+    resetVisuals();
+    void run(editor.state.doc.toString());
+  },
+  closed: () => { if (editorVisible()) editor.focus(); },
+});
+
 const challenges = new ChallengeMode({
   listSketches: host.listSketches, writeSketch: host.writeSketch, finishChallenge: host.finishChallenge,
   open, save, notify: showStatus, focus: () => { if (editorVisible()) editor.focus(); },
@@ -288,6 +307,8 @@ addEventListener("keydown", (e) => {
   const ctrl = e.ctrlKey || e.metaKey;
   const handled = () => { e.preventDefault(); e.stopPropagation(); };
   if (challenges.onKey(e)) return;
+  if (explorer.onKey(e)) return;
+  if (e.key === "F2") { handled(); editor.contentDOM.blur(); explorer.show(); return; }
   if (e.key === "F11") { handled(); host.toggleFullscreen(); return; }
   if (e.key === "F1") { handled(); toggleHelp(); return; }
   if (e.key === "F9") { handled(); if (!e.repeat) void recorder.toggle(); return; }
