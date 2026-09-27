@@ -247,7 +247,9 @@ warp(2, 0.04, 2, 3, ao.map("bass", 1, 1.8))
 fetched: the files are bundled with Ao, unmodified, and
 `src/renderer/vendor/hydra/SOURCES.md` records where each came from.
 hyper-hydra's own docs describe each extension in full.
-`sketches/fractal-garden.js` uses four of them together.
+`sketches/fractal-garden.js` uses noise, fractals, gradientmap and outputs
+together, `sketches/lanterns.js` shows softpattern, and
+`sketches/interference.js` builds ripples from arithmetics.
 
 Each extension loads into the deck running the sketch (see
 [Autopilot](#autopilot)), so it works on either side of a crossfade; `use`
