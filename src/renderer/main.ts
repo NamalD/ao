@@ -2,6 +2,10 @@ import Hydra from "hydra-synth";
 import type { Bridge } from "../preload/preload";
 import { ao, updateAudio } from "./audio";
 import { createEditor, setText } from "./editor";
+import { flashStatus } from "./flash";
+import { Meter } from "./meter";
+import { NightFade } from "./night";
+import { describeNight } from "../shared/night";
 import { describeError, ErrorReporter, installRuntimeErrorReporting } from "./runtime-errors";
 import { Scene, SceneOptions } from "./scenes";
 import { SketchWriter } from "./sketch-writer";
@@ -35,6 +39,8 @@ installRuntimeErrorReporting(runtimeErrors);
 // --- Rendering -------------------------------------------------------------
 
 const canvas = $("stage") as HTMLCanvasElement;
+const night = new NightFade(canvas);
+const meter = new Meter(document.body);
 const pixelSize = (): [number, number] => [Math.round(innerWidth * devicePixelRatio), Math.round(innerHeight * devicePixelRatio)];
 const [width, height] = pixelSize();
 const hydra = new Hydra({
@@ -66,7 +72,8 @@ let last = performance.now(), frames = 0, fpsWindow = last;
 function frame(now: number) {
   // Schedule first: nothing that throws below may stop the visuals.
   requestAnimationFrame(frame);
-  const dt = now - last;
+  // Night fade may slow time a little; it is 1 unless configured.
+  const dt = (now - last) * night.timeScale;
   last = now;
   const time = hydra.synth.time + dt * 0.001 * hydra.synth.speed;
   for (const [source, scene] of scenes) {
@@ -222,6 +229,16 @@ function setEditorVisible(visible: boolean) {
 }
 const editorVisible = () => !document.body.classList.contains("ambient");
 
+function toggleMeter() {
+  meter.setVisible(!meter.visible);
+  host.updateSettings({ meter: meter.visible });
+}
+function cycleNight() {
+  const { mode } = night.cycle();
+  host.updateSettings({ night: { mode } });
+  flashStatus(status, describeNight(night.current));
+}
+
 addEventListener("keydown", (e) => {
   const ctrl = e.ctrlKey || e.metaKey;
   const handled = () => { e.preventDefault(); e.stopPropagation(); };
@@ -229,6 +246,8 @@ addEventListener("keydown", (e) => {
   if (e.key === "F1") { handled(); toggleHelp(); return; }
   if (ctrl && !e.shiftKey && e.key.toLowerCase() === "n") { handled(); void createSketch(); return; }
   if (ctrl && e.shiftKey && e.key.toLowerCase() === "h") { handled(); setEditorVisible(!editorVisible()); return; }
+  if (ctrl && e.shiftKey && e.key.toLowerCase() === "m") { handled(); toggleMeter(); return; }
+  if (ctrl && e.shiftKey && e.key.toLowerCase() === "n") { handled(); cycleNight(); return; }
   if (ctrl && e.key === "PageDown") { handled(); void step(1); return; }
   if (ctrl && e.key === "PageUp") { handled(); void step(-1); return; }
   if (ctrl && e.key.toLowerCase() === "q") { handled(); host.quit(); return; }
@@ -237,7 +256,7 @@ addEventListener("keydown", (e) => {
   const actions: Record<string, () => void> = {
     j: () => void step(-1), k: () => void step(1), f: host.toggleFullscreen,
     e: () => setEditorVisible(true), h: toggleHelp, i: () => fpsLabel.classList.toggle("shown"),
-    q: host.quit, Escape: host.quit,
+    m: toggleMeter, n: cycleNight, q: host.quit, Escape: host.quit,
   };
   const action = actions[e.key];
   if (action) { handled(); action(); }
@@ -246,6 +265,9 @@ addEventListener("keydown", (e) => {
 // --- Start -------------------------------------------------------------------
 
 setEditorVisible(params.get("hideEditor") !== "1");
+const settings = await host.settings();
+meter.setVisible(settings.meter);
+night.set(settings.night);
 sketches = await host.listSketches();
 const initial = params.get("sketch") || (await host.lastSketch());
 await open(sketches.includes(initial) ? initial : sketches[0] ?? "");

@@ -118,3 +118,27 @@ kbd { color: var(--accent); font-family: inherit; }
 #notice:empty { display: none; }
 #notice.error { color: var(--error); opacity: 1; }
 body.ambient #notice:not(.error) { display: none; }
+
+/* Meter */
+#meter {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  background: var(--shade);
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: 6px;
+  pointer-events: none;
+}
+#meter[hidden] { display: none; }
+
+/* Night fade: a black layer over the stage and under the editor. */
+#night {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 2s linear;
+}
+/* Brief status messages, such as the night fade mode, show in ambient mode too. */
+body.ambient #status.flash { display: block; flex: none; padding: 0 8px; background: var(--shade); }

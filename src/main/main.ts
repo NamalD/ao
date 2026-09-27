@@ -4,9 +4,14 @@ import { join } from "node:path";
 import { Capture, startCapture, startFakeCapture } from "./capture";
 import { isAppNavigation } from "./navigation";
 import { Store } from "./store";
+import { mergeSettings, normalizeSettings, Settings } from "../shared/settings";
 
 interface WindowState { x?: number; y?: number; width: number; height: number; fullscreen: boolean }
-interface Options { fakeAudio: boolean; sketch?: string; screenshot?: string; delay: number; hideEditor: boolean }
+interface Options {
+  fakeAudio: boolean; sketch?: string; screenshot?: string; delay: number; hideEditor: boolean;
+  /** Screenshots ignore saved settings; these opt in to the overlays. */
+  meter: boolean; night?: string;
+}
 
 function parseOptions(argv: string[]): Options {
   const value = (flag: string) => argv.find((a) => a.startsWith(`--${flag}=`))?.split("=").slice(1).join("=");
@@ -16,6 +21,8 @@ function parseOptions(argv: string[]): Options {
     screenshot: value("screenshot"),
     delay: Number(value("screenshot-delay") ?? 3000),
     hideEditor: argv.includes("--hide-editor"),
+    meter: argv.includes("--meter"),
+    night: value("night"),
   };
 }
 
@@ -83,6 +90,16 @@ function registerIpc(win: () => BrowserWindow | null): void {
   ipcMain.on("window:fullscreen", () => { const w = win(); w?.setFullScreen(!w.isFullScreen()); });
   ipcMain.on("app:quit", () => app.quit());
   ipcMain.on("log", (_e, message: string) => store.log(message));
+  ipcMain.handle("settings:read", () => readSettings());
+  ipcMain.on("settings:update", (_e, patch: unknown) => {
+    if (!options.screenshot) store.write("settings", mergeSettings(readSettings(), patch));
+  });
+}
+
+/** `state/settings.json`, or for screenshots only what the flags ask for. */
+function readSettings(): Settings {
+  if (options.screenshot) return normalizeSettings({ meter: options.meter, night: { mode: options.night ?? "off" } });
+  return normalizeSettings(store.read("settings", {}));
 }
 
 function watchSketches(send: (name: string) => void): void {
