@@ -43,7 +43,7 @@ describe("completion lists", () => {
 
   it("offers Hydra's globals at the top level with real descriptions", () => {
     const options = topLevelCompletions();
-    for (const name of ["o0", "o3", "s1", "render", "hush", "setFunction", "speed", "bpm", "time", "mouse", "width", "height", "update", "ao", "osc"]) {
+    for (const name of ["o0", "o3", "s1", "render", "hush", "setFunction", "speed", "bpm", "time", "mouse", "width", "height", "update", "use", "ao", "osc"]) {
       const option = options.find((o) => o.label === name);
       expect(option?.info, name).toBeTruthy();
     }
