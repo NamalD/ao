@@ -285,6 +285,21 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
 }\`, { scale: 0.5 })
 
 src(s0).out()`,
+  clearScene: `// A pen that paints into a buffer; the painting wipes every 8 seconds.
+s0.initScene(\`
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+  fragColor = texture(aoBuffer0, fragCoord / iResolution.xy);
+}\`, { buffers: [\`
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+  vec2 uv = fragCoord / iResolution.xy;
+  vec2 pen = 0.5 + 0.35 * vec2(cos(iTime), sin(1.7 * iTime));
+  float ink = smoothstep(0.02 + 0.03 * aoBass, 0.0, distance(uv, pen));
+  fragColor = max(texture(aoPrevious, uv), ink * vec4(uv, 1.0, 1.0));
+}\`] })
+
+src(s0).out()
+
+setInterval(() => s0.clearScene(), 8000)`,
   initCanvas: `const ctx = s0.initCanvas(512, 512)
 ctx.fillStyle = "white"
 ctx.font = "200px monospace"
