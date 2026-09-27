@@ -1,9 +1,12 @@
+import { javascript } from "@codemirror/lang-javascript";
+import { syntaxTree } from "@codemirror/language";
+import { EditorState } from "@codemirror/state";
 import hydraFunctions from "hydra-synth/src/glsl/glsl-functions.js";
 import { describe, expect, it } from "vitest";
 import { ao, aoDocs } from "../src/renderer/audio";
 import {
-  aoMemberDocs, chainMethods, functionDoc, generators, hydraDocs, memberCompletions,
-  publicAoMembers, topLevelCompletions,
+  aoMemberDocs, chainMethods, functionDoc, generators, hydraDocs, isSolidChain, memberCompletions,
+  publicAoMembers, solidMethods, solidShapeNames, topLevelCompletions,
 } from "../src/renderer/editor";
 
 const labels = (options: { label: string }[]) => options.map((option) => option.label);
@@ -79,5 +82,31 @@ describe("ao documentation", () => {
       expect(aoDocs[name]?.description, name).toBeTruthy();
       expect(aoDocs[name]?.signature, name).toMatch(new RegExp(`^ao\\.${name}\\b`));
     }
+  });
+});
+
+describe("solid completions", () => {
+  const completionsAt = (doc: string) => {
+    const state = EditorState.create({ doc, extensions: [javascript()] });
+    const node = syntaxTree(state).resolveInner(doc.length, -1);
+    return labels(memberCompletions(undefined, isSolidChain(state, node)));
+  };
+
+  it("offers solid methods after a solid chain and Hydra's after a Hydra one", () => {
+    expect(completionsAt("sphere(1)\n  .spikes(0.3)\n  .")).toEqual(expect.arrayContaining(["spikes", "spin", "add", "out"]));
+    expect(completionsAt("sphere(1)\n  .spikes(0.3)\n  .")).not.toContain("modulateHue");
+    expect(completionsAt("osc(10).rotate(0.1).")).toContain("modulateHue");
+    expect(completionsAt("osc(10).add(box().")).toContain("spikes");
+  });
+
+  it("offers solid shapes at the top level and documents every solid function", () => {
+    expect(labels(topLevelCompletions())).toEqual(expect.arrayContaining(["sphere", "box", "torus"]));
+    for (const name of [...solidShapeNames, ...solidMethods]) {
+      expect(functionDoc(name, undefined, true)?.description, name).toBeTruthy();
+    }
+    expect(functionDoc("rotate", undefined, true)?.description).toContain("radians");
+    expect(functionDoc("rotate")?.description).toBe(hydraDocs.rotate.description);
+    expect(functionDoc("sphere")?.signature).toBe("sphere(radius = 1)");
+    expect(functionDoc("add", undefined, true)?.signature).toBe("add(solid, smooth = 0)");
   });
 });

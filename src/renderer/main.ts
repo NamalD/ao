@@ -11,6 +11,7 @@ import { Recorder } from "./recorder";
 import { describeError, ErrorReporter, installRuntimeErrorReporting } from "./runtime-errors";
 import { Scene, SceneOptions } from "./scenes";
 import { SketchWriter } from "./sketch-writer";
+import { solidShapes } from "./solids";
 import "./style.css";
 
 declare global {
@@ -68,6 +69,8 @@ for (const source of hydra.s) {
   };
 }
 window.ao = ao;
+// 3D solids chain like Hydra and render into a source: `sphere().spikes(0.3).out(s0)`.
+Object.assign(window, solidShapes);
 host.onAudio(updateAudio);
 
 let last = performance.now(), frames = 0, fpsWindow = last;
