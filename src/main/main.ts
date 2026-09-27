@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain } from "electron";
 import { watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Capture, startCapture, startFakeCapture } from "./capture";
+import { saveChallenge } from "./challenge-log";
 import { isAppNavigation } from "./navigation";
 import { Store } from "./store";
 
@@ -83,6 +84,8 @@ function registerIpc(win: () => BrowserWindow | null): void {
   ipcMain.on("window:fullscreen", () => { const w = win(); w?.setFullScreen(!w.isFullScreen()); });
   ipcMain.on("app:quit", () => app.quit());
   ipcMain.on("log", (_e, message: string) => store.log(message));
+  ipcMain.handle("challenge:finish", (_e, result: unknown) =>
+    saveChallenge(store, result, async () => (await win()!.webContents.capturePage()).toPNG()));
 }
 
 function watchSketches(send: (name: string) => void): void {
