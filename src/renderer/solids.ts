@@ -88,8 +88,8 @@ export const solidFunctions: SolidFunction[] = [
     point: "aoTwist({p}, {amount})", reach: "1e6", slope: "{slope} + 2.0 * abs({amount})" },
   // Surface
   { name: "spikes", type: "modify", description: "Pushes sharp spikes out of the surface; drive the length with the music.",
-    params: [param("length", 0.3, "How far the spikes reach; 0 is smooth."), param("density", 8, "How many spikes: higher packs in more, thinner ones."), param("sharpness", 4, "Higher makes needles, lower makes soft bumps.")],
-    distance: "{d} - {length} * aoSpikes({p}, {density}, {sharpness})",
+    params: [param("length", 0.3, "How far the spikes reach; 0 is smooth."), param("density", 8, "How many spikes: higher packs in more, thinner ones."), param("sharpness", 4, "Higher makes needles, lower makes soft bumps."), param("variety", 0, "How much spike lengths differ: 0 all alike, 1 from nothing to full length.")],
+    distance: "{d} - {length} * aoSpikes({p}, {density}, {sharpness}, {variety})",
     reach: "{reach} + abs({length})", slope: "{slope} + 0.5 * abs({length} * {density}) * sqrt(max({sharpness}, 1.0))" },
   { name: "wobble", type: "modify", description: "A slow, liquid swell over the surface.",
     params: [param("amount", 0.1, "How far the surface moves."), param("frequency", 3, "Number of swells across the solid."), param("speed", 1, "How fast the swells move.")],
@@ -305,10 +305,14 @@ float aoCylinder(vec3 p, float r, float h) {
   vec2 d = abs(vec2(length(p.xz), p.y)) - vec2(r, 0.5 * h);
   return min(max(d.x, d.y), 0.0) + length(max(d, 0.0));
 }
-float aoSpikes(vec3 p, float density, float sharpness) {
+float aoSpikes(vec3 p, float density, float sharpness, float variety) {
   vec3 d = aoDirection(p);
   float lattice = abs(sin(density * d.x) * sin(density * d.y) * sin(density * d.z));
-  return pow(lattice, max(sharpness, 0.01));
+  // Each spike peaks inside its own cell of the lattice, and the lattice is 0
+  // on the cell walls, so a length picked per cell never tears the surface.
+  vec3 cell = floor(density * d / 3.14159265);
+  float own = fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+  return pow(lattice, max(sharpness, 0.01)) * mix(1.0, own, clamp(variety, 0.0, 1.0));
 }
 float aoWobble(vec3 p, float f, float speed) {
   vec3 d = aoDirection(p);
