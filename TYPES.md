@@ -20,20 +20,36 @@ normalized to `0..1` and update as audio is captured.
 | `ao.mid` | `number` | Average energy from 250 Hz to 2 kHz. |
 | `ao.high` | `number` | Average energy above 2 kHz. |
 | `ao.fft` | `number[]` | 64 log-spaced band levels, from about 30 Hz to 16 kHz, low to high. |
+| `ao.peak` | `number` | Position of the loudest band, `0..1` from low to high; glides between bands. |
+| `ao.centroid` | `number` | Spectral centroid, `0..1`: the level-weighted mean position, a steady measure of brightness. |
 
-`ao.map(level, lo = 0, hi = 1)` returns a function that maps the selected
-level into the interval `lo..hi`. Passing the function to Hydra makes the
-value update every frame:
+Spectrum positions (`ao.fftAt`, `ao.peak`, `ao.centroid`, GLSL `aoFFT`) share
+one log-frequency axis: `0` is about 30 Hz, `0.5` about 700 Hz, `1` about
+16 kHz, and each octave spans about 0.11.
+
+| Method | Returns | Meaning |
+| --- | --- | --- |
+| `ao.fftAt(x)` | `number` | Spectrum level at position `x` (`0..1`), linearly interpolated like GLSL `aoFFT(x)`. |
+| `ao.hz(lo, hi?)` | `number` | Average level of the bands between `lo` and `hi` Hz. With one argument, or a range narrower than a band, the interpolated level at that frequency. |
+| `ao.map(level, lo = 0, hi = 1)` | `() => number` | A function mapping a level onto `lo..hi`, for Hydra arguments. |
+
+Rough frequency ranges for `ao.hz`: kick `40..100`, bass line `60..250`,
+snare body `150..300`, voice `300..3000`, snare crack `2000..5000`, hats and
+cymbals `6000..12000`.
+
+`ao.map` returns a function, so passing it to Hydra makes the value update
+every frame. `level` is a level name or any function returning `0..1`:
 
 ```js
 osc(20, 0.05, () => 1 + ao.bass)
   .rotate(ao.map("mid", 0, 0.5))
+  .scale(ao.map(() => ao.hz(40, 100), 1, 1.5))
+  .hue(ao.map("centroid", 0, 1))
   .out()
 ```
 
-The accepted `level` values are `"loudness"`, `"impulse"`, `"beat"`,
-`"bass"`, `"mid"`, and `"high"`. `ao.fft` is available as an array for
-direct indexing; `ao.map` does not map spectrum bands.
+The accepted level names are `"loudness"`, `"impulse"`, `"beat"`, `"bass"`,
+`"mid"`, `"high"`, `"peak"`, and `"centroid"`.
 
 ## GLSL scene interface
 
