@@ -8,6 +8,49 @@ export interface SceneOptions {
   uniforms?: Record<string, UniformValue>;
 }
 
+export interface UniformResult {
+  /** Exactly `size` finite numbers, safe to upload. */
+  value: number[];
+  /** Set when the value had to be replaced or corrected. */
+  error?: string;
+}
+
+/**
+ * Evaluates a user uniform for a GLSL uniform of `size` floats (1 for float,
+ * up to 4 for vec4). A function that throws or returns something unusable
+ * falls back to zeros instead of breaking the frame; a single number fills a
+ * vector, as GLSL's `vec3(x)` does. Pure, so the frame loop can rely on it.
+ */
+export function evaluateUniform(name: string, uniform: UniformValue, size: number): UniformResult {
+  const zeros = () => new Array<number>(size).fill(0);
+  let raw: unknown = uniform;
+  if (typeof uniform === "function") {
+    try {
+      raw = uniform();
+    } catch (e) {
+      return { value: zeros(), error: `uniform ${name}: ${e instanceof Error ? e.message : String(e)}` };
+    }
+  }
+  const expected = size === 1 ? "a number" : `a number or ${size} numbers`;
+  if (typeof raw === "number") {
+    if (!Number.isFinite(raw)) return { value: zeros(), error: `uniform ${name} is ${raw}, expected ${expected}` };
+    return { value: new Array<number>(size).fill(raw) };
+  }
+  const list = Array.isArray(raw) || ArrayBuffer.isView(raw) ? Array.from(raw as ArrayLike<unknown>) : null;
+  if (!list || !list.every((x) => typeof x === "number" && Number.isFinite(x))) {
+    const shown = typeof raw === "string" ? JSON.stringify(raw) : list ? `[${list.map(String).join(", ")}]` : String(raw);
+    return { value: zeros(), error: `uniform ${name} is ${shown}, expected ${expected}` };
+  }
+  const numbers = list as number[];
+  if (numbers.length === size) return { value: numbers };
+  const value = zeros();
+  for (let i = 0; i < Math.min(size, numbers.length); i++) value[i] = numbers[i];
+  return { value, error: `uniform ${name} has ${numbers.length} values, expected ${size}` };
+}
+
+/** Float components per active uniform type: float, vec2, vec3, vec4. */
+const FLOAT_SIZES: Record<number, number> = { 0x1406: 1, 0x8b50: 2, 0x8b51: 3, 0x8b52: 4 };
+
 /**
  * Shadertoy-style GLSL ES 3.0 prelude. Scenes define
  * `void mainImage(out vec4 fragColor, in vec2 fragCoord)`.
@@ -52,6 +95,8 @@ export function formatShaderLog(log: string): string {
     `${prefix}${Math.max(1, Number(line) - PRELUDE_LINES)}`).trim();
 }
 
+interface UniformInfo { location: WebGLUniformLocation; size: number }
+
 /** One WebGL2 canvas that renders a scene each frame, used as a Hydra source. */
 export class Scene {
   readonly canvas = document.createElement("canvas");
@@ -59,14 +104,21 @@ export class Scene {
   private program: WebGLProgram | null = null;
   private code = "";
   private spectrum: WebGLTexture;
-  private locations = new Map<string, WebGLUniformLocation | null>();
+  private spectrumData = new Float32Array(0);
+  private uniforms = new Map<string, UniformInfo>();
+  private setters: ((at: WebGLUniformLocation, v: number[]) => void)[];
   private frame = 0;
   options: SceneOptions = {};
 
-  constructor() {
+  /** `onError` hears about uniforms that threw or returned unusable values. */
+  constructor(private readonly onError: (message: string) => void = () => {}) {
     const gl = this.canvas.getContext("webgl2", { antialias: false, depth: false, premultipliedAlpha: false });
     if (!gl) throw new Error("WebGL2 is unavailable");
     this.gl = gl;
+    this.setters = [
+      (at, v) => gl.uniform1fv(at, v), (at, v) => gl.uniform2fv(at, v),
+      (at, v) => gl.uniform3fv(at, v), (at, v) => gl.uniform4fv(at, v),
+    ];
     const buffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
@@ -113,8 +165,15 @@ export class Scene {
     if (this.program) gl.deleteProgram(this.program);
     this.program = program;
     this.code = code;
-    this.locations.clear();
     this.frame = 0;
+    // Active uniforms only: the compiler drops the ones a shader doesn't use.
+    this.uniforms.clear();
+    const count = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS) as number;
+    for (let i = 0; i < count; i++) {
+      const info = gl.getActiveUniform(program, i);
+      const location = info && gl.getUniformLocation(program, info.name);
+      if (info && location) this.uniforms.set(info.name, { location, size: FLOAT_SIZES[info.type] ?? 0 });
+    }
   }
 
   render(width: number, height: number, time: number, dt: number, audio: AudioFeatures): void {
@@ -130,8 +189,7 @@ export class Scene {
     gl.useProgram(this.program);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.spectrum);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, audio.spectrum.length, 1, 0, gl.RED, gl.FLOAT,
-      new Float32Array(audio.spectrum));
+    this.uploadSpectrum(audio.spectrum);
     this.uniform("iResolution", [w, h, 1]);
     this.uniform("iTime", time);
     this.uniform("iTimeDelta", dt);
@@ -144,26 +202,40 @@ export class Scene {
     this.uniform("aoHigh", audio.high);
     this.uniformInt("aoSpectrum", 0);
     for (const [name, value] of Object.entries(this.options.uniforms ?? {})) {
-      this.uniform(name, typeof value === "function" ? value() : value);
+      const info = this.uniforms.get(name);
+      if (!info) continue; // undeclared, or unused and optimized away
+      if (!info.size) {
+        this.onError(`uniform ${name} must be declared as float or vec2..vec4`);
+        continue;
+      }
+      const result = evaluateUniform(name, value, info.size);
+      if (result.error) this.onError(result.error);
+      this.setters[info.size - 1](info.location, result.value);
     }
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
-  private location(name: string): WebGLUniformLocation | null {
-    if (!this.locations.has(name)) this.locations.set(name, this.gl.getUniformLocation(this.program!, name));
-    return this.locations.get(name)!;
+  /** Streams the spectrum into texture storage that is allocated once per length. */
+  private uploadSpectrum(spectrum: readonly number[]): void {
+    const gl = this.gl;
+    if (this.spectrumData.length !== spectrum.length) {
+      this.spectrumData = new Float32Array(spectrum.length);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, Math.max(1, spectrum.length), 1, 0, gl.RED, gl.FLOAT, null);
+    }
+    if (!spectrum.length) return;
+    this.spectrumData.set(spectrum);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, spectrum.length, 1, gl.RED, gl.FLOAT, this.spectrumData);
   }
 
   private uniform(name: string, value: number | number[]): void {
-    const at = this.location(name);
-    if (!at) return;
-    const v = typeof value === "number" ? [value] : value;
-    const setters = [this.gl.uniform1fv, this.gl.uniform2fv, this.gl.uniform3fv, this.gl.uniform4fv];
-    setters[v.length - 1]?.call(this.gl, at, v);
+    const info = this.uniforms.get(name);
+    if (!info?.size) return;
+    if (typeof value === "number") this.gl.uniform1f(info.location, value);
+    else this.setters[info.size - 1](info.location, value);
   }
 
   private uniformInt(name: string, value: number): void {
-    const at = this.location(name);
-    if (at) this.gl.uniform1i(at, value);
+    const info = this.uniforms.get(name);
+    if (info) this.gl.uniform1i(info.location, value);
   }
 }

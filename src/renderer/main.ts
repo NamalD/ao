@@ -2,6 +2,7 @@ import Hydra from "hydra-synth";
 import type { Bridge } from "../preload/preload";
 import { ao, updateAudio } from "./audio";
 import { createEditor, setText } from "./editor";
+import { describeError, ErrorReporter, installRuntimeErrorReporting } from "./runtime-errors";
 import { Scene, SceneOptions } from "./scenes";
 import "./style.css";
 
@@ -13,6 +14,22 @@ const host = window.aoHost;
 const params = new URLSearchParams(location.search);
 const $ = (id: string) => document.getElementById(id)!;
 const status = $("status"), sketchLabel = $("sketch"), fpsLabel = $("fps");
+// Capture and audio messages from the main process; a successful run keeps them.
+const notice = document.createElement("span");
+notice.id = "notice";
+fpsLabel.before(notice);
+
+let current = "";
+
+function showStatus(message: string, error = false) {
+  status.textContent = message;
+  status.classList.toggle("error", error);
+  if (error) host.log(`${current}: ${message}`);
+}
+
+// Runtime errors from sketch code show once each until the next run.
+const runtimeErrors = new ErrorReporter((message) => showStatus(message, true));
+installRuntimeErrorReporting(runtimeErrors);
 
 // --- Rendering -------------------------------------------------------------
 
@@ -35,7 +52,7 @@ const scenes = new Map<HydraSource, Scene>();
 for (const source of hydra.s) {
   source.initScene = (code: string, options?: SceneOptions) => {
     let scene = scenes.get(source);
-    if (!scene) scenes.set(source, (scene = new Scene()));
+    if (!scene) scenes.set(source, (scene = new Scene((message) => runtimeErrors.report(message))));
     scene.load(code, options);
     if (source.src !== scene.canvas) source.init({ src: scene.canvas });
     source.dynamic = true;
@@ -46,41 +63,48 @@ host.onAudio(updateAudio);
 
 let last = performance.now(), frames = 0, fpsWindow = last;
 function frame(now: number) {
+  // Schedule first: nothing that throws below may stop the visuals.
+  requestAnimationFrame(frame);
   const dt = now - last;
   last = now;
   const time = hydra.synth.time + dt * 0.001 * hydra.synth.speed;
   for (const [source, scene] of scenes) {
-    if (source.src === scene.canvas) scene.render(hydra.width, hydra.height, time, dt / 1000, ao.features);
+    if (source.src !== scene.canvas) continue;
+    try {
+      scene.render(hydra.width, hydra.height, time, dt / 1000, ao.features);
+    } catch (e) {
+      runtimeErrors.report(`scene: ${describeError(e)}`);
+    }
   }
-  hydra.tick(dt);
+  try {
+    hydra.tick(dt);
+  } catch (e) {
+    runtimeErrors.report(`Hydra: ${describeError(e)}`);
+  }
   frames++;
   if (now - fpsWindow > 500) {
     fpsLabel.textContent = `${Math.round((frames * 1000) / (now - fpsWindow))} fps`;
     frames = 0;
     fpsWindow = now;
   }
-  requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
 // --- Sketches ----------------------------------------------------------------
 
 let sketches: string[] = [];
-let current = "";
 let saved = "";
 
-function showStatus(message: string, error = false) {
-  status.textContent = message;
-  status.classList.toggle("error", error);
-  if (error) host.log(`${current}: ${message}`);
-}
-
 async function run(code: string): Promise<void> {
+  // A still-broken sketch reports its runtime errors again after this run.
+  runtimeErrors.reset();
   try {
     // Each evaluation gets its own scope so re-running `const` blocks works.
     // Hydra's functions, `ao`, and scene sources are globals.
     await new Function(`return (async () => {\n${code}\n})()`)();
     showStatus("");
+    // Errors reported while an async sketch was running were just cleared.
+    runtimeErrors.reset();
   } catch (e) {
     showStatus(e instanceof Error ? e.message : String(e), true);
   }
@@ -165,7 +189,12 @@ host.onSketchChanged(async (name) => {
   updateLabel();
   await run(code);
 });
-host.onStatus((message) => showStatus(message));
+host.onStatus((message) => {
+  notice.textContent = message;
+  notice.title = message;
+  // "capturing <monitor>" is the one healthy report; the rest mean audio trouble.
+  notice.classList.toggle("error", !message.startsWith("capturing "));
+});
 
 // --- Overlay and keys --------------------------------------------------------
 
