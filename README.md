@@ -50,6 +50,10 @@ select, `u` undoes, and `:w` saves. Undo history starts fresh with each sketch
 you open. `:w <name>` renames the open sketch, keeping its undo history; it
 refuses a name that's taken unless you write `:w! <name>`.
 
+`:run` (or `:r`) runs the whole sketch, like Ctrl+Shift+Enter. Give it a
+range to run only those lines: `:'<,'>r` runs a visual selection, `:5,9r`
+lines 5 to 9, and `:.r` the cursor's line. What runs is formatted as usual.
+
 `K` in normal mode opens the code explorer on the word under the cursor.
 
 With the editor hidden, the old single keys work: `j`/`k` switch sketches,

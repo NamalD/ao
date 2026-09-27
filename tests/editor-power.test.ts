@@ -2,7 +2,7 @@ import { redo, undo, undoDepth } from "@codemirror/commands";
 import { EditorSelection, type EditorState, type Transaction } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { describe, expect, it, vi } from "vitest";
-import { createEditorState, parseWriteArgs, writeCommand } from "../src/renderer/editor";
+import { createEditorState, parseWriteArgs, runCommand, runCommandRange, writeCommand } from "../src/renderer/editor";
 import { remix } from "../src/renderer/remix";
 import { ScrubGesture } from "../src/renderer/scrub";
 import { literalAt } from "../src/renderer/numbers";
@@ -119,5 +119,31 @@ describe(":w arguments", () => {
     expect(edits.save).toHaveBeenCalledOnce();
     expect(edits.rename.mock.calls).toEqual([["halo2", false], ["halo", true]]);
     expect(edits.status).toHaveBeenCalledWith(expect.stringMatching(/invalid sketch name/), true);
+  });
+});
+
+describe(":run", () => {
+  const lines = (state: EditorState, from: number, to: number) => state.sliceDoc(from, to);
+
+  it("covers the whole sketch without a range, and whole lines with one", () => {
+    const state = createEditorState(SKETCH, actions());
+    const range = (line?: number, lineEnd?: number) => {
+      const { from, to } = runCommandRange(state, line, lineEnd);
+      return lines(state, from, to);
+    };
+    expect(range()).toBe(SKETCH);
+    expect(range(1)).toBe("  .rotate(-0.25)");
+    expect(range(0, 2)).toBe("osc(20, 0.05, 1.5)\n  .rotate(-0.25)\n  .out()");
+    // `:*run` hands the lines over backwards; a range past the end stops at the last line.
+    expect(range(2, 0)).toBe(range(0, 2));
+    expect(range(4, 99)).toBe("noise(3).out(o1)");
+  });
+
+  it("runs the code in range", () => {
+    const edits = { ...actions(), autoFormat: () => false };
+    const view = { state: createEditorState(SKETCH, edits), dispatch: vi.fn() } as unknown as EditorView;
+    runCommand(view);
+    runCommand(view, 4);
+    expect(edits.run.mock.calls).toEqual([[SKETCH], ["noise(3).out(o1)"]]);
   });
 });

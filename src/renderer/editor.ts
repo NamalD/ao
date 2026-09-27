@@ -600,6 +600,25 @@ export function writeCommand(view: EditorView, argString?: string): void {
 }
 Vim.defineEx("write", "w", (cm, params: { argString?: string }) => writeCommand(cm.cm6 as EditorView, params.argString));
 
+/**
+ * The code `:run` covers: the whole sketch without a range, or whole lines
+ * `line` to `lineEnd` (0-based, as vim hands them over, in either order).
+ */
+export function runCommandRange(state: EditorState, line?: number, lineEnd?: number): { from: number; to: number } {
+  if (line === undefined) return { from: 0, to: state.doc.length };
+  const last = state.doc.lines - 1;
+  const clamp = (n: number) => Math.max(0, Math.min(last, n));
+  const [first, final] = [clamp(line), clamp(lineEnd ?? line)].sort((a, b) => a - b);
+  return { from: state.doc.line(first + 1).from, to: state.doc.line(final + 1).to };
+}
+
+/** `:run` and `:r` run the sketch, like Ctrl+Shift+Enter; `:'<,'>r` or `:5,9r` run only those lines. */
+export function runCommand(view: EditorView, line?: number, lineEnd?: number): void {
+  const { from, to } = runCommandRange(view.state, line, lineEnd);
+  runAndFormat(view, from, to);
+}
+Vim.defineEx("run", "r", (cm, params) => runCommand(cm.cm6 as EditorView, params.line, params.lineEnd));
+
 /** K: open the code explorer on the word under the cursor, like vim's keyword lookup. */
 export function helpCommand(view: EditorView): void {
   const head = view.state.selection.main.head;
