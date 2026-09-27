@@ -5,7 +5,8 @@ import { ThumbnailCapture } from "./browser/thumbnail-capture";
 import { Autopilot } from "./autopilot";
 import { ChallengeMode } from "./challenges/challenge-mode";
 import { Mixer } from "./crossfade";
-import { createEditor, setText } from "./editor";
+import { createEditor, insertBlock, setText } from "./editor";
+import { CodeExplorer } from "./explorer/explorer";
 import { flashStatus } from "./flash";
 import { setLiveValues, toggleLiveValues } from "./live-values";
 import { Meter } from "./meter";
@@ -49,7 +50,8 @@ installRuntimeErrorReporting(runtimeErrors);
 const canvas = $("stage") as HTMLCanvasElement;
 const night = new NightFade(canvas);
 const meter = new Meter(document.body);
-const pixelSize = (): [number, number] => [Math.round(innerWidth * devicePixelRatio), Math.round(innerHeight * devicePixelRatio)];
+// #stage's box is the visuals' area: the window, or right of the code explorer.
+const pixelSize = (): [number, number] => [Math.round((canvas.clientWidth || innerWidth) * devicePixelRatio), Math.round((canvas.clientHeight || innerHeight) * devicePixelRatio)];
 const [width, height] = pixelSize();
 // Two Hydra decks, so switches can crossfade; #stage mirrors them for recording.
 const mixer = new Mixer(canvas, width, height, (message) => runtimeErrors.report(message));
@@ -133,6 +135,7 @@ const editor = createEditor(editorRoot, {
   },
   rename: (name, overwrite) => void rename(name, overwrite),
   status: showStatus,
+  help: (line, column) => { editor.contentDOM.blur(); explorer.lookUp(line, column); },
 });
 
 const dirty = () => editor.state.doc.toString() !== saved;
@@ -332,6 +335,28 @@ host.onAudio((features) => autopilot.feed(features));
 // Automatic switches wait for the next bar (at most 4 s); a manual skip goes now.
 autopilot.alignSwitch = (reason) => reason === "skip" ? 0 : msToNextBar();
 
+// The code explorer: F2, or K on a word. Its examples play on the current
+// deck, cut in as a sketch switch would be, which also resets speed and bpm.
+// Browsing counts as editing, so autopilot doesn't switch away meanwhile.
+const explorer = new CodeExplorer({
+  play: (code) => {
+    autopilot.setEditorVisible(true);
+    autopilot.edited();
+    mixer.cut();
+    void run(code);
+  },
+  restore: () => { mixer.cut(); void run(editor.state.doc.toString()); },
+  insert: (code) => {
+    editor.dispatch(insertBlock(editor.state, code));
+    mixer.cut();
+    void run(editor.state.doc.toString());
+  },
+  closed: () => {
+    autopilot.setEditorVisible(editorVisible());
+    if (editorVisible()) editor.focus();
+  },
+});
+
 const challenges = new ChallengeMode({
   listSketches: host.listSketches, writeSketch: host.writeSketch, finishChallenge: host.finishChallenge,
   open: async (name) => { await open(name); }, save, notify: showStatus, focus: () => { if (editorVisible()) editor.focus(); },
@@ -350,6 +375,8 @@ addEventListener("keydown", (e) => {
   const ctrl = e.ctrlKey || e.metaKey;
   const handled = () => { e.preventDefault(); e.stopPropagation(); };
   if (challenges.onKey(e)) return;
+  if (explorer.onKey(e)) return;
+  if (e.key === "F2") { handled(); editor.contentDOM.blur(); explorer.show(); return; }
   if (browser.onKey(e)) return;
   if (e.key === "F11") { handled(); host.toggleFullscreen(); return; }
   if (e.key === "F1") { handled(); toggleHelp(); return; }

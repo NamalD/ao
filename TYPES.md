@@ -91,6 +91,32 @@ shape(3, () => 0.3 + 0.2 * Math.abs(ao.waveAt(0.25)))
   .out()
 ```
 
+## Hydra extensions: `use`
+
+```ts
+function use(...names: string[]): Promise<void>;
+```
+
+Loads vendored Hydra extensions into the deck running the sketch, so their
+functions are available afterwards like Hydra's own. Names are
+`"noise"`, `"softpattern"`, `"fractals"`, `"outputs"`, `"gradientmap"` and
+`"arithmetics"`, or the vendored file names with or without `.js`
+(`"lib-noise"`, `"hydra-fractals.js"`). An unknown name throws an `Error`
+listing the available ones, before anything loads.
+
+Loading is synchronous; the returned promise resolves at once, so
+`await use(...)` and a bare `use(...)` behave the same. Loading an extension
+already loaded on that deck does nothing. Extensions can't be unloaded:
+what they add stays on the deck until Ao restarts, while per-sketch state
+(output settings from `outputs`, gradient textures from `gradientmap`) is
+reset whenever the deck switches sketches. The README's "Hydra extensions"
+section lists what each one adds.
+
+```js
+await use("gradientmap", "noise")
+turb(4, 0.1, 3).lookupX(createGradient([0, 0, 0.1], "teal", "gold")).out()
+```
+
 ## GLSL scene interface
 
 `s0.initScene(source, options)` attaches a Shadertoy-style GLSL ES 3.0

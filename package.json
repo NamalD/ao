@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.2.0",
   "description": "Live-coded ambient audio visualizer",
+  "license": "AGPL-3.0-only",
   "main": "dist/electron/main.cjs",
   "scripts": {
     "build": "node scripts/build.mjs",

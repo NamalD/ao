@@ -1,5 +1,6 @@
 import Hydra from "hydra-synth";
 import type { AudioFeatures } from "../shared/features";
+import { ExtensionLoader, sharedPrototypes } from "./extensions";
 import { describeError } from "./runtime-errors";
 import { Scene, SceneOptions } from "./scenes";
 import { evaluateInScope, sketchScope } from "./scope";
@@ -35,6 +36,8 @@ export class Deck {
   private readonly intervals = new Set<number>();
   private readonly frames = new Set<number>();
   private readonly timers: Record<TimerName, unknown>;
+  /** Vendored Hydra extensions loaded on this deck with `use` (see extensions.ts). */
+  readonly extensions: ExtensionLoader;
 
   constructor(width: number, height: number, readonly label: string, private readonly onError: (message: string) => void) {
     this.canvas.className = "deck";
@@ -49,7 +52,12 @@ export class Deck {
     for (const source of this.hydra.s) this.patchSource(source);
     this.timers = this.makeTimers();
     // Solids render into this deck's s0 when `.out()` is given no source.
-    this.scope = sketchScope(this.synth, { ...this.timers, ...makeSolidShapes(() => this.hydra.s[0]) });
+    const extras: Record<string, unknown> = { ...this.timers, ...makeSolidShapes(() => this.hydra.s[0]) };
+    this.scope = sketchScope(this.synth, extras);
+    const hydra = this.hydra as unknown as { o: object[]; s: object[] };
+    this.extensions = new ExtensionLoader({ hydra: this.hydra, synth: this.synth, scope: this.scope, shared: sharedPrototypes(hydra, this.synth) });
+    // `use` in a sketch loads into the deck running it.
+    extras.use = this.extensions.use;
   }
 
   /**
@@ -88,7 +96,9 @@ export class Deck {
   /**
    * Stops everything the sketch left running, ready for the next one:
    * Hydra's outputs, sources and `update`, the sketch's timers, and its
-   * scenes' buffers. `speed` and friends go back to Hydra's defaults.
+   * scenes' buffers. `speed` and friends go back to Hydra's defaults, and
+   * so do settings extensions keep per sketch, such as `o0.setLinear()`;
+   * functions extensions added stay.
    */
   reset(): void {
     for (const id of this.timeouts) clearTimeout(id);
@@ -97,6 +107,12 @@ export class Deck {
     this.timeouts.clear();
     this.intervals.clear();
     this.frames.clear();
+    // Before hush: output settings must be back to two buffers when it re-renders them.
+    try {
+      this.extensions.reset();
+    } catch (e) {
+      this.onError(`extensions: ${describeError(e)}`);
+    }
     this.synth.hush();
     Object.assign(this.synth, { speed: 1, bpm: 30, fps: undefined });
     // Scenes stay, so their WebGL contexts are reused rather than churned, but

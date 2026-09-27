@@ -42,12 +42,15 @@ past 1 MB the log moves to `ao.log.1`.
 | F11 | fullscreen |
 | F9 | start or stop recording video with audio |
 | F1 | help |
+| F2 | code explorer: `ao`, Hydra and recipes, with live examples |
 | Ctrl+Q | quit |
 
 The editor uses vim keys: `i` inserts, `Esc` returns to normal mode, `v`/`V`
 select, `u` undoes, and `:w` saves. Undo history starts fresh with each sketch
 you open. `:w <name>` renames the open sketch, keeping its undo history; it
 refuses a name that's taken unless you write `:w! <name>`.
+
+`K` in normal mode opens the code explorer on the word under the cursor.
 
 With the editor hidden, the old single keys work: `j`/`k` switch sketches,
 `a` toggles autopilot, `f` fullscreen, `e` brings the editor back, `i` toggles the FPS counter, `m`
@@ -217,6 +220,62 @@ Scenes see these as `aoWave`, `aoSpectrogram`, `aoBalance`, `aoWidth`,
 `aoChroma[12]` and `aoKey`; `TYPES.md` has the details, and
 `sketches/scope.js` and `sketches/ridges.js` show them off.
 
+## Hydra extensions
+
+Ao bundles a few third-party Hydra extensions. A sketch loads them with
+`use`, before using what they add:
+
+```js
+await use("fractals", "noise")
+
+warp(2, 0.04, 2, 3, ao.map("bass", 1, 1.8))
+  .blend(src(o0).inversion().mirrorWrap().scale(1.4), 0.7)
+  .out()
+```
+
+| Name | From | Adds |
+| --- | --- | --- |
+| `noise` | Thomas Jourdan's [extra-shaders-for-hydra](https://gitlab.com/metagrowing/extra-shaders-for-hydra) `lib-noise.js` | Noise generators: `whitenoise`, `colornoise`, `unoise`, `turb`, `uturb`, `warp` (domain warping), `cwarp`, `ncontour`. `turb(4, 0.1, 3)` |
+| `softpattern` | the same, `lib-softpattern.js` | Soft animated patterns: `blinking`, `blobs`, `concentric`, `phasenoise`, `sdfmove`, `smoothsun`. `blinking(8, 3, 0.5)` |
+| `fractals` | geikha's [hyper-hydra](https://github.com/geikha/hyper-hydra) `hydra-fractals.js` | Folds for fractal feedback: `.mirrorX(pos, coverage)`, `.mirrorY`, `.mirrorX2`, `.mirrorY2`, `.mirrorWrap()`, `.inversion()`. `src(o0).inversion().mirrorWrap()` |
+| `outputs` | hyper-hydra, `hydra-outputs.js` | Output framebuffer settings: `o1.setLinear()` for smooth feedback, `setNearest()`, `clear()`, `setFbos({ mag, min })`, and `oS` for all four outputs. `o1.setLinear()` |
+| `gradientmap` | hyper-hydra, `hydra-gradientmap.js` | Gradient maps: `createGradient(...colors)` and `createLinearGradient(angle, ...)` make a gradient texture, `.lookupX(tex)` recolours by brightness. `noise(3).lookupX(createGradient("navy", "gold"))` |
+| `arithmetics` | hyper-hydra, `hydra-arithmetics.js` | Maths on colours: `.sin()`, `.pow(2)`, `.mod(0.5)`, `.range(lo, hi)`, `.clamp()`, `.add(0.1)`, `.div(2)`, … and `x()`, `y()`, `xCenter()`, `lengthCenter()` generators. `x(6).sin().range(0.2, 0.8)` |
+
+`use` also takes the file names, with or without `.js` (`"lib-noise"`,
+`"hydra-fractals.js"`); any other name throws, listing these. Nothing is
+fetched: the files are bundled with Ao, unmodified, and
+`src/renderer/vendor/hydra/SOURCES.md` records where each came from.
+hyper-hydra's own docs describe each extension in full.
+`sketches/fractal-garden.js` uses four of them together.
+
+Each extension loads into the deck running the sketch (see
+[Autopilot](#autopilot)), so it works on either side of a crossfade; `use`
+on the other deck loads it there too, and loading one twice costs nothing.
+Things to know:
+
+- **Extensions stay loaded.** Nothing can unload them, so what they add stays
+  on that deck until Ao restarts, including for later sketches that never
+  called `use`. They only add names, with one exception: `arithmetics` wraps
+  the built-in `add`, `sub` and `mult` so they also take numbers
+  (`.add(0.1)`). Given a texture, they give the same result as before (to
+  within 1/255). A sketch shouldn't count on a function it didn't `use`,
+  since which deck it lands on is chance.
+- **Per-sketch settings are reset.** On every sketch switch, outputs go back
+  to Hydra's defaults (two buffers, nearest filtering, clamped), undoing
+  `o0.setLinear()` and friends, and gradient textures are freed.
+- `arithmetics` claims short names, `x`, `y`, `length` and `distance`, as
+  Hydra functions. A sketch that assigns an undeclared global of the same
+  name overwrites the function on that deck; declare your own with `const`
+  or `let`. Its `length()`, `distance()` and `distanceCenter()` don't
+  compile in Hydra's WebGL 1 shaders: use `lengthCenter()` or
+  `x().mult(x()).add(y().mult(y())).sqrt()`.
+- `outputs`: `setRepeat()` and `setMirror()` turn an output black at
+  Ao's window sizes, because WebGL 1 can't wrap textures whose sides aren't
+  powers of two. Use Hydra's `.repeat()` or `fractals`' `.mirrorWrap()`.
+  `setBufferCount(n)` is marked experimental upstream.
+- `noise` loads the noise library; Hydra's own `noise()` is unchanged.
+
 ## Sketch browser
 
 Ctrl+O (`o` with the editor hidden) shows every sketch as a card with a
@@ -341,6 +400,37 @@ shrunk to a couple of pixels. During a fade both render, the incoming canvas
 over the outgoing one. The recorder captures `#stage`, so while recording
 Ao draws the same blend into it every frame. Hydra's names stay available on
 `window` for the DevTools console, pointing at the current deck.
+
+## Code explorer
+
+F2 opens a reference panel on the left, and `K` in the editor's normal mode
+opens it on the word under the cursor (`osc`, `ao.hz`, `s0.initScene`, `o1`,
+…), or searches for a word it doesn't know. It covers every `ao` member, each
+with a live reading of its value, every Hydra function by kind (sources,
+geometry, colour, blend, modulate), Hydra's globals (`out`, outputs,
+`render`, `speed`, `bpm`, arrays, `update`, `setFunction`, …), the `s0`–`s3`
+methods, and a few recipes for mapping audio.
+
+Each entry has its signature, parameters and one example, which plays on
+the visuals as you move to it; while the panel is open the visuals shrink to
+its right so the example is centred where you can see it. Examples that would
+turn on the camera or screen capture, fetch a URL, or blank everything are
+marked `·` and play only on Enter. Closing the explorer puts your sketch
+back, re-running it; `i` instead inserts the example into your sketch as a
+new block after the one under the cursor and runs the whole sketch.
+
+| Key | Action |
+| --- | --- |
+| `j`/`k`, arrows | move |
+| Tab, Shift+Tab | next / previous section |
+| `/` | search names, then descriptions; Enter or Esc returns to the list |
+| Enter | play the example |
+| `i` | insert the example into the sketch |
+| Esc, F2 | close and restore the sketch |
+
+Examples play on the canvas, so a recording running meanwhile captures them.
+Content lives in `src/renderer/explorer/content.ts`; a test checks every
+Hydra function, `ao` member and source method has an example.
 
 ## Audio meter
 
@@ -593,3 +683,13 @@ cd .worktrees/short-feature-name
 Use `make worktree-list` to see active worktrees. From the primary checkout,
 `make worktree-remove NAME=short-feature-name` removes a clean worktree after
 handoff; it leaves the branch intact for review or merge.
+
+## License
+
+Ao is free software under the GNU Affero General Public License, version 3
+only (`AGPL-3.0-only`); see `LICENSE`. It bundles
+[hydra-synth](https://github.com/hydra-synth/hydra-synth), also AGPL-3.0,
+and the vendored Hydra extensions in `src/renderer/vendor/hydra/`, each
+under its own licence (hyper-hydra's under GPL-3.0, extra-shaders-for-hydra's
+under AGPL-3.0). `src/renderer/vendor/hydra/SOURCES.md` lists them, and
+their licence texts are next to them.
