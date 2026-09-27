@@ -24,3 +24,27 @@ describe("capture command", () => {
     expect(findExecutable("parec", "")).toBeNull();
   });
 });
+
+describe("fake capture", () => {
+  it("keeps real-time pace when its timer fires late", async () => {
+    const { vi } = await import("vitest");
+    const { startFakeCapture, SAMPLE_RATE } = await import("../src/main/capture");
+    let clock = 0;
+    const now = vi.spyOn(performance, "now").mockImplementation(() => clock);
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      let frames = 0;
+      const capture = startFakeCapture(() => {}, (samples) => { frames += samples.length / 2; });
+      // Every 20 ms tick runs 5 ms late: one second passes in 40 ticks.
+      for (let tick = 0; tick < 40; tick++) {
+        clock += 25;
+        vi.advanceTimersByTime(20);
+      }
+      capture.stop();
+      expect(frames).toBe(SAMPLE_RATE);
+    } finally {
+      vi.useRealTimers();
+      now.mockRestore();
+    }
+  });
+});
