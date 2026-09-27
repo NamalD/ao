@@ -65,7 +65,7 @@ export function startCapture(onFeatures: (f: AudioFeatures) => void,
   return { stop: () => child.kill("SIGTERM") };
 }
 
-/** A synthetic kick-and-pad signal for screenshots and silent development. */
+/** A synthetic kick, pad and panned hats signal for screenshots and silent development. */
 export function startFakeCapture(onFeatures: (f: AudioFeatures) => void,
                                  onPcm?: (samples: Float32Array) => void): Capture {
   const analyser = new Analyser(SAMPLE_RATE);
@@ -83,9 +83,17 @@ export function startFakeCapture(onFeatures: (f: AudioFeatures) => void,
       const t = n / SAMPLE_RATE;
       const beatPhase = t % 0.5;
       const kick = Math.exp(-beatPhase * 18) * Math.sin(2 * Math.PI * (50 + 90 * Math.exp(-beatPhase * 30)) * beatPhase);
-      const pad = 0.12 * (Math.sin(2 * Math.PI * 220 * t) + Math.sin(2 * Math.PI * 330 * t + Math.sin(t)));
+      const low = 0.12 * Math.sin(2 * Math.PI * 220 * t);
+      const high = 0.12 * Math.sin(2 * Math.PI * 330 * t + Math.sin(t));
       const hat = (t % 0.25 < 0.02 ? 0.08 : 0) * (Math.random() * 2 - 1);
-      samples[i * 2] = samples[i * 2 + 1] = 0.6 * kick + pad + hat;
+      // Kick and low pad stay centred; the upper pad voice drifts across
+      // the speakers every 8 s and the hats ping-pong, so balance and width
+      // have something to show.
+      const pan = 0.8 * Math.sin((2 * Math.PI * t) / 8);
+      const right = Math.floor(t / 0.25) % 2 === 1;
+      const centre = 0.6 * kick + low;
+      samples[i * 2] = centre + (1 - pan) * high + (right ? 0.2 : 1) * hat;
+      samples[i * 2 + 1] = centre + (1 + pan) * high + (right ? 1 : 0.2) * hat;
     }
     onFeatures(analyser.push(samples, n / SAMPLE_RATE));
     onPcm?.(samples);

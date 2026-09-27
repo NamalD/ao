@@ -47,4 +47,33 @@ describe("fake capture", () => {
       now.mockRestore();
     }
   });
+
+  it("is stereo, with a voice drifting between the speakers", async () => {
+    const { vi } = await import("vitest");
+    const { startFakeCapture } = await import("../src/main/capture");
+    let clock = 0;
+    const now = vi.spyOn(performance, "now").mockImplementation(() => clock);
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const balances: number[] = [], widths: number[] = [];
+      let different = false;
+      const capture = startFakeCapture((f) => { balances.push(f.balance); widths.push(f.width); }, (samples) => {
+        for (let i = 0; i < samples.length && !different; i += 2) different = samples[i] !== samples[i + 1];
+      });
+      // Seven seconds: the drift peaks right at 2 s and left at 6 s.
+      for (let tick = 0; tick < 350; tick++) {
+        clock += 20;
+        vi.advanceTimersByTime(20);
+      }
+      capture.stop();
+      expect(different).toBe(true);
+      expect(Math.max(...balances)).toBeGreaterThan(0.1);
+      expect(Math.min(...balances)).toBeLessThan(-0.1);
+      expect(Math.max(...balances.map(Math.abs))).toBeLessThan(0.6);
+      expect(Math.max(...widths)).toBeGreaterThan(0.1);
+    } finally {
+      vi.useRealTimers();
+      now.mockRestore();
+    }
+  });
 });
