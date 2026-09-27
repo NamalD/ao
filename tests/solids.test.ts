@@ -73,6 +73,16 @@ describe("solid mistakes fail when the line runs", () => {
     expect(() => sphere().add(0.5)).toThrow("add: expected a solid such as sphere(), got 0.5");
   });
 
+  it("reads the last frame only when asked for trails", () => {
+    expect(compileSolid(sphere()).code).not.toContain("aoPrevious");
+    const a = compileSolid(sphere(), { trails: 0.8 });
+    expect(a.code).toContain("texture(aoPrevious, fragCoord / iResolution.xy)");
+    expect(a.code).toContain("uniform float aoTrails;");
+    expect(a.uniforms.aoTrails).toBe(0.8);
+    // Like every other number, a new trails value doesn't recompile.
+    expect(compileSolid(sphere(), { trails: () => 0.5 }).code).toBe(a.code);
+  });
+
   it("asks for a source to render into", () => {
     expect(() => sphere().out({})).toThrow("out: expected a source such as s0, got [object Object]");
   });

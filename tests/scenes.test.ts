@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateUniform, formatShaderLog, PRELUDE_LINES } from "../src/renderer/scenes";
+import { evaluateUniform, formatShaderLog, MAX_BUFFERS, PRELUDE_LINES, sceneSources } from "../src/renderer/scenes";
 
 describe("formatShaderLog", () => {
   it("reports errors at the scene's own line numbers", () => {
@@ -33,5 +33,21 @@ describe("evaluateUniform", () => {
   it("pads or truncates vectors of the wrong length and reports it", () => {
     expect(evaluateUniform("v", [1, 2], 3)).toEqual({ value: [1, 2, 0], error: "uniform v has 2 values, expected 3" });
     expect(evaluateUniform("v", () => [1, 2, 3, 4], 1)).toEqual({ value: [1], error: "uniform v has 4 values, expected 1" });
+  });
+});
+
+describe("sceneSources", () => {
+  it("runs the buffers in order before the image", () => {
+    expect(sceneSources("image", { buffers: ["velocity", "dye"] })).toEqual(["velocity", "dye", "image"]);
+    expect(sceneSources("image")).toEqual(["image"]);
+  });
+
+  it("rejects buffers it can't run when the line runs", () => {
+    expect(() => sceneSources("image", { buffers: "velocity" as unknown as string[] }))
+      .toThrow("initScene buffers: expected an array of GLSL strings, such as [velocity, dye]");
+    expect(() => sceneSources("image", { buffers: new Array<string>(MAX_BUFFERS + 1).fill("b") }))
+      .toThrow(`initScene buffers: at most ${MAX_BUFFERS}, got ${MAX_BUFFERS + 1}`);
+    expect(() => sceneSources("image", { buffers: ["a", undefined as unknown as string] }))
+      .toThrow("initScene buffers[1]: expected GLSL source, got undefined");
   });
 });

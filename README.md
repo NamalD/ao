@@ -144,6 +144,39 @@ resolution for heavy raymarchers; `uniforms` feeds extra values, declared in
 the shader as `uniform float name;`. Shader errors report line numbers within
 the scene string. `sketches/dunes.js` is a full raymarched landscape.
 
+**Buffers** give a scene memory, for simulations that need the previous
+frame: fluids, reaction-diffusion, particles in a texture. Each string in
+`buffers` is another `mainImage` pass, run in order before the scene every
+frame into a half-float RGBA texture that keeps its output. Every pass reads
+them as `aoBuffer0`..`aoBuffer3` (also `iChannel0`..`iChannel3`, so most
+Shadertoy multipass shaders paste in), getting this frame's output from
+buffers that already ran and the previous frame's from the rest, and
+`aoPrevious` is always the pass's own previous frame. Values may be negative
+or above 1, and alpha is kept.
+
+```js
+s0.initScene(`
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+  fragColor = texture(aoBuffer0, fragCoord / iResolution.xy);
+}`, { buffers: [`
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+  vec2 uv = fragCoord / iResolution.xy;
+  vec4 last = texture(aoPrevious, (uv - 0.5) * 0.99 + 0.5);  // zoom in
+  float hit = smoothstep(0.1, 0., length(uv - 0.5)) * aoImpulse;
+  fragColor = last * 0.95 + hit * vec4(1., 0.4, 0.7, 1.);
+}`] })
+src(s0).out()
+```
+
+State survives editing: re-running the scene recompiles it but keeps the
+buffers and `iFrame` counting, so tweaking a simulation doesn't restart it,
+and scrubbing numbers inside buffer strings works as in the scene.
+`s0.clearScene()` empties them and restarts `iFrame` at `0`; so does changing
+the number of buffers or switching sketches. Resizing stretches the state to
+the new size. Buffers render at the scene's `scale`, and a pixel that comes
+out NaN is stored as `0` so it can't spread. `sketches/fluid.js` is ink
+stirred through water by the music.
+
 **Solids** are 3D shapes written like Hydra chains, with no GLSL. A shape
 starts the chain, methods move, warp and colour it, and `.out(s0)` raymarches
 it, lit and shaded, into a source you then use like any other:
@@ -167,8 +200,8 @@ Methods place the solid (`move`, `rotate`, `spin`, `scale`, `repeat`,
 melts the two together like liquid. As in Hydra, every argument can be a
 number or a function read each frame. Numbers become uniforms too, so
 scrubbing one never recompiles the shader. `out` takes `{ scale, camera,
-background, glow, step }`; lower `step` if very long spikes or strong twists
-tear. Completion and signature help know solid chains apart from Hydra ones.
+background, glow, step, trails }`; lower `step` if very long spikes or strong
+twists tear, and `trails` (`0..1`) leaves light trails behind moving solids. Completion and signature help know solid chains apart from Hydra ones.
 `sketches/urchin.js` is a ball that turns spiky when the song gets intense.
 
 Each evaluation runs in its own function scope, so re-running a block that

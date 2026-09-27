@@ -34,4 +34,5 @@ interface HydraSource {
   dynamic: boolean;
   init(options: { src: unknown; dynamic?: boolean }): void;
   initScene(code: string, options?: import("./scenes").SceneOptions): void;
+  clearScene(): void;
 }

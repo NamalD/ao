@@ -108,6 +108,12 @@ describe("finding literals", () => {
     expect(spans.map((s) => `${s.text}${s.glsl ? "g" : ""}`)).toEqual(["1.0g", ".5g", "2g", "3g", "0.75", "0.25g"]);
   });
 
+  it("reads GLSL in initScene buffers but not in other arrays", () => {
+    const doc = "s0.initScene(`float a = 1.0;`, { buffers: [`float b = 2.0;`, `float c = 3.0;`], scale: 0.5 })\nlog([`4.0`])";
+    const spans = numbersIn(state(doc), 0, doc.length);
+    expect(spans.map((s) => `${s.text}${s.glsl ? "g" : ""}`)).toEqual(["1.0g", "2.0g", "3.0g", "0.5"]);
+  });
+
   it("leaves other template strings alone but reads their interpolations", () => {
     expect(texts("log(`frame 12 ${3 * 2}`)")).toEqual(["3", "2"]);
     expect(texts("s1.initImage(`https://x.io/1.5.jpg`)")).toEqual([]);
