@@ -7,6 +7,7 @@ import { flashStatus } from "./flash";
 import { Meter } from "./meter";
 import { NightFade } from "./night";
 import { describeNight } from "../shared/night";
+import { Recorder } from "./recorder";
 import { describeError, ErrorReporter, installRuntimeErrorReporting } from "./runtime-errors";
 import { Scene, SceneOptions } from "./scenes";
 import { SketchWriter } from "./sketch-writer";
@@ -248,6 +249,10 @@ host.onStatus((message) => {
   notice.classList.toggle("error", !message.startsWith("capturing "));
 });
 
+// Records the canvas (never the overlay) with the system audio: F9, or `r`.
+const recorder = new Recorder(host, canvas, () => current);
+fpsLabel.before(recorder.indicator);
+
 // --- Overlay and keys --------------------------------------------------------
 
 const help = $("help");
@@ -285,6 +290,7 @@ addEventListener("keydown", (e) => {
   if (challenges.onKey(e)) return;
   if (e.key === "F11") { handled(); host.toggleFullscreen(); return; }
   if (e.key === "F1") { handled(); toggleHelp(); return; }
+  if (e.key === "F9") { handled(); if (!e.repeat) void recorder.toggle(); return; }
   if (ctrl && !e.shiftKey && e.key.toLowerCase() === "n") { handled(); void createSketch(); return; }
   if (ctrl && e.shiftKey && e.key.toLowerCase() === "h") { handled(); setEditorVisible(!editorVisible()); return; }
   if (ctrl && e.shiftKey && e.key.toLowerCase() === "m") { handled(); toggleMeter(); return; }
@@ -299,6 +305,7 @@ addEventListener("keydown", (e) => {
     e: () => setEditorVisible(true), h: toggleHelp, i: () => fpsLabel.classList.toggle("shown"),
     m: toggleMeter, n: cycleNight, q: host.quit, Escape: host.quit,
     c: () => challenges.toggle(),
+    r: () => { if (!e.repeat) void recorder.toggle(); },
   };
   const action = actions[e.key];
   if (action) { handled(); action(); }

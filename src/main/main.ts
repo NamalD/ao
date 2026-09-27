@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { Capture, startCapture, startFakeCapture } from "./capture";
 import { saveChallenge } from "./challenge-log";
 import { isAppNavigation } from "./navigation";
+import { setupRecording } from "./recording";
 import { Store } from "./store";
 import { mergeSettings, normalizeSettings, Settings } from "../shared/settings";
 
@@ -131,11 +132,12 @@ void app.whenReady().then(() => {
   win.webContents.on("console-message", ({ level, message, sourceId, lineNumber }) => {
     if (level === "warning" || level === "error") store.log(`renderer ${level}: ${message} (${sourceId}:${lineNumber})`);
   });
+  const recording = setupRecording(() => win, (message) => store.log(message));
   let capture: Capture;
   win.webContents.once("did-finish-load", () => {
     capture = options.fakeAudio || options.screenshot
-      ? startFakeCapture((f) => send("audio", f))
-      : startCapture((f) => send("audio", f), report);
+      ? startFakeCapture((f) => send("audio", f), recording.pcm)
+      : startCapture((f) => send("audio", f), report, recording.pcm);
   });
   app.on("before-quit", () => capture?.stop());
 

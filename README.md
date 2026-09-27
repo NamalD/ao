@@ -36,6 +36,7 @@ past 1 MB the log moves to `ao.log.1`.
 | Ctrl+Shift+N | night fade: follow the schedule, force on, force off |
 | Ctrl+Shift+C | challenge: draw a prompt, or finish the running one |
 | F11 | fullscreen |
+| F9 | start or stop recording video with audio |
 | F1 | help |
 | Ctrl+Q | quit |
 
@@ -46,8 +47,8 @@ refuses a name that's taken unless you write `:w! <name>`.
 
 With the editor hidden, the old single keys work: `j`/`k` switch sketches,
 `f` fullscreen, `e` brings the editor back, `i` toggles the FPS counter, `m`
-the audio meter, `n` cycles the night fade, `c`
-opens a challenge, and `q` or `Esc` quits.
+the audio meter, `n` cycles the night fade, `c` opens a challenge, `r` starts
+or stops recording, and `q` or `Esc` quits.
 
 ## Sketches
 
@@ -229,6 +230,50 @@ snapshot path) to `state/challenges.json`. Challenge sketches are git-ignored
 (`sketches/challenge-*.js`), so attempts don't clutter the example sketches.
 Prompts live in `src/shared/challenge-prompts.ts`; add a line to extend a
 bucket.
+
+## Recording
+
+F9 (or `r` with the editor hidden) records the visuals with the system audio
+to `~/Videos/Ao/ao-YYYYMMDD-HHMMSS-<sketch>.webm`; press it again to stop.
+The folder is `Ao` inside your XDG videos folder, created if needed, with
+`~/Videos/Ao` and then `/tmp/Ao` as fallbacks. A red `● REC` and the elapsed
+time show in the status bar, in ambient mode too, and when you stop, the
+saved path shows there and in `state/ao.log`.
+
+Only the canvas is recorded, so the editor, status bar and help never appear
+in the video. The sound comes from the same `parec` capture of the default
+output's monitor that drives the visuals, so it is what you hear, never the
+microphone. While recording, the main process sends that PCM straight to an
+AudioWorklet in the renderer, which plays it through a 50 ms jitter buffer
+into the recording's audio track; it never reaches your speakers. One
+MediaRecorder encodes the canvas, at up to 60 fps, and that track as WebM:
+VP9 (or VP8) video at about 16 Mbit/s with Opus audio. Nothing extra runs
+while you aren't recording, and no external tools are needed.
+
+The file is written as it records, one chunk a second, so a long recording
+never sits in memory. Quitting or closing the window while recording
+finishes the file first. Things to know:
+
+- If capture isn't working (no `parec`, say), the recording is video only,
+  and the indicator says so.
+- The recorded audio runs about 50 ms behind the live sound, and the
+  visuals, which react to the same capture, a frame or so behind it, so in
+  the video they land within a couple of frames of each other.
+- MediaRecorder writes WebM without a duration; Ao fills it in when you
+  stop. There is no seek index either, so some players seek slowly;
+  `ffmpeg -i in.webm -c copy out.webm` adds one.
+- If Ao is killed rather than quit, the file keeps everything up to the last
+  second or so, without a duration.
+- The video follows the canvas's size; resizing the window mid-recording
+  changes the frame size, which some players and editors handle poorly.
+- A heavy sketch records at whatever frame rate it renders.
+
+`--record-seconds=N` records the first N seconds once the sketch is up, then
+quits, for making clips from a script:
+
+```sh
+npx electron . --sketch=dunes --hide-editor --record-seconds=30
+```
 
 ## Screenshots
 

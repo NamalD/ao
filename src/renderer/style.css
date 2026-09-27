@@ -189,3 +189,11 @@ body.challenge-capture #night { display: none; }
 /* Editor power */
 /* Alt+drag scrubbing a number (scrub.ts). */
 #editor .cm-editor.cm-scrubbing, #editor .cm-editor.cm-scrubbing .cm-content { cursor: ew-resize; }
+/* Recording: the indicator lives in the DOM overlay, so it never appears in
+   the recorded canvas, and it stays visible in ambient mode. */
+#recording { white-space: nowrap; }
+#recording:empty { display: none; }
+#recording.live { color: #ff5c5c; font-weight: bold; animation: ao-rec-pulse 2s ease-in-out infinite; }
+#recording.saved { color: var(--accent); max-width: 50%; overflow: hidden; text-overflow: ellipsis; }
+#recording.error { color: var(--error); max-width: 50%; overflow: hidden; text-overflow: ellipsis; }
+@keyframes ao-rec-pulse { 50% { opacity: 0.55; } }

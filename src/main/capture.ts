@@ -28,7 +28,8 @@ export interface Capture { stop(): void }
 
 /** Captures the current output device and reports features for every chunk. */
 export function startCapture(onFeatures: (f: AudioFeatures) => void,
-                             report: (message: string) => void): Capture {
+                             report: (message: string) => void,
+                             onPcm?: (samples: Float32Array) => void): Capture {
   const parec = findExecutable("parec");
   const pactl = findExecutable("pactl");
   if (!parec || !pactl) {
@@ -53,6 +54,7 @@ export function startCapture(onFeatures: (f: AudioFeatures) => void,
     const samples = new Float32Array(new Uint8Array(pending.subarray(0, usable)).buffer);
     pending = pending.subarray(usable);
     onFeatures(analyser.push(samples, (performance.now() - started) / 1000));
+    onPcm?.(samples);
   });
   child.stderr!.on("data", (d: Buffer) => report(`parec: ${d.toString().trim()}`));
   child.on("error", (e) => report(`capture failed: ${e.message}`));
@@ -64,13 +66,20 @@ export function startCapture(onFeatures: (f: AudioFeatures) => void,
 }
 
 /** A synthetic kick-and-pad signal for screenshots and silent development. */
-export function startFakeCapture(onFeatures: (f: AudioFeatures) => void): Capture {
+export function startFakeCapture(onFeatures: (f: AudioFeatures) => void,
+                                 onPcm?: (samples: Float32Array) => void): Capture {
   const analyser = new Analyser(SAMPLE_RATE);
   const chunk = 960;
+  const started = performance.now();
   let n = 0;
   const timer = setInterval(() => {
-    const samples = new Float32Array(chunk * 2);
-    for (let i = 0; i < chunk; i++, n++) {
+    // Timers run late; generate by elapsed time so the signal keeps real-time
+    // pace, as a recording of it needs.
+    const due = Math.floor(((performance.now() - started) / 1000) * SAMPLE_RATE) - n;
+    if (due <= 0) return;
+    const frames = Math.min(due, SAMPLE_RATE);
+    const samples = new Float32Array(frames * 2);
+    for (let i = 0; i < frames; i++, n++) {
       const t = n / SAMPLE_RATE;
       const beatPhase = t % 0.5;
       const kick = Math.exp(-beatPhase * 18) * Math.sin(2 * Math.PI * (50 + 90 * Math.exp(-beatPhase * 30)) * beatPhase);
@@ -79,6 +88,7 @@ export function startFakeCapture(onFeatures: (f: AudioFeatures) => void): Captur
       samples[i * 2] = samples[i * 2 + 1] = 0.6 * kick + pad + hat;
     }
     onFeatures(analyser.push(samples, n / SAMPLE_RATE));
+    onPcm?.(samples);
   }, (chunk / SAMPLE_RATE) * 1000);
   return { stop: () => clearInterval(timer) };
 }
