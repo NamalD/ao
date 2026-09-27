@@ -23,8 +23,8 @@ past 1 MB the log moves to `ao.log.1`.
 
 | Key | Action |
 | --- | --- |
-| Ctrl+Enter | run the block under the cursor (lines between blank lines) |
-| Ctrl+Shift+Enter, Alt+Enter | run the whole sketch |
+| Ctrl+Enter | run and format the block under the cursor (lines between blank lines) |
+| Ctrl+Shift+Enter, Alt+Enter | run and format the whole sketch |
 | Ctrl+S, `:w` | save the sketch |
 | `:w <name>`, `:w! <name>` | save as `sketches/<name>.js` and rename the sketch (`!` replaces an existing one) |
 | Alt+scroll, Alt+drag | scrub the number under the pointer; Shift steps ten times coarser |
@@ -63,6 +63,14 @@ once; neither re-runs the sketch, and saving an unchanged sketch doesn't write
 anything. Saving the file from another editor does re-run it, unless the
 overlay has unsaved edits, in which case the status bar says so and Ctrl+S
 keeps your version.
+
+**Formatting.** Ctrl+Enter and Ctrl+Shift+Enter format the code they run
+with [Prettier](https://prettier.io/): double quotes, no semicolons, lines up
+to 100 columns. The code runs first, so formatting never delays it. The
+cursor stays on the same code, the formatting is its own undo step, and
+autosave saves it. Code that doesn't parse is left as you wrote it, and so is
+the inside of scene and `glsl:` strings. Scrubbing and remix don't format. Set `"format": false` in
+[`settings.json`](#settings) to turn this off.
 
 **Scrubbing and remix.** Hold Alt and scroll over a number, or Alt+drag it
 sideways, and the block around it re-runs as it changes. Each step is the
@@ -459,6 +467,7 @@ the defaults:
 {
   "meter": false,
   "liveValues": true,
+  "format": true,
   "night": {
     "mode": "schedule",
     "start": "22:00",
@@ -473,6 +482,7 @@ the defaults:
 
 - `meter`: whether the audio meter is showing.
 - `liveValues`: whether live values show beside `ao` expressions in the code.
+- `format`: whether running code in the editor also formats it.
 - `night.mode`: `"schedule"`, `"on"` (always night), or `"off"` (never).
 - `night.start`, `night.end`: local 24-hour `HH:MM` times of the window;
   equal times make it empty.

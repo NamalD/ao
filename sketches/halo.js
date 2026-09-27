@@ -3,7 +3,8 @@
 // breathes with the bass, flashes on hits, and its colour follows how
 // bright the sound is (ao.centroid, passed in as a uniform).
 
-s0.initScene(`
+s0.initScene(
+  `
 uniform float brightness;
 
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
@@ -21,8 +22,8 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   vec3 colour = 0.55 + 0.45 * cos(6.2832 * (brightness + 0.4 * cell + vec3(0.0, 0.33, 0.67)));
   float ring = 0.004 / abs(r - inner + 0.03) * (0.4 + 1.5 * aoImpulse);
   fragColor = vec4(colour * (bar + ring), 1.0);
-}`, { uniforms: { brightness: () => 2.0 * ao.centroid } })
+}`,
+  { uniforms: { brightness: () => 2.0 * ao.centroid } },
+)
 
-src(s0)
-  .add(src(o0).scale(1.015), 0.7)
-  .out()
+src(s0).add(src(o0).scale(1.015), 0.7).out()

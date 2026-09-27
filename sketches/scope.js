@@ -48,5 +48,5 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
 }`)
 
 src(s0)
-  .blend(src(o0).scale(1.003), 0.45)   // phosphor persistence
+  .blend(src(o0).scale(1.003), 0.45) // phosphor persistence
   .out()

@@ -7,11 +7,13 @@ export interface Settings {
   meter: boolean;
   /** Whether live values show beside `ao` expressions in the editor. */
   liveValues: boolean;
+  /** Whether running code in the editor also formats it with Prettier. */
+  format: boolean;
   night: NightSettings;
   autopilot: AutopilotSettings;
 }
 
-export const defaultSettings: Settings = { meter: false, liveValues: true, night: defaultNight, autopilot: defaultAutopilot };
+export const defaultSettings: Settings = { meter: false, liveValues: true, format: true, night: defaultNight, autopilot: defaultAutopilot };
 
 /**
  * Settings from untrusted JSON: known keys are validated and defaulted,
@@ -23,6 +25,7 @@ export function normalizeSettings(raw: unknown): Settings {
     ...r,
     meter: typeof r.meter === "boolean" ? r.meter : defaultSettings.meter,
     liveValues: typeof r.liveValues === "boolean" ? r.liveValues : defaultSettings.liveValues,
+    format: typeof r.format === "boolean" ? r.format : defaultSettings.format,
     night: normalizeNight(r.night),
     autopilot: normalizeAutopilot(r.autopilot),
   };
