@@ -4,10 +4,12 @@ import { defaultNight, NightSettings, normalizeNight } from "./night";
 export interface Settings {
   /** Whether the audio meter overlay is shown. */
   meter: boolean;
+  /** Whether running code in the editor also formats it with Prettier. */
+  format: boolean;
   night: NightSettings;
 }
 
-export const defaultSettings: Settings = { meter: false, night: defaultNight };
+export const defaultSettings: Settings = { meter: false, format: true, night: defaultNight };
 
 /**
  * Settings from untrusted JSON: known keys are validated and defaulted,
@@ -18,6 +20,7 @@ export function normalizeSettings(raw: unknown): Settings {
   return {
     ...r,
     meter: typeof r.meter === "boolean" ? r.meter : defaultSettings.meter,
+    format: typeof r.format === "boolean" ? r.format : defaultSettings.format,
     night: normalizeNight(r.night),
   };
 }

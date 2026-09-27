@@ -2,11 +2,11 @@
 // composed like any built-in Hydra source.
 
 setFunction({
-  name: 'aurora',
-  type: 'src',
+  name: "aurora",
+  type: "src",
   inputs: [
-    { type: 'float', name: 'speed', default: 0.2 },
-    { type: 'float', name: 'energy', default: 0.5 },
+    { type: "float", name: "speed", default: 0.2 },
+    { type: "float", name: "energy", default: 0.5 },
   ],
   glsl: `
     float band = 0.0;
@@ -16,7 +16,7 @@ setFunction({
       band += exp(-abs(_st.y - wave) * (24.0 - 12.0 * energy)) / i;
     }
     vec3 colour = mix(vec3(0.65, 0.3, 1.0), vec3(0.1, 1.0, 0.55), smoothstep(0.1, 0.55, _st.y));
-    return vec4(colour * band, 1.0);`
+    return vec4(colour * band, 1.0);`,
 })
 
 aurora(0.25, () => ao.loudness)

@@ -1,8 +1,8 @@
 import { autocompletion, closeBrackets, type Completion, type CompletionContext } from "@codemirror/autocomplete";
-import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { defaultKeymap, history, historyKeymap, indentWithTab, isolateHistory } from "@codemirror/commands";
 import { javascript } from "@codemirror/lang-javascript";
 import { bracketMatching, HighlightStyle, syntaxHighlighting, syntaxTree } from "@codemirror/language";
-import { EditorState, type Extension, Facet, Prec, type Range, StateEffect, StateField } from "@codemirror/state";
+import { EditorState, type Extension, Facet, Prec, type Range, StateEffect, StateField, type TransactionSpec } from "@codemirror/state";
 import { Decoration, type DecorationSet, drawSelection, EditorView, keymap, showTooltip, type Tooltip } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 import { tags } from "@lezer/highlight";
@@ -12,6 +12,7 @@ import hydraFunctions from "hydra-synth/src/glsl/glsl-functions.js";
 import HydraSourceClass from "hydra-synth/src/hydra-source.js";
 import { ao, aoDocs } from "./audio";
 import { blockAt } from "./blocks";
+import { formatCode, minimalChange } from "./format";
 import { remix, remixRunRange } from "./remix";
 import { joinsScrub, scrubbing } from "./scrub";
 
@@ -23,6 +24,8 @@ export interface EditorActions {
   rename?(name: string, overwrite: boolean): void;
   /** Show a message in the status bar. */
   status?(message: string, error?: boolean): void;
+  /** Whether running code also formats it; formats when absent. */
+  autoFormat?(): boolean;
 }
 
 // --- Documentation -----------------------------------------------------------
@@ -448,8 +451,39 @@ function runRange(view: EditorView, from: number, to: number): true {
   return true;
 }
 
+/**
+ * Formats the code between `from` and `to` with Prettier, as one undo step,
+ * keeping the cursor on the same code. Code that doesn't parse is left alone,
+ * and so is a document edited while formatting ran: the next run catches up.
+ */
+export async function formatRange(
+  view: { readonly state: EditorState; dispatch(spec: TransactionSpec): void }, from: number, to: number,
+): Promise<void> {
+  const { doc, selection } = view.state;
+  const code = doc.sliceString(from, to);
+  const head = selection.main.head;
+  const inside = selection.main.empty && head >= from && head <= to;
+  const result = await formatCode(code, inside ? head - from : 0);
+  if (!result || view.state.doc !== doc) return;
+  const changes = minimalChange(code, result.code, from);
+  if (!changes) return;
+  view.dispatch({
+    changes,
+    selection: inside ? { anchor: from + result.cursor } : undefined,
+    userEvent: "format",
+    annotations: isolateHistory.of("full"),
+  });
+}
+
+/** Ctrl+Enter and friends: run the code, then format what ran. */
+function runAndFormat(view: EditorView, from: number, to: number): true {
+  runRange(view, from, to);
+  if (view.state.facet(editorActions)?.autoFormat?.() !== false) void formatRange(view, from, to);
+  return true;
+}
+
 function extensionsFor(actions: EditorActions): Extension[] {
-  const evaluate = runRange;
+  const evaluate = runAndFormat;
   const runBlock = (view: EditorView) => {
     const block = blockAt(view.state.doc.toString(), view.state.selection.main.head);
     return block ? evaluate(view, block.from, block.to) : true;
