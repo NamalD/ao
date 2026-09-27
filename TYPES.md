@@ -51,6 +51,34 @@ osc(20, 0.05, () => 1 + ao.bass)
 The accepted level names are `"loudness"`, `"impulse"`, `"beat"`, `"bass"`,
 `"mid"`, `"high"`, `"peak"`, and `"centroid"`.
 
+### Waveform, stereo image and chroma
+
+These come with every feature frame, about 50 times a second.
+
+| Member | Type | Meaning |
+| --- | --- | --- |
+| `ao.wave` | `Float32Array` | The newest ~21 ms of mono waveform (1024 samples at 48 kHz, averaged in pairs): 512 values, `-1..1`. Each frame starts on a rising zero crossing, like an oscilloscope trigger, so a steady tone holds still. |
+| `ao.waveAt(x)` | `number` | The waveform at position `x` (`0..1` across `ao.wave`), linearly interpolated like GLSL `aoWaveAt(x)`. |
+| `ao.balance` | `number` | Stereo balance, `-1` (left) .. `0` (centre) .. `1` (right), from the channels' RMS levels, smoothed over ~0.1 s. |
+| `ao.width` | `number` | Stereo width, `0` for mono up to `1` for uncorrelated, out-of-phase or hard-panned sound: the side (L−R) level relative to the mid (L+R). |
+| `ao.chroma` | `number[]` | 12 pitch-class levels, `0..1`, for C, C#, D, … B, folded across octaves from spectral peaks between 110 Hz and 5 kHz. Normalized so the strongest is near 1 and smoothed; all zero in silence. |
+| `ao.key` | `number` | The dominant pitch class, `0` (C) .. `11` (B). Another class must be clearly stronger to take over, so it doesn't flicker; it holds its last value through silence. |
+| `ao.hue` | `number` | `ao.key / 12`: a colour hue that follows the harmony rather than the brightness. |
+
+The trigger waits for the signal to dip near its lowest point and then
+takes the next rise through zero, found between samples. Tones down to
+about 47 Hz stay still; noisy or rapidly changing sound still moves, as on
+a real scope. Chroma is a rough guide to the harmony, not a transcription:
+harmonics add the fifth and major third of each note, and noise reads as
+flat.
+
+```js
+shape(3, () => 0.3 + 0.2 * Math.abs(ao.waveAt(0.25)))
+  .color(1, 0.4, 0.3).hue(() => ao.hue)
+  .scrollX(() => 0.2 * ao.balance)
+  .out()
+```
+
 ## GLSL scene interface
 
 `s0.initScene(source, options)` attaches a Shadertoy-style GLSL ES 3.0
@@ -94,3 +122,34 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
 
 The `swirl` example must declare `uniform float swirl;` in the shader if it is
 used there.
+
+### Waveform, spectrogram, stereo and chroma in scenes
+
+| Uniform or helper | GLSL type | Meaning |
+| --- | --- | --- |
+| `aoWave` | `sampler2D` | `ao.wave` as a 512 × 1 texture, values `-1..1`. |
+| `aoWaveAt(x)` | `float` | The waveform at `x` (`0..1`), `-1..1`. |
+| `aoSpectrogram` | `sampler2D` | The last 256 spectrum frames as a 64 × 256 ring, one row every 20 ms. |
+| `aoSpectrogramRow` | `float` | The row holding the newest frame. |
+| `aoHistory(x, age)` | `float` | Band level at spectrum position `x` (`0..1`, like `aoFFT`) as it was `age` ago: `0` newest, `1` oldest. Hides the ring's wrap. |
+| `aoBalance`, `aoWidth` | `float` | `ao.balance` and `ao.width`. |
+| `aoChroma[12]` | `float[12]` | `ao.chroma`, indexed C = 0 .. B = 11. |
+| `aoKey` | `float` | `ao.key`, `0..11`; `aoKey / 12.` is `ao.hue`. |
+
+The spectrogram is kept in the renderer from the spectra that already
+arrive: rows fall due at 50 a second by the capture clock, however the
+chunks arrive, so `aoHistory`'s `age` spans a steady 5.12 s (`age` 0.1 is
+about half a second ago). A frame that lands between rows refreshes the
+newest one, and a late frame fills the gap by interpolation.
+
+```js
+s0.initScene(`
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+  vec2 uv = fragCoord / iResolution.xy;
+  float level = aoHistory(uv.x, uv.y);  // waterfall: newest at the bottom
+  float trace = smoothstep(0.01, 0., abs(uv.y - 0.5 - 0.4 * aoWaveAt(uv.x)));
+  vec3 tint = 0.5 + 0.5 * cos(6.2832 * (aoKey / 12. + vec3(0., .33, .67)));
+  fragColor = vec4(tint * level + trace, 1.);
+}`)
+src(s0).out()
+```

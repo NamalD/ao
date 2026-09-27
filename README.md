@@ -150,6 +150,33 @@ sample media whose host sends CORS headers (`Access-Control-Allow-Origin`).
 Scripts still load only from Ao itself, and a sketch can't navigate the
 window away from Ao or open new windows.
 
+### Waveform, spectrogram and harmony
+
+Beyond levels and the spectrum, Ao hands sketches and scenes the shape of
+the sound. `ao.wave` is the newest ~21 ms of waveform, 512 values `-1..1`,
+trigger-aligned like an oscilloscope so a steady tone holds still, and
+scenes read it as `aoWaveAt(x)`. Scenes also get `aoHistory(x, age)`, the
+spectrum over the last 5.12 s (age `0` now, `1` oldest) for waterfalls and
+terrain. `ao.balance` (`-1` left .. `1` right) and `ao.width` (`0` mono ..
+`1` wide) describe the stereo image. `ao.chroma` holds 12 pitch-class
+levels, C to B, and `ao.key` the strongest (`0..11`), so colour can follow
+the harmony: `ao.hue` is `ao.key / 12`.
+
+```js
+s0.initScene(`
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+  vec2 uv = fragCoord / iResolution.xy;
+  vec3 tint = 0.5 + 0.5 * cos(6.2832 * (aoKey / 12. + vec3(0., .33, .67)));
+  float scope = smoothstep(0.01, 0., abs(uv.y - 0.5 - 0.4 * aoWaveAt(uv.x)));
+  fragColor = vec4(tint * (aoHistory(uv.x, uv.y) + scope), 1.);
+}`)
+src(s0).out()
+```
+
+Scenes see these as `aoWave`, `aoSpectrogram`, `aoBalance`, `aoWidth`,
+`aoChroma[12]` and `aoKey`; `TYPES.md` has the details, and
+`sketches/scope.js` and `sketches/ridges.js` show them off.
+
 ## Audio meter
 
 Ctrl+Shift+M (`m` with the editor hidden) shows a small meter in the top-right
@@ -278,8 +305,9 @@ npx electron . --sketch=dunes --hide-editor --record-seconds=30
 ## Screenshots
 
 `make screenshot SKETCH=dunes` renders a sketch offscreen with a synthetic
-kick-and-pad signal and writes `state/dunes.png`. Useful for checking a
-change without watching the screen, and it prints the frame rate it reached.
+kick, pad and hats signal (slightly stereo) and writes `state/dunes.png`.
+Useful for checking a change without watching the screen, and it prints the
+frame rate it reached.
 Screenshots ignore `settings.json`, so the meter and night fade stay out of
 them unless you ask: add `--meter` or `--night=on` to the `electron` command
 (`npx electron . --sketch=dunes --hide-editor --meter --screenshot=state/dunes.png`).
