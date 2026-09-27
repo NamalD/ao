@@ -1,8 +1,9 @@
 /**
  * The code explorer's hand-written content: one runnable example for every
- * Hydra function, `ao` member and source method, plus Hydra's globals and a
- * few recipes. Descriptions and parameters for the first three come from the
- * editor's docs (editor.ts, audio.ts); tests check every name has an example.
+ * Hydra function, `ao` member, source method and name a vendored extension
+ * adds, plus Hydra's globals and a few recipes. Descriptions and parameters
+ * for those come from the editor's docs (editor.ts, audio.ts,
+ * extension-docs.ts); tests check every name has an example.
  */
 
 /** An example that shouldn't auto-play: it needs a camera, the screen, the network, or blanks the screen. */
@@ -542,3 +543,348 @@ src(o1)
   .out(o0)`,
   },
 ];
+
+/** Puts the `use` line an extension's examples need at their top. */
+function using(extension: string, examples: Record<string, Example>): Record<string, Example> {
+  const line = `await use("${extension}")\n\n`;
+  return Object.fromEntries(Object.entries(examples).map(([name, example]) =>
+    [name, typeof example === "string" ? line + example : { ...example, code: line + example.code }]));
+}
+
+/**
+ * One example per name each vendored Hydra extension adds, by extension,
+ * plus `use` for the extension's intro. Each starts with its `use` line, so
+ * it runs from the explorer on either deck. Names that are broken upstream
+ * (see extension-docs.ts) are manual.
+ */
+export const extensionExamples: Record<string, Record<string, Example>> = {
+  noise: using("noise", {
+    use: `// Domain-warped noise pushed by the bass, speckled with static on hits.
+warp(2, 0.05, 2, 3, () => 1 + ao.bass)
+  .color(0.5, 0.8, 1)
+  .add(whitenoise(3, 1), () => 0.3 * ao.impulse)
+  .out()`,
+    whitenoise: `whitenoise(() => 2 + 30 * ao.bass, 1).out()`,
+    colornoise: `colornoise(12, () => ao.impulse).out()`,
+    unoise: `unoise(4, () => 0.1 + ao.mid).out()`,
+    turb: `turb(3, 0.1, () => 1 + 5 * ao.high)
+  .color(1, 0.7, 0.4)
+  .out()`,
+    uturb: `uturb(4, 0.2, 4)
+  .color(0.4, 0.8, 1)
+  .out()`,
+    warp: `warp(2, 0.05, 2, 3, () => 1 + ao.bass).out()`,
+    cwarp: `cwarp(2, 0.05, 2, 3, 1, () => 0.3 + ao.loudness).out()`,
+    ncontour: `ncontour(() => ao.bass - 0.5, 0.08, 3, 3, 0.3, 2).out()`,
+  }),
+  softpattern: using("softpattern", {
+    use: `// Lanterns under a sun that swells with the bass.
+blinking(7, 7, () => 0.2 + 0.8 * ao.mid)
+  .add(smoothsun(() => 0.2 + 0.3 * ao.bass, 0.2, 1, 0.5).color(1, 0.55, 0.2))
+  .out()`,
+    blinking: `blinking(8, 3, () => 0.2 + ao.mid).out()`,
+    blobs: `blobs(0.2, () => 0.1 + 0.3 * ao.bass, 0.05).out()`,
+    concentric: `concentric(() => 5 + 20 * ao.bass, 2, 0.5, 1).out()`,
+    phasenoise: `phasenoise(() => 0.5 + 0.3 * ao.mid, 0.2, 4, 0.5).out()`,
+    sdfmove: `sdfmove(0.2, () => 0.2 + ao.bass, -0.3).out()`,
+    smoothsun: `smoothsun(() => 0.2 + 0.2 * ao.bass, 0.15, 1, 0.5)
+  .color(1, 0.6, 0.2)
+  .out()`,
+  }),
+  fractals: using("fractals", {
+    use: `// Feedback folded inside out: shapes bloom back from the edges.
+shape(5, () => 0.1 + 0.2 * ao.bass)
+  .add(src(o0).inversion().mirrorWrap().scale(1.4), 0.85)
+  .out()`,
+    mirrorX: `osc(20, 0.1, 1)
+  .rotate(0.6)
+  .mirrorX(() => 0.2 * ao.bass)
+  .out()`,
+    mirrorY: `voronoi(6, 0.3)
+  .color(0.6, 0.3, 1)
+  .mirrorY(() => 0.2 * ao.mid)
+  .out()`,
+    mirrorX2: `osc(20, 0.1, 1)
+  .rotate(0.6)
+  .mirrorX2(0, () => 0.5 + 0.5 * ao.bass)
+  .out()`,
+    mirrorY2: `voronoi(6, 0.3)
+  .color(0.6, 0.3, 1)
+  .mirrorY2(0, () => 0.5 + 0.5 * ao.mid)
+  .out()`,
+    mirrorWrap: `osc(10, 0.1, 1)
+  .kaleid(4)
+  .mirrorWrap()
+  .scale(() => 0.3 + 0.3 * ao.bass)
+  .out()`,
+    inversion: `shape(4, 0.3)
+  .color(0.4, 0.8, 1)
+  .add(src(o0).inversion().mirrorWrap().scale(() => 1.2 + 0.4 * ao.bass), 0.8)
+  .out()`,
+  }),
+  outputs: using("outputs", {
+    use: `// Smooth feedback: without setLinear the trails go blocky as they turn.
+o0.setLinear()
+
+shape(4, () => 0.1 + 0.2 * ao.bass)
+  .add(src(o0).scale(1.02).rotate(() => 0.03 * ao.mid), 0.95)
+  .out()`,
+    setLinear: `o0.setLinear()
+
+shape(3, 0.2)
+  .add(src(o0).scale(1.01).rotate(() => 0.02 + 0.05 * ao.bass), 0.95)
+  .out()`,
+    setNearest: `// Hydra's default: the trails turn blocky as they zoom.
+o0.setNearest()
+
+shape(3, 0.2)
+  .add(src(o0).scale(1.01).rotate(() => 0.02 + 0.05 * ao.bass), 0.95)
+  .out()`,
+    setRepeat: { manual: true, code: `// Broken at Ao's window sizes: o0 turns black (see above).
+o0.setRepeat()
+
+osc(10, 0.1, 1)
+  .add(src(o0).scale(0.5), 0.5)
+  .out()` },
+    setClamp: `o0.setClamp()
+
+osc(10, 0.1, 1)
+  .add(src(o0).scale(0.8), () => 0.5 * ao.bass)
+  .out()`,
+    setMirror: { manual: true, code: `// Broken at Ao's window sizes: o0 turns black (see above).
+o0.setMirror()
+
+osc(10, 0.1, 1)
+  .add(src(o0).scale(0.5), 0.5)
+  .out()` },
+    clear: `// Trails build up, and every beat wipes them.
+update = () => {
+  if (ao.beat > 0.9) o0.clear()
+}
+
+shape(3, 0.1)
+  .scrollX(() => Math.sin(time) * 0.3)
+  .add(src(o0).scale(1.01), 0.98)
+  .out()`,
+    setBufferCount: { manual: true, code: `// Broken in Ao's Hydra: o0 shows a stale frame (see above).
+o0.setBufferCount(3)
+
+shape(4, () => 0.1 + 0.2 * ao.bass)
+  .add(prev().scale(1.02), 0.9)
+  .out()` },
+    resetBuffers: `o0.setLinear()
+// Back to two buffers, nearest and clamped: the trails turn blocky again.
+o0.resetBuffers()
+
+shape(3, 0.2)
+  .add(src(o0).scale(1.01).rotate(0.03), 0.95)
+  .out()`,
+    setFbos: `o0.setFbos({ min: "linear", mag: "linear" })
+
+voronoi(6, 0.3)
+  .add(src(o0).scale(1.02).rotate(() => 0.05 * ao.mid), 0.9)
+  .out()`,
+    oS: `// Smooth sampling on every output.
+oS.setLinear()
+
+shape(3, 0.2).out(o1)
+src(o1)
+  .add(src(o0).scale(1.02).rotate(() => 0.04 * ao.bass), 0.93)
+  .out()`,
+  }),
+  gradientmap: using("gradientmap", {
+    use: `// Grey noise coloured by its brightness.
+const fire = createGradient("black", "darkred", "orange", "white")
+
+noise(3, 0.1)
+  .brightness(() => ao.bass - 0.2)
+  .lookupX(fire)
+  .out()`,
+    createGradient: `const sea = createGradient("#012", "teal", "aquamarine", "white")
+
+voronoi(5, 0.3)
+  .lookupX(sea)
+  .out()`,
+    createLinearGradient: `// A diagonal sky; "navy", 0 puts navy at the start.
+const sky = createLinearGradient(Math.PI / 4, "navy", 0, "violet", 0.6, "gold")
+
+src(sky)
+  .modulate(noise(2), () => 0.1 * ao.bass)
+  .out()`,
+    lookupX: `osc(10, 0.1)
+  .lookupX(createGradient("indigo", "deeppink", "gold"), 0, () => 0.4 + 0.6 * ao.mid)
+  .out()`,
+    lookupY: `// lookupY reads a column, so its gradient runs bottom to top.
+const warm = createLinearGradient(Math.PI / 2, "black", "firebrick", "khaki")
+
+noise(4, () => 0.1 + ao.bass)
+  .lookupY(warm)
+  .out()`,
+  }),
+  arithmetics: using("arithmetics", {
+    use: `// Ripples from maths: distance from the centre, as a sine.
+lengthCenter(40)
+  .sub(() => 4 * time)
+  .sin()
+  .unipolar()
+  .mult(() => 0.5 + ao.bass)
+  .color(0.5, 0.8, 1)
+  .out()`,
+    // Generators
+    x: `x(() => 20 + 40 * ao.bass)
+  .sin()
+  .unipolar()
+  .out()`,
+    y: `y(10)
+  .add(() => time)
+  .fract()
+  .out()`,
+    length: { manual: true, code: `// Broken upstream: strict WebGL drivers reject length()'s shader.
+length(4).out()` },
+    distance: { manual: true, code: `// Broken upstream: distance()'s shader doesn't compile.
+distance(0.5, 0.5).out()` },
+    xCenter: `xCenter(() => 20 + 40 * ao.bass)
+  .cos()
+  .unipolar()
+  .out()`,
+    yCenter: `yCenter(30)
+  .add(() => 3 * time)
+  .sin()
+  .unipolar()
+  .color(1, 0.5, 0.8)
+  .out()`,
+    lengthCenter: `lengthCenter(() => 20 + 30 * ao.bass)
+  .sub(() => 4 * time)
+  .sin()
+  .unipolar()
+  .out()`,
+    distanceCenter: { manual: true, code: `// Broken upstream: distanceCenter()'s shader doesn't compile.
+distanceCenter(0.2, 0.2).out()` },
+    // Colour maths
+    abs: `osc(10, 0.1)
+  .bipolar()
+  .abs()
+  .out()`,
+    sign: `noise(3, () => 0.1 + ao.mid)
+  .sign()
+  .out()`,
+    fract: `gradient()
+  .mult(() => 2 + 6 * ao.bass)
+  .fract()
+  .out()`,
+    sin: `x(20)
+  .add(() => time)
+  .sin()
+  .unipolar()
+  .out()`,
+    cos: `y(20)
+  .add(() => 2 * time)
+  .cos()
+  .unipolar()
+  .out()`,
+    tan: `x(3)
+  .sub(() => 1.5 + ao.bass)
+  .tan()
+  .out()`,
+    asin: `osc(10, 0.1, 1)
+  .bipolar()
+  .asin()
+  .unipolar()
+  .out()`,
+    acos: `osc(10, () => 0.1 + ao.mid)
+  .acos()
+  .div(3.14)
+  .out()`,
+    atan: `xCenter(() => 10 + 40 * ao.bass)
+  .atan()
+  .unipolar()
+  .out()`,
+    exp: `x()
+  .exp()
+  .sub(1)
+  .mult(() => 0.6 + ao.bass)
+  .out()`,
+    log: `x(8)
+  .log()
+  .div(2)
+  .out()`,
+    exp2: `y()
+  .exp2()
+  .sub(1)
+  .color(1, 0.6, 0.3)
+  .out()`,
+    log2: `lengthCenter(8)
+  .log2()
+  .div(3)
+  .out()`,
+    sqrt: `x()
+  .sqrt()
+  .mult(osc(20, 0.1, () => ao.mid))
+  .out()`,
+    inversesqrt: `lengthCenter(() => 4 + 20 * ao.bass)
+  .inversesqrt()
+  .mult(0.3)
+  .out()`,
+    // Number ops
+    mod: `x(4)
+  .mod(() => 0.3 + 0.5 * ao.bass)
+  .out()`,
+    min: `osc(10, 0.1, 1)
+  .min(() => 0.2 + 0.8 * ao.loudness)
+  .out()`,
+    max: `osc(10, 0.1, 1)
+  .max(voronoi(5, 0.3))
+  .out()`,
+    step: `// .step(v) is white where the image is darker than v.
+noise(3)
+  .step(() => ao.bass)
+  .out()`,
+    pow: `x()
+  .pow(() => 1 + 6 * ao.bass)
+  .out()`,
+    div: `gradient()
+  .div(() => 0.5 + ao.mid)
+  .out()`,
+    add: `osc(10, 0.1, 1)
+  .add(() => ao.bass - 0.5)
+  .out()`,
+    sub: `osc(10, 0.1, 1)
+  .sub(() => 0.5 * ao.high)
+  .out()`,
+    mult: `osc(10, 0.1, 1)
+  .mult(() => 2 * ao.loudness)
+  .out()`,
+    amp: `osc(10, 0.1, 1)
+  .amp(() => 0.3 + 1.5 * ao.bass)
+  .out()`,
+    amplitude: `voronoi(5, 0.3)
+  .amplitude(() => 0.3 + 1.5 * ao.mid)
+  .out()`,
+    offset: `osc(10, 0.1, 1)
+  .offset(() => ao.bass - 0.4)
+  .out()`,
+    off: `voronoi(5, 0.3)
+  .off(() => ao.impulse - 0.3)
+  .out()`,
+    // Ranges
+    bipolar: `osc(10, 0.1)
+  .bipolar(() => 1 + ao.bass)
+  .abs()
+  .out()`,
+    unipolar: `x(20)
+  .sin()
+  .unipolar(() => 0.5 + ao.mid)
+  .out()`,
+    range: `noise(4)
+  .range(() => 0.1 + 0.4 * ao.bass, 0.9)
+  .out()`,
+    birange: `noise(4)
+  .birange(0.1, () => 0.4 + 0.6 * ao.bass)
+  .color(0.4, 0.7, 1)
+  .out()`,
+    clamp: `osc(10, 0.1, 1)
+  .mult(3)
+  .clamp(0.2, () => 0.4 + 0.6 * ao.mid)
+  .out()`,
+  }),
+};

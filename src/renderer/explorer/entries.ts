@@ -5,9 +5,12 @@
  */
 import hydraFunctions from "hydra-synth/src/glsl/glsl-functions.js";
 import { functionDoc, publicAoMembers, sourceMembers } from "../editor";
-import { aoExamples, type Example, globalEntries, hydraExamples, recipes, sourceExamples } from "./content";
+import { extensionApi, extensionDocs, extensionGroups } from "../extension-api";
+import { CATALOG } from "../extensions";
+import { aoExamples, type Example, extensionExamples, globalEntries, hydraExamples, recipes, sourceExamples } from "./content";
 
-export type SectionId = "ao" | "src" | "coord" | "color" | "combine" | "combineCoord" | "globals" | "sources" | "recipes";
+/** Built-in sections, and one or more per vendored extension (`ext:noise`, `ext:arithmetics-maths`, …). */
+export type SectionId = "ao" | "src" | "coord" | "color" | "combine" | "combineCoord" | "globals" | "sources" | "recipes" | `ext:${string}`;
 
 export const sections: { id: SectionId; title: string }[] = [
   { id: "ao", title: "ao audio" },
@@ -18,13 +21,14 @@ export const sections: { id: SectionId; title: string }[] = [
   { id: "combineCoord", title: "Modulate" },
   { id: "globals", title: "Hydra globals" },
   { id: "sources", title: "s0–s3 methods" },
+  ...extensionGroups.map(({ id, title }) => ({ id: id as SectionId, title })),
   { id: "recipes", title: "Recipes" },
 ];
 
 export interface EntryParam { name: string; default?: number | string | null; description?: string }
 
 export interface Entry {
-  /** Unique: "ao:bass", "hydra:osc", "source:initScene", "global:render", "recipe:chains". */
+  /** Unique: "ao:bass", "hydra:osc", "source:initScene", "global:render", "ext:noise" (an extension's intro), "ext:noise:warp", "recipe:chains". */
   id: string;
   section: SectionId;
   name: string;
@@ -78,8 +82,45 @@ export function buildEntries(): Entry[] {
   for (const name of sourceMembers) {
     entries.push(fromDoc(`source:${name}`, "sources", `s0.${name}`, functionDoc(name, "s0"), sourceExamples[name]));
   }
+  entries.push(...extensionEntries());
   for (const r of recipes) {
     entries.push({ id: `recipe:${r.name}`, section: "recipes", name: r.name, description: r.description, params: [], ...unpack(r.example), aliases: [] });
+  }
+  return entries;
+}
+
+/**
+ * The vendored extensions' entries: for each, an intro (`use("noise")`)
+ * opening its first section, then everything it adds, section by section.
+ * Output methods read `o0.setLinear`, as source methods read `s0.initScene`.
+ * Names broken upstream say so and don't auto-play.
+ */
+function extensionEntries(): Entry[] {
+  const entries: Entry[] = [];
+  const api = extensionApi();
+  for (const ext of CATALOG) {
+    const docs = extensionDocs[ext.name];
+    const examples = extensionExamples[ext.name] ?? {};
+    entries.push({
+      id: `ext:${ext.name}`, section: docs.groups[0] as SectionId, name: `use("${ext.name}")`,
+      description: `${docs.intro}\n\nBy ${docs.author}, ${docs.licence}. \`await use("${ext.name}")\` loads it on the deck running the sketch; it stays loaded there until Ao restarts.`,
+      params: [], ...unpack(examples.use ?? ""), aliases: [ext.name, ext.file.replace(/\.js$/, "")],
+    });
+    for (const group of docs.groups) {
+      for (const fn of api.filter((f) => f.extension === ext.name && f.group === group)) {
+        const example = unpack(examples[fn.name] ?? "");
+        entries.push({
+          id: `ext:${ext.name}:${fn.name}`, section: group as SectionId,
+          name: fn.kind === "output" ? `o0.${fn.name}` : fn.name,
+          signature: fn.signature,
+          description: [fn.description, ...(fn.broken ? [`Broken upstream: ${fn.broken}`] : []), `Needs \`await use("${ext.name}")\`.`].join("\n\n"),
+          params: fn.params,
+          ...example,
+          autoplay: example.autoplay && !fn.broken,
+          aliases: [],
+        });
+      }
+    }
   }
   return entries;
 }
@@ -104,8 +145,10 @@ export function findEntry(entries: Entry[], word: { name: string; owner?: string
   const byId = (id: string) => entries.find((e) => e.id === id);
   if (owner === "ao") return byId(`ao:${name}`);
   if (owner && /^s[0-3]$/.test(owner)) return byId(`source:${name}`);
+  if (owner && /^(o[0-3]|oS)$/.test(owner)) return byId(`ext:outputs:${name}`);
   if (name === "ao") return byId("ao:map");
-  return byId(`hydra:${name}`) ?? byId(`global:${name}`) ?? entries.find((e) => e.aliases.includes(name));
+  return byId(`hydra:${name}`) ?? byId(`global:${name}`)
+    ?? entries.find((e) => e.id.startsWith("ext:") && e.name === name) ?? entries.find((e) => e.aliases.includes(name));
 }
 
 /** True if the letters of `query` appear in `text` in order. */
@@ -124,7 +167,7 @@ export function filterEntries(entries: Entry[], query: string): { matches: Entry
   const q = query.trim().toLowerCase();
   if (!q) return { matches: entries, best: entries[0] };
   const score = (entry: Entry): number => {
-    const names = [entry.name, ...entry.aliases].map((n) => n.toLowerCase().replace(/^(ao|s0)\./, ""));
+    const names = [entry.name, ...entry.aliases].map((n) => n.toLowerCase().replace(/^(ao|s0|o0)\./, ""));
     if (names.some((n) => n === q)) return 5;
     if (names.some((n) => n.startsWith(q))) return 4;
     if (names.some((n) => n.includes(q))) return 3;
