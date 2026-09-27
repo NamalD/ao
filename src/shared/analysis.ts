@@ -1,4 +1,7 @@
 import { AudioFeatures, SPECTRUM_BANDS } from "./features";
+import { Chroma } from "./chroma";
+import { StereoImage } from "./stereo";
+import { triggeredWave } from "./waveform";
 
 const FFT_SIZE = 2048;
 // Long enough to average over a few cycles of a low tone, so steady notes do
@@ -135,6 +138,8 @@ export class Analyser {
   private beat = 0;
   private lastBeat = -Infinity;
   private lastTime: number | null = null;
+  private stereo = new StereoImage();
+  private chroma: Chroma;
 
   constructor(private sampleRate = 48000) {
     const edges = bandEdges();
@@ -150,6 +155,7 @@ export class Analyser {
     this.bassBands = bandRange(centres, 0, 250);
     this.midBands = bandRange(centres, 250, 2000);
     this.highBands = bandRange(centres, 2000, Infinity);
+    this.chroma = new Chroma(sampleRate, FFT_SIZE, 4 / FFT_SIZE);
   }
 
   push(interleaved: Float32Array, now: number): AudioFeatures {
@@ -174,6 +180,8 @@ export class Analyser {
     this.loudness = follow(this.loudness, clamp01(5 * energy), dt, 0.03, 0.4);
 
     this.updateSpectrum(dt);
+    this.stereo.push(interleaved, dt);
+    this.chroma.update(this.re, this.im, dt);
     return {
       time: now,
       loudness: this.loudness,
@@ -183,6 +191,11 @@ export class Analyser {
       mid: this.average(this.midBands),
       high: this.average(this.highBands),
       spectrum: this.levels.slice(),
+      wave: triggeredWave(this.ring, this.written),
+      balance: this.stereo.balance,
+      width: this.stereo.width,
+      chroma: this.chroma.values.slice(),
+      key: this.chroma.key,
     };
   }
 
