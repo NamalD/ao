@@ -12,22 +12,13 @@ voronoi()
   .saturate(ao.map("bass", 0, 1))
   .blend(
     gradient()
-      .pixelate(
-        ao.map("treble", 20, 400),
-        ao.map("treble", 20, 400)
-      )
+      .pixelate(ao.map("treble", 20, 400), ao.map("treble", 20, 400))
       // ensure output stays red
-      .color(0, 1, 0)
+      .color(0, 1, 0),
   )
-  .rotate(12.80)
+  .rotate(12.8)
   .repeat(ao.map("loudness", 10, 59), ao.map("bass", 10, 100))
   .color(ao.map("loudness", 0, 1), 0, 0)
-  .blend(
-    osc(2, -0.1, 0.6)
-      .brightness(ao.map("loudness", 0.0, 0.2))
-  )
-  .blend(
-    shape(2),
-    ao.map("loudness", 0, 0.2)
-  )
+  .blend(osc(2, -0.1, 0.6).brightness(ao.map("loudness", 0.0, 0.2)))
+  .blend(shape(2), ao.map("loudness", 0, 0.2))
   .out()

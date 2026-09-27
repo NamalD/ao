@@ -1,9 +1,5 @@
-noise(ao.map("loudness",2,2.2), ao.map("loudness", 0.1, 0.1005))
+noise(ao.map("loudness", 2, 2.2), ao.map("loudness", 0.1, 0.1005))
   .rotate(0, ao.map("bass", 0, 0.001))
   .pixelate(ao.map("mid", 100, 250), ao.map("mid", 100, 300))
-  .color(
-    ao.map("mid", 1, 0.9),
-    ao.map("mid", 1, 0.7),
-    ao.map("mid", 1, 0.75),
-    1)
+  .color(ao.map("mid", 1, 0.9), ao.map("mid", 1, 0.7), ao.map("mid", 1, 0.75), 1)
   .out()
