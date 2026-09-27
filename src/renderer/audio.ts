@@ -1,5 +1,8 @@
 import { AudioFeatures, silentFeatures } from "../shared/features";
 import { centroidPosition, hzLevel, peakPosition, spectrumAt } from "../shared/spectrum";
+import { keyHue } from "../shared/chroma";
+import { waveAt } from "../shared/waveform";
+import { spectrogram } from "./spectrogram";
 
 type Level = "loudness" | "impulse" | "beat" | "bass" | "mid" | "high" | "peak" | "centroid";
 
@@ -34,6 +37,21 @@ export const ao = {
     const read = typeof level === "function" ? level : () => this[level];
     return () => lo + (hi - lo) * read();
   },
+  // --- Waveform, stereo image and chroma ---
+  /** The newest ~21 ms of waveform, 512 values -1..1, starting on a rising zero crossing. */
+  get wave() { return this.features.wave; },
+  /** The waveform at position x (0..1), interpolated like GLSL `aoWaveAt(x)`. */
+  waveAt(x: number) { return waveAt(this.features.wave, x); },
+  /** Stereo balance, -1 (left) .. 1 (right). */
+  get balance() { return this.features.balance; },
+  /** Stereo width, 0 (mono) .. 1 (wide). */
+  get width() { return this.features.width; },
+  /** Pitch-class strengths, 0..1, for C, C#, D, … B. */
+  get chroma() { return this.features.chroma; },
+  /** The dominant pitch class, 0 (C) .. 11 (B). */
+  get key() { return this.features.key; },
+  /** The dominant pitch class as a hue, 0..1 (key / 12), so colour can follow the harmony. */
+  get hue() { return keyHue(this.features.key); },
 };
 
 /**
@@ -54,8 +72,16 @@ export const aoDocs: Record<string, { signature: string; description: string }> 
   hz: { signature: "ao.hz(lo, hi?)", description: "Average level between two frequencies in Hz, or at one frequency: ao.hz(40, 100) for kicks." },
   peak: { signature: "ao.peak", description: "Position of the loudest band, 0..1 from low to high; glides between bands." },
   centroid: { signature: "ao.centroid", description: "Spectral centroid, 0..1 from low to high: how bright the sound is. Steadier than peak." },
+  wave: { signature: "ao.wave", description: "The newest ~21 ms of waveform: 512 values, -1..1, starting on a rising zero crossing so a scope holds still." },
+  waveAt: { signature: "ao.waveAt(x)", description: "Waveform value, -1..1, at position x, 0..1 across ao.wave, interpolated like GLSL aoWaveAt(x)." },
+  balance: { signature: "ao.balance", description: "Stereo balance, -1 (left) .. 0 (centre) .. 1 (right), smoothed." },
+  width: { signature: "ao.width", description: "Stereo width, 0 for mono up to 1 for wide or hard-panned sound, smoothed." },
+  chroma: { signature: "ao.chroma", description: "12 pitch-class levels, 0..1, for C, C#, D, … B (110 Hz..5 kHz); the strongest is near 1." },
+  key: { signature: "ao.key", description: "The dominant pitch class, 0 (C) .. 11 (B); changes only when another clearly takes over." },
+  hue: { signature: "ao.hue", description: "The dominant pitch class as a hue, 0..1 (ao.key / 12): colour that follows the harmony." },
 };
 
 export function updateAudio(features: AudioFeatures): void {
   ao.features = features;
+  spectrogram.push(features.spectrum, features.time);
 }
