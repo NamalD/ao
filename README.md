@@ -556,3 +556,13 @@ cd .worktrees/short-feature-name
 Use `make worktree-list` to see active worktrees. From the primary checkout,
 `make worktree-remove NAME=short-feature-name` removes a clean worktree after
 handoff; it leaves the branch intact for review or merge.
+
+## License
+
+Ao is free software under the GNU Affero General Public License, version 3
+only (`AGPL-3.0-only`); see `LICENSE`. It bundles
+[hydra-synth](https://github.com/hydra-synth/hydra-synth), also AGPL-3.0,
+and the vendored Hydra extensions in `src/renderer/vendor/hydra/`, each
+under its own licence (hyper-hydra's under GPL-3.0, extra-shaders-for-hydra's
+under AGPL-3.0). `src/renderer/vendor/hydra/SOURCES.md` lists them, and
+their licence texts are next to them.
