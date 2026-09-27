@@ -36,9 +36,9 @@ describe("completion lists", () => {
     expect(labels(memberCompletions(undefined))).toContain("modulateHue");
   });
 
-  it("offers every HydraSource method plus initScene after s0.", () => {
+  it("offers every HydraSource method plus initScene and clearScene after s0.", () => {
     const options = labels(memberCompletions("s0"));
-    expect(options).toEqual(expect.arrayContaining(["init", "initImage", "initVideo", "initCam", "initScreen", "clear", "initScene"]));
+    expect(options).toEqual(expect.arrayContaining(["init", "initImage", "initVideo", "initCam", "initScreen", "clear", "initScene", "clearScene"]));
     expect(options).not.toContain("tick");
     expect(options).not.toContain("constructor");
     for (const name of options) expect(functionDoc(name, "s0")?.description, name).toBeTruthy();

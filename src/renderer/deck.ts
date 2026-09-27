@@ -116,8 +116,9 @@ export class Deck {
     this.synth.hush();
     Object.assign(this.synth, { speed: 1, bpm: 30, fps: undefined });
     // Scenes stay, so their WebGL contexts are reused rather than churned, but
-    // give up their drawing buffers; hush has detached them from the sources.
-    for (const scene of this.scenes.values()) scene.canvas.width = scene.canvas.height = 1;
+    // give up their drawing and state buffers; hush has detached them from
+    // the sources, and the next sketch starts its simulations afresh.
+    for (const scene of this.scenes.values()) scene.release();
   }
 
   /** Resets and shrinks an idle deck, so it holds almost no GPU memory. */
@@ -130,7 +131,7 @@ export class Deck {
     return this.hydra.width === PARKED && this.hydra.height === PARKED;
   }
 
-  /** Each Hydra source can also host a GLSL scene: `s0.initScene(glsl)`. */
+  /** Each Hydra source can also host a GLSL scene: `s0.initScene(glsl)`, emptied by `s0.clearScene()`. */
   private patchSource(source: HydraSource): void {
     source.initScene = (code: string, options?: SceneOptions) => {
       let scene = this.scenes.get(source);
@@ -139,6 +140,8 @@ export class Deck {
       if (source.src !== scene.canvas) source.init({ src: scene.canvas });
       source.dynamic = true;
     };
+    // Empties a scene's buffers and restarts its iFrame, which edits don't.
+    source.clearScene = () => this.scenes.get(source)?.clear();
     // hydra-synth makes a new texture on every init and clear without freeing
     // the old one; free it, so switching sketches for hours doesn't leak.
     const holder = source as unknown as { tex: Texture };

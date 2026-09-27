@@ -8,6 +8,29 @@ export interface SceneOptions {
   scale?: number;
   /** Extra uniforms, declared in the shader as `uniform float name;` (or vec2..vec4). */
   uniforms?: Record<string, UniformValue>;
+  /**
+   * Up to four state passes, each GLSL defining `mainImage`, run in order
+   * before the scene each frame into float textures that keep their output:
+   * `aoBuffer0`..`aoBuffer3` in every pass.
+   */
+  buffers?: string[];
+}
+
+export const MAX_BUFFERS = 4;
+
+/**
+ * The GLSL sources for a scene: its buffers in order, then the image. Throws
+ * on options that can't work, so a mistake fails when the line runs.
+ */
+export function sceneSources(code: string, options: SceneOptions = {}): string[] {
+  if (typeof code !== "string") throw new Error(`initScene: expected GLSL source, got ${typeof code}`);
+  const buffers = options.buffers ?? [];
+  if (!Array.isArray(buffers)) throw new Error("initScene buffers: expected an array of GLSL strings, such as [velocity, dye]");
+  if (buffers.length > MAX_BUFFERS) throw new Error(`initScene buffers: at most ${MAX_BUFFERS}, got ${buffers.length}`);
+  buffers.forEach((buffer, i) => {
+    if (typeof buffer !== "string") throw new Error(`initScene buffers[${i}]: expected GLSL source, got ${typeof buffer}`);
+  });
+  return [...buffers, code];
 }
 
 export interface UniformResult {
@@ -84,6 +107,17 @@ uniform float aoBalance;
 uniform float aoWidth;
 uniform float aoChroma[12];
 uniform float aoKey;
+// State buffers: this frame's output for buffers that already ran, the
+// previous frame's for the rest. aoPrevious is this pass's previous frame.
+uniform sampler2D aoBuffer0;
+uniform sampler2D aoBuffer1;
+uniform sampler2D aoBuffer2;
+uniform sampler2D aoBuffer3;
+uniform sampler2D aoPrevious;
+#define iChannel0 aoBuffer0
+#define iChannel1 aoBuffer1
+#define iChannel2 aoBuffer2
+#define iChannel3 aoBuffer3
 /** Waveform at x in 0..1 across the newest ~21 ms, -1..1. */
 float aoWaveAt(float x) { return texture(aoWave, vec2(clamp(x, 0., 1.), .5)).r; }
 /** Band level at x (0..1, low to high) as it was age ago: 0 newest, 1 oldest (~5 s). */
@@ -103,6 +137,27 @@ void main() {
 }
 `;
 
+/**
+ * Buffers keep alpha. Half floats top out at 65504, and one NaN would spread
+ * through the state for good, so those pixels are stored as zero instead.
+ */
+const BUFFER_MAIN = `
+void main() {
+  vec4 colour = vec4(0.);
+  mainImage(colour, gl_FragCoord.xy);
+  aoFragColor = mix(clamp(colour, -65504., 65504.), vec4(0.), bvec4(isnan(colour)));
+}
+`;
+
+/** Copies or resamples a texture across the whole target. */
+const COPY = `#version 300 es
+precision highp float;
+uniform sampler2D source;
+uniform vec2 size;
+out vec4 colour;
+void main() { colour = texture(source, gl_FragCoord.xy / size); }
+`;
+
 const VERTEX = `#version 300 es
 in vec2 position;
 void main() { gl_Position = vec4(position, 0., 1.); }
@@ -118,14 +173,38 @@ export function formatShaderLog(log: string): string {
 
 interface UniformInfo { location: WebGLUniformLocation; size: number }
 
-/** One WebGL2 canvas that renders a scene each frame, used as a Hydra source. */
+/** A compiled pass: a buffer, or the image the scene shows. */
+interface Pass { program: WebGLProgram; uniforms: Map<string, UniformInfo> }
+
+/** A float texture with a framebuffer to render into it. */
+interface Target { texture: WebGLTexture; framebuffer: WebGLFramebuffer }
+
+/** Ping-pong state: `read` holds the newest output, the next is drawn into `write`. */
+interface State { read: Target; write: Target; width: number; height: number }
+
+// Texture units: audio on 0..2, buffers on 3..6, the pass's own previous frame on 7.
+const BUFFER_UNIT = 3;
+const PREVIOUS_UNIT = BUFFER_UNIT + MAX_BUFFERS;
+const SAMPLERS: Record<string, number> = {
+  aoSpectrum: 0, aoWave: 1, aoSpectrogram: 2, aoPrevious: PREVIOUS_UNIT,
+  ...Object.fromEntries(Array.from({ length: MAX_BUFFERS }, (_, i) => [`aoBuffer${i}`, BUFFER_UNIT + i])),
+};
+
+/**
+ * One WebGL2 canvas that renders a scene each frame, used as a Hydra source.
+ * Buffers, and an image that reads `aoPrevious`, keep their output in float
+ * textures across frames. That state survives recompiles, so editing a
+ * running simulation doesn't restart it; it clears when the number of
+ * buffers changes, on `clear`, and on `release`.
+ */
 export class Scene {
   readonly canvas = document.createElement("canvas");
   private gl: WebGL2RenderingContext;
-  private program: WebGLProgram | null = null;
-  private code = "";
+  private passes: Pass[] = [];
+  private sources: string[] = [];
   private spectrum: WebGLTexture;
   private spectrumData = new Float32Array(0);
+  /** The pass whose uniforms are being set. */
   private uniforms = new Map<string, UniformInfo>();
   private setters: ((at: WebGLUniformLocation, v: number[]) => void)[];
   private frame = 0;
@@ -137,12 +216,20 @@ export class Scene {
   private history: WebGLTexture;
   private historyUploaded = -1;
   private historyVersion = -1;
+  // One state per buffer, then the image's if it reads aoPrevious.
+  private states: (State | null)[] = [];
+  private empty: WebGLTexture;
+  private copy: WebGLProgram;
+  private copyLocations: { source: WebGLUniformLocation | null; size: WebGLUniformLocation | null };
+  private floatTargets: boolean;
 
   /** `onError` hears about uniforms that threw or returned unusable values. */
   constructor(private readonly onError: (message: string) => void = () => {}) {
     const gl = this.canvas.getContext("webgl2", { antialias: false, depth: false, premultipliedAlpha: false });
     if (!gl) throw new Error("WebGL2 is unavailable");
     this.gl = gl;
+    // Rendering into RGBA16F needs this; WebGL2 filters half floats without help.
+    this.floatTargets = !!gl.getExtension("EXT_color_buffer_float");
     this.setters = [
       (at, v) => gl.uniform1fv(at, v), (at, v) => gl.uniform2fv(at, v),
       (at, v) => gl.uniform3fv(at, v), (at, v) => gl.uniform4fv(at, v),
@@ -161,6 +248,11 @@ export class Scene {
     this.wave = this.createTexture(gl.CLAMP_TO_EDGE);
     // Rows repeat, so aoHistory reads straight across the ring's wrap.
     this.history = this.createTexture(gl.REPEAT);
+    // Buffers a scene doesn't have read as transparent black.
+    this.empty = this.createTexture(gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+    this.copy = this.link(COPY, "scene copy");
+    this.copyLocations = { source: gl.getUniformLocation(this.copy, "source"), size: gl.getUniformLocation(this.copy, "size") };
   }
 
   private createTexture(wrapT: number): WebGLTexture {
@@ -174,10 +266,8 @@ export class Scene {
     return texture;
   }
 
-  /** Compiles `code` unless it is already running. Throws and keeps the old program on error. */
-  load(code: string, options: SceneOptions = {}): void {
-    this.options = options;
-    if (code === this.code && this.program) return;
+  /** Compiles and links a fragment shader; `label` names it in errors. */
+  private link(fragment: string, label: string): WebGLProgram {
     const gl = this.gl;
     const compile = (type: number, source: string) => {
       const shader = gl.createShader(type)!;
@@ -186,12 +276,18 @@ export class Scene {
       if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
         const log = gl.getShaderInfoLog(shader) ?? "unknown error";
         gl.deleteShader(shader);
-        throw new Error(`scene shader: ${formatShaderLog(log)}`);
+        throw new Error(`${label} shader: ${formatShaderLog(log)}`);
       }
       return shader;
     };
     const vs = compile(gl.VERTEX_SHADER, VERTEX);
-    const fs = compile(gl.FRAGMENT_SHADER, PRELUDE + code + MAIN);
+    let fs: WebGLShader;
+    try {
+      fs = compile(gl.FRAGMENT_SHADER, fragment);
+    } catch (e) {
+      gl.deleteShader(vs);
+      throw e;
+    }
     const program = gl.createProgram()!;
     gl.attachShader(program, vs);
     gl.attachShader(program, fs);
@@ -202,24 +298,148 @@ export class Scene {
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
       const log = gl.getProgramInfoLog(program);
       gl.deleteProgram(program);
-      throw new Error(`scene link: ${log}`);
+      throw new Error(`${label} link: ${log}`);
     }
-    if (this.program) gl.deleteProgram(this.program);
-    this.program = program;
-    this.code = code;
-    this.frame = 0;
+    return program;
+  }
+
+  /** Compiles a pass, pointing its samplers at their texture units. */
+  private compilePass(code: string, label: string, main: string): Pass {
+    const gl = this.gl;
+    const program = this.link(PRELUDE + code + main, label);
     // Active uniforms only: the compiler drops the ones a shader doesn't use.
-    this.uniforms.clear();
+    const uniforms = new Map<string, UniformInfo>();
     const count = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS) as number;
     for (let i = 0; i < count; i++) {
       const info = gl.getActiveUniform(program, i);
       const location = info && gl.getUniformLocation(program, info.name);
-      if (info && location) this.uniforms.set(info.name, { location, size: FLOAT_SIZES[info.type] ?? 0 });
+      if (info && location) uniforms.set(info.name, { location, size: FLOAT_SIZES[info.type] ?? 0 });
     }
+    gl.useProgram(program);
+    for (const [name, unit] of Object.entries(SAMPLERS)) {
+      const info = uniforms.get(name);
+      if (info) gl.uniform1i(info.location, unit);
+    }
+    return { program, uniforms };
+  }
+
+  /**
+   * Compiles `code`, and any `options.buffers`, unless they are already
+   * running. Throws and keeps the old programs on error.
+   */
+  load(code: string, options: SceneOptions = {}): void {
+    const sources = sceneSources(code, options);
+    this.options = options;
+    if (this.passes.length && sources.length === this.sources.length && sources.every((s, i) => s === this.sources[i])) return;
+    const passes: Pass[] = [];
+    try {
+      sources.forEach((source, i) => {
+        const image = i === sources.length - 1;
+        passes.push(this.compilePass(source, image ? "scene" : `scene buffers[${i}]`, image ? MAIN : BUFFER_MAIN));
+      });
+    } catch (e) {
+      for (const pass of passes) this.gl.deleteProgram(pass.program);
+      throw e;
+    }
+    for (const pass of this.passes) this.gl.deleteProgram(pass.program);
+    // A different set of buffers means different state: start it afresh.
+    if (sources.length !== this.sources.length) this.clear(true);
+    this.passes = passes;
+    this.sources = sources;
+  }
+
+  /** Empties the buffers and restarts iFrame; `free` also gives up their textures. */
+  clear(free = false): void {
+    const gl = this.gl;
+    for (const state of this.states) {
+      if (!state) continue;
+      for (const target of [state.read, state.write]) {
+        if (free) {
+          gl.deleteFramebuffer(target.framebuffer);
+          gl.deleteTexture(target.texture);
+        } else {
+          gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer);
+          gl.clearColor(0, 0, 0, 0);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+        }
+      }
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    if (free) this.states = [];
+    this.frame = 0;
+  }
+
+  /** Shrinks the canvas and frees the buffers, for a deck that is switching sketches. */
+  release(): void {
+    this.canvas.width = this.canvas.height = 1;
+    this.clear(true);
+  }
+
+  private createTarget(width: number, height: number): Target {
+    const gl = this.gl;
+    const texture = this.createTexture(gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, width, height, 0, gl.RGBA, gl.HALF_FLOAT, null);
+    const framebuffer = gl.createFramebuffer()!;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+    const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    if (status !== gl.FRAMEBUFFER_COMPLETE) {
+      gl.deleteFramebuffer(framebuffer);
+      gl.deleteTexture(texture);
+      throw new Error(`scene buffers: can't render into half-float textures (status 0x${status.toString(16)})`);
+    }
+    return { texture, framebuffer };
+  }
+
+  /** Draws `texture` over the whole of the bound framebuffer, `width` × `height`. */
+  private drawCopy(texture: WebGLTexture, width: number, height: number): void {
+    const gl = this.gl;
+    gl.useProgram(this.copy);
+    gl.activeTexture(gl.TEXTURE0 + PREVIOUS_UNIT);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.uniform1i(this.copyLocations.source, PREVIOUS_UNIT);
+    gl.uniform2f(this.copyLocations.size, width, height);
+    gl.viewport(0, 0, width, height);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  /**
+   * The state for pass `i` at `width` × `height`, or null for an image that
+   * doesn't read aoPrevious. A resize stretches the old state into the new.
+   */
+  private stateFor(i: number, width: number, height: number): State | null {
+    const gl = this.gl;
+    const image = i === this.passes.length - 1;
+    const old = this.states[i] ?? null;
+    if (image && !this.passes[i].uniforms.has("aoPrevious")) {
+      if (old) {
+        for (const target of [old.read, old.write]) {
+          gl.deleteFramebuffer(target.framebuffer);
+          gl.deleteTexture(target.texture);
+        }
+        this.states[i] = null;
+      }
+      return null;
+    }
+    if (old && old.width === width && old.height === height) return old;
+    if (!this.floatTargets) throw new Error("scene buffers: this GPU can't render into float textures (EXT_color_buffer_float)");
+    const state: State = { read: this.createTarget(width, height), write: this.createTarget(width, height), width, height };
+    if (old) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, state.read.framebuffer);
+      this.drawCopy(old.read.texture, width, height);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      for (const target of [old.read, old.write]) {
+        gl.deleteFramebuffer(target.framebuffer);
+        gl.deleteTexture(target.texture);
+      }
+    }
+    this.states[i] = state;
+    return state;
   }
 
   render(width: number, height: number, time: number, dt: number, audio: AudioFeatures): void {
-    if (!this.program) return;
+    if (!this.passes.length) return;
     const gl = this.gl;
     const scale = this.options.scale ?? 1;
     const w = Math.max(1, Math.round(width * scale)), h = Math.max(1, Math.round(height * scale));
@@ -227,47 +447,43 @@ export class Scene {
       this.canvas.width = w;
       this.canvas.height = h;
     }
-    gl.viewport(0, 0, w, h);
-    gl.useProgram(this.program);
+    const states = this.passes.map((_, i) => this.stateFor(i, w, h));
+    this.uploadAudio(audio);
+    // Each user uniform is read once a frame, however many passes use it.
+    const values = new Map<string, number[]>();
+    const buffers = states.length - 1;
+    this.passes.forEach((pass, i) => {
+      const state = states[i];
+      for (let b = 0; b < MAX_BUFFERS; b++) {
+        gl.activeTexture(gl.TEXTURE0 + BUFFER_UNIT + b);
+        gl.bindTexture(gl.TEXTURE_2D, b < buffers ? states[b]!.read.texture : this.empty);
+      }
+      gl.activeTexture(gl.TEXTURE0 + PREVIOUS_UNIT);
+      gl.bindTexture(gl.TEXTURE_2D, state ? state.read.texture : this.empty);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, state ? state.write.framebuffer : null);
+      gl.viewport(0, 0, w, h);
+      gl.useProgram(pass.program);
+      this.uniforms = pass.uniforms;
+      this.setUniforms(w, h, time, dt, audio, values);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      if (state) [state.read, state.write] = [state.write, state.read];
+    });
+    // An image with state was drawn off screen; show it.
+    const image = states[buffers];
+    if (image) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      this.drawCopy(image.read.texture, w, h);
+    }
+    gl.activeTexture(gl.TEXTURE0);
+    this.frame++;
+  }
+
+  /** Uploads the audio textures that changed, once a frame for every pass. */
+  private uploadAudio(audio: AudioFeatures, history: SpectrumHistory = spectrogram): void {
+    const gl = this.gl;
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.spectrum);
     this.uploadSpectrum(audio.spectrum);
-    this.uniform("iResolution", [w, h, 1]);
-    this.uniform("iTime", time);
-    this.uniform("iTimeDelta", dt);
-    this.uniformInt("iFrame", this.frame++);
-    this.uniform("aoLoudness", audio.loudness);
-    this.uniform("aoImpulse", audio.impulse);
-    this.uniform("aoBeat", audio.beat);
-    this.uniform("aoBass", audio.bass);
-    this.uniform("aoMid", audio.mid);
-    this.uniform("aoHigh", audio.high);
-    this.uniform("aoBpm", clock.bpm);
-    this.uniform("aoPhase", phaseNow());
-    this.uniform("aoBar", barNow());
-    this.uniformInt("aoSpectrum", 0);
-    this.renderShaderAudio(audio);
-    for (const [name, value] of Object.entries(this.options.uniforms ?? {})) {
-      const info = this.uniforms.get(name);
-      if (!info) continue; // undeclared, or unused and optimized away
-      if (!info.size) {
-        this.onError(`uniform ${name} must be declared as float or vec2..vec4`);
-        continue;
-      }
-      const result = evaluateUniform(name, value, info.size);
-      if (result.error) this.onError(result.error);
-      this.setters[info.size - 1](info.location, result.value);
-    }
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-  }
-
-  /**
-   * Waveform, spectrogram, stereo and chroma inputs. Textures upload only
-   * when their data changed: the waveform when new features arrive, the
-   * spectrogram only its new rows.
-   */
-  private renderShaderAudio(audio: AudioFeatures, history: SpectrumHistory = spectrogram): void {
-    const gl = this.gl;
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, this.wave);
     if (audio.wave && audio.wave !== this.waveSource) {
@@ -277,15 +493,45 @@ export class Scene {
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, this.history);
     this.uploadHistory(history);
-    gl.activeTexture(gl.TEXTURE0);
-    this.uniformInt("aoWave", 1);
-    this.uniformInt("aoSpectrogram", 2);
-    this.uniform("aoSpectrogramRow", history.newest);
+  }
+
+  /** Sets the active pass's uniforms; `values` caches user uniforms across passes. */
+  private setUniforms(w: number, h: number, time: number, dt: number, audio: AudioFeatures, values: Map<string, number[]>): void {
+    this.uniform("iResolution", [w, h, 1]);
+    this.uniform("iTime", time);
+    this.uniform("iTimeDelta", dt);
+    this.uniformInt("iFrame", this.frame);
+    this.uniform("aoLoudness", audio.loudness);
+    this.uniform("aoImpulse", audio.impulse);
+    this.uniform("aoBeat", audio.beat);
+    this.uniform("aoBass", audio.bass);
+    this.uniform("aoMid", audio.mid);
+    this.uniform("aoHigh", audio.high);
+    this.uniform("aoBpm", clock.bpm);
+    this.uniform("aoPhase", phaseNow());
+    this.uniform("aoBar", barNow());
+    this.uniform("aoSpectrogramRow", spectrogram.newest);
     this.uniform("aoBalance", audio.balance ?? 0);
     this.uniform("aoWidth", audio.width ?? 0);
     this.uniform("aoKey", audio.key ?? 0);
     const chroma = this.uniforms.get("aoChroma[0]");
-    if (chroma && audio.chroma?.length === 12) gl.uniform1fv(chroma.location, audio.chroma);
+    if (chroma && audio.chroma?.length === 12) this.gl.uniform1fv(chroma.location, audio.chroma);
+    for (const [name, value] of Object.entries(this.options.uniforms ?? {})) {
+      const info = this.uniforms.get(name);
+      if (!info) continue; // undeclared, or unused and optimized away
+      if (!info.size) {
+        this.onError(`uniform ${name} must be declared as float or vec2..vec4`);
+        continue;
+      }
+      const key = `${name}/${info.size}`;
+      let result = values.get(key);
+      if (!result) {
+        const evaluated = evaluateUniform(name, value, info.size);
+        if (evaluated.error) this.onError(evaluated.error);
+        values.set(key, (result = evaluated.value));
+      }
+      this.setters[info.size - 1](info.location, result);
+    }
   }
 
   /** Streams the waveform into the bound one-row texture, allocated once per length. */

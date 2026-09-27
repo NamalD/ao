@@ -322,6 +322,16 @@ s0.initStream("friend")
 src(s0).out()` },
   clear: { manual: true, code: `// Stop the camera, video or scene in s0 and free it.
 s0.clear()` },
+  clearScene: `s0.initScene(\`
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+  vec2 uv = fragCoord / iResolution.xy;
+  fragColor = vec4(uv, 0.5 + 0.5 * sin(float(iFrame) * 0.05), 1.0);
+}\`)
+// Empties s0's scene buffers and restarts iFrame, keeping the scene running:
+// a trail or simulation starts over from a blank frame.
+s0.clearScene()
+
+src(s0).out()`,
 };
 
 export interface GlobalEntry {
