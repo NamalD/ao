@@ -211,6 +211,68 @@ gradient()
   .rotate(ao.map("mid", 0, 3))
   .scale(ao.map("bass", 1, 1.5))
   .out()`,
+  wave: `// An oscilloscope: draw ao.wave onto a canvas each frame.
+const ctx = s0.initCanvas(512, 256)
+update = () => {
+  ctx.clearRect(0, 0, 512, 256)
+  ctx.strokeStyle = "white"
+  ctx.lineWidth = 3
+  ctx.beginPath()
+  ao.wave.forEach((v, i) => ctx.lineTo(i, 128 - 100 * v))
+  ctx.stroke()
+}
+
+src(s0).out()`,
+  waveAt: `// The waveform's middle sample nudges the stripes.
+osc(20, 0.05, 1)
+  .scrollY(() => 0.2 * ao.waveAt(0.5))
+  .out()`,
+  balance: `// Leans towards whichever speaker is louder.
+shape(4, 0.3)
+  .scroll(() => 0.3 * ao.balance, 0)
+  .out()`,
+  width: `// Mono stays a narrow line; wide stereo spreads it out.
+shape(4, 0.4)
+  .scale(1, () => 0.1 + 2 * ao.width, 1)
+  .out()`,
+  chroma: `// ao.chroma[0] is C, ao.chroma[7] is G: each shape lights with its note.
+shape(4, () => 0.3 * ao.chroma[0]).scrollX(-0.2)
+  .add(shape(4, () => 0.3 * ao.chroma[7]).color(1, 0.6, 0.2).scrollX(0.2))
+  .out()`,
+  key: `// Twelve positions round a wheel, one per pitch class.
+shape(3, 0.25)
+  .rotate(() => (ao.key / 12) * 6.283)
+  .out()`,
+  hue: `// Colour that follows the harmony.
+osc(15, 0.05, 1)
+  .saturate(2)
+  .hue(() => ao.hue)
+  .out()`,
+  bpm: `// Spin one full turn every four beats.
+shape(3, 0.3)
+  .rotate(0, () => (ao.bpm / 60 / 4) * 6.283)
+  .out()`,
+  phase: `// A ring that swells through each beat, then snaps back.
+shape(64, () => 0.1 + 0.4 * ao.phase, 0.05)
+  .out()`,
+  bar: `// A different shape on each beat of the bar.
+shape(() => 3 + ao.bar, 0.35)
+  .out()`,
+  tempoConfidence: `// Stripes sharpen as the tempo locks in.
+osc(20, 0.05, 1)
+  .saturate(() => ao.tempoConfidence)
+  .modulate(noise(3), () => 0.3 * (1 - ao.tempoConfidence))
+  .out()`,
+  ramp: `// One slow turn per bar, in time with the music.
+osc(20, 0, 1)
+  .kaleid(6)
+  .rotate(() => ao.ramp(4) * 6.283)
+  .out()`,
+  pulse: `// Flashes on eighth notes.
+voronoi(6, 0.2)
+  .color(0.3, 0.2, 0.8)
+  .add(solid(1, 1, 1), () => 0.4 * ao.pulse(2))
+  .out()`,
 };
 
 /** One example per s0–s3 method. */

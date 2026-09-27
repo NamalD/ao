@@ -1,5 +1,5 @@
 import { autocompletion, closeBrackets, type Completion, type CompletionContext } from "@codemirror/autocomplete";
-import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { defaultKeymap, history, historyKeymap, indentWithTab, isolateHistory } from "@codemirror/commands";
 import { javascript } from "@codemirror/lang-javascript";
 import { bracketMatching, HighlightStyle, syntaxHighlighting, syntaxTree } from "@codemirror/language";
 import { EditorSelection, EditorState, type Extension, Facet, Prec, type Range, StateEffect, StateField, type TransactionSpec } from "@codemirror/state";
@@ -12,6 +12,8 @@ import hydraFunctions from "hydra-synth/src/glsl/glsl-functions.js";
 import HydraSourceClass from "hydra-synth/src/hydra-source.js";
 import { ao, aoDocs } from "./audio";
 import { blockAt } from "./blocks";
+import { keepLiveValues, liveValues } from "./live-values";
+import { formatCode, minimalChange } from "./format";
 import { remix, remixRunRange } from "./remix";
 import { joinsScrub, scrubbing } from "./scrub";
 
@@ -25,6 +27,8 @@ export interface EditorActions {
   status?(message: string, error?: boolean): void;
   /** K in normal mode: look up the word at `column` of `line` in the code explorer. */
   help?(line: string, column: number): void;
+  /** Whether running code also formats it; formats when absent. */
+  autoFormat?(): boolean;
 }
 
 // --- Documentation -----------------------------------------------------------
@@ -480,8 +484,39 @@ function runRange(view: EditorView, from: number, to: number): true {
   return true;
 }
 
+/**
+ * Formats the code between `from` and `to` with Prettier, as one undo step,
+ * keeping the cursor on the same code. Code that doesn't parse is left alone,
+ * and so is a document edited while formatting ran: the next run catches up.
+ */
+export async function formatRange(
+  view: { readonly state: EditorState; dispatch(spec: TransactionSpec): void }, from: number, to: number,
+): Promise<void> {
+  const { doc, selection } = view.state;
+  const code = doc.sliceString(from, to);
+  const head = selection.main.head;
+  const inside = selection.main.empty && head >= from && head <= to;
+  const result = await formatCode(code, inside ? head - from : 0);
+  if (!result || view.state.doc !== doc) return;
+  const changes = minimalChange(code, result.code, from);
+  if (!changes) return;
+  view.dispatch({
+    changes,
+    selection: inside ? { anchor: from + result.cursor } : undefined,
+    userEvent: "format",
+    annotations: isolateHistory.of("full"),
+  });
+}
+
+/** Ctrl+Enter and friends: run the code, then format what ran. */
+function runAndFormat(view: EditorView, from: number, to: number): true {
+  runRange(view, from, to);
+  if (view.state.facet(editorActions)?.autoFormat?.() !== false) void formatRange(view, from, to);
+  return true;
+}
+
 function extensionsFor(actions: EditorActions): Extension[] {
-  const evaluate = runRange;
+  const evaluate = runAndFormat;
   const runBlock = (view: EditorView) => {
     const block = blockAt(view.state.doc.toString(), view.state.selection.main.head);
     return block ? evaluate(view, block.from, block.to) : true;
@@ -510,6 +545,7 @@ function extensionsFor(actions: EditorActions): Extension[] {
     syntaxHighlighting(highlight),
     keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
     flashField,
+    liveValues(),
     EditorView.lineWrapping,
     EditorView.updateListener.of((u) => { if (u.docChanged) actions.changed(); }),
     editorActions.of(actions),
@@ -523,9 +559,12 @@ export function createEditorState(doc: string, actions: EditorActions): EditorSt
   return EditorState.create({ doc, extensions: extensionsFor(actions) });
 }
 
-/** A fresh state for another document, reusing `state`'s extensions but none of its history. */
+/**
+ * A fresh state for another document, reusing `state`'s extensions but none
+ * of its history. Whether live values show carries over.
+ */
 export function documentState(state: EditorState, doc: string): EditorState {
-  return EditorState.create({ doc, extensions: [...state.facet(editorExtensions)] });
+  return EditorState.create({ doc, extensions: [keepLiveValues(state), ...state.facet(editorExtensions)] });
 }
 
 /** Mirror vim's mode in the status bar. The vim plugin is recreated with each new state. */

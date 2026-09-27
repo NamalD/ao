@@ -7,6 +7,7 @@ declare module "hydra-synth" {
     height: number;
     synth: { time: number; speed: number; hush(): void };
     tick(dt: number): void;
+    loadScript(url?: string): Promise<void>;
     setResolution(width: number, height: number): void;
   }
 }
@@ -15,6 +16,12 @@ declare module "hydra-synth/src/glsl/glsl-functions.js" {
   interface HydraFunctionInput { name: string; type: string; default?: number | string | null }
   interface HydraFunctionDefinition { name: string; type: string; inputs: HydraFunctionInput[] }
   export default function hydraFunctions(): HydraFunctionDefinition[];
+}
+
+declare module "hydra-synth/src/lib/array-utils.js" {
+  type ArrayValue = (props: { time: number; bpm: number }) => number;
+  const arrayUtils: { init(): void; getValue(arr?: unknown[]): ArrayValue };
+  export default arrayUtils;
 }
 
 declare module "hydra-synth/src/hydra-source.js" {

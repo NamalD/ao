@@ -1,4 +1,4 @@
-.PHONY: all run dev test screenshot clean worktree worktree-create worktree-list worktree-remove worktree-prune
+.PHONY: all run dev test screenshot thumbnails clean worktree worktree-create worktree-list worktree-remove worktree-prune
 
 all: node_modules
 	npm run build
@@ -24,6 +24,11 @@ test: node_modules
 # Render a sketch offscreen with synthetic audio: make screenshot SKETCH=dunes
 screenshot: all
 	npx electron . --sketch=$(SKETCH) --hide-editor --screenshot=state/$(SKETCH).png
+
+# Render missing sketch thumbnails offscreen into state/thumbnails/.
+# make thumbnails FORCE=1 re-renders them all; SKETCH=a,b limits the run.
+thumbnails: all
+	npx electron . $(if $(SKETCH),--thumbnails=$(SKETCH),--thumbnails) $(if $(FORCE),--force)
 
 clean:
 	rm -rf dist

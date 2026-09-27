@@ -276,15 +276,23 @@ export class CodeExplorer {
     this.detail.scrollTop = 0;
   }
 
-  /** A live reading of an `ao` property: a bar, or 64 bars for ao.fft. */
+  /** A live reading of an `ao` property: a bar and its value, or a bar per value for arrays such as ao.fft. */
   private liveValue(name: string): HTMLElement {
-    const read = () => (ao as unknown as Record<string, number | number[]>)[name];
+    const read = () => (ao as unknown as Record<string, number | ArrayLike<number>>)[name];
     const box = el("div", { className: "explorer-live" });
-    if (Array.isArray(read())) {
-      const bars = Array.from({ length: 64 }, () => el("i"));
+    const first = read();
+    if (typeof first !== "number") {
+      // ao.wave has 512 samples; every eighth is plenty for a glance.
+      const step = Math.ceil(first.length / 64);
+      const bars = Array.from({ length: Math.ceil(first.length / step) }, () => el("i"));
       box.classList.add("spectrum");
       box.append(...bars);
-      this.live = { update: () => (read() as number[]).forEach((v, i) => { if (bars[i]) bars[i].style.height = `${Math.round(v * 100)}%`; }) };
+      this.live = {
+        update: () => {
+          const values = read() as ArrayLike<number>;
+          bars.forEach((bar, i) => { bar.style.height = `${Math.round(Math.min(1, Math.abs(values[i * step] ?? 0)) * 100)}%`; });
+        },
+      };
     } else {
       const fill = el("i"), value = el("span");
       box.append(el("b", {}, fill), value);

@@ -23,18 +23,22 @@ past 1 MB the log moves to `ao.log.1`.
 
 | Key | Action |
 | --- | --- |
-| Ctrl+Enter | run the block under the cursor (lines between blank lines) |
-| Ctrl+Shift+Enter, Alt+Enter | run the whole sketch |
+| Ctrl+Enter | run and format the block under the cursor (lines between blank lines) |
+| Ctrl+Shift+Enter, Alt+Enter | run and format the whole sketch |
 | Ctrl+S, `:w` | save the sketch |
 | `:w <name>`, `:w! <name>` | save as `sketches/<name>.js` and rename the sketch (`!` replaces an existing one) |
 | Alt+scroll, Alt+drag | scrub the number under the pointer; Shift steps ten times coarser |
 | Alt+R | remix the numbers in the block under the cursor |
 | Ctrl+N | create a new sketch |
-| Ctrl+PgUp / Ctrl+PgDn | previous / next sketch |
+| Ctrl+PgUp / Ctrl+PgDn | previous / next sketch, crossfading |
+| Ctrl+O | browse sketches by thumbnail (see [Sketch browser](#sketch-browser)) |
+| Ctrl+Shift+A | autopilot on or off: shuffle sketches on drops, section changes and a timer |
 | Ctrl+Shift+H | hide or show the editor (ambient mode) |
 | Ctrl+Shift+M | show or hide the audio meter |
+| Ctrl+Shift+L | show or hide live values beside `ao` expressions in the code |
 | Ctrl+Shift+N | night fade: follow the schedule, force on, force off |
 | Ctrl+Shift+C | challenge: draw a prompt, or finish the running one |
+| Ctrl+Shift+T | tap tempo on each beat, starting on the one; two quick taps return to auto (see [Tempo](#tempo)) |
 | F11 | fullscreen |
 | F9 | start or stop recording video with audio |
 | F1 | help |
@@ -49,9 +53,9 @@ refuses a name that's taken unless you write `:w! <name>`.
 `K` in normal mode opens the code explorer on the word under the cursor.
 
 With the editor hidden, the old single keys work: `j`/`k` switch sketches,
-`f` fullscreen, `e` brings the editor back, `i` toggles the FPS counter, `m`
+`a` toggles autopilot, `f` fullscreen, `e` brings the editor back, `i` toggles the FPS counter, `m`
 the audio meter, `n` cycles the night fade, `c` opens a challenge, `r` starts
-or stops recording, and `q` or `Esc` quits.
+or stops recording, `o` opens the sketch browser, `t` taps the tempo, and `q` or `Esc` quits.
 
 ## Sketches
 
@@ -62,6 +66,14 @@ once; neither re-runs the sketch, and saving an unchanged sketch doesn't write
 anything. Saving the file from another editor does re-run it, unless the
 overlay has unsaved edits, in which case the status bar says so and Ctrl+S
 keeps your version.
+
+**Formatting.** Ctrl+Enter and Ctrl+Shift+Enter format the code they run
+with [Prettier](https://prettier.io/): double quotes, no semicolons, lines up
+to 100 columns. The code runs first, so formatting never delays it. The
+cursor stays on the same code, the formatting is its own undo step, and
+autosave saves it. Code that doesn't parse is left as you wrote it, and so is
+the inside of scene and `glsl:` strings. Scrubbing and remix don't format. Set `"format": false` in
+[`settings.json`](#settings) to turn this off.
 
 **Scrubbing and remix.** Hold Alt and scroll over a number, or Alt+drag it
 sideways, and the block around it re-runs as it changes. Each step is the
@@ -128,7 +140,8 @@ src(s0).modulate(osc(8), 0.02).out()
 ```
 
 Scenes get `iResolution`, `iTime`, `iTimeDelta`, `iFrame`, the audio levels as
-`aoLoudness`, `aoImpulse`, `aoBeat`, `aoBass`, `aoMid`, and `aoHigh`, and
+`aoLoudness`, `aoImpulse`, `aoBeat`, `aoBass`, `aoMid`, and `aoHigh`, the
+tempo as `aoBpm`, `aoPhase` and `aoBar` (see [Tempo](#tempo)), and
 `aoFFT(x)` to sample the spectrum. `scale` renders at a fraction of the output
 resolution for heavy raymarchers; `uniforms` feeds extra values, declared in
 the shader as `uniform float name;`. Shader errors report line numbers within
@@ -152,6 +165,158 @@ under `make dev` the page is served from `localhost`, and WebGL can only
 sample media whose host sends CORS headers (`Access-Control-Allow-Origin`).
 Scripts still load only from Ao itself, and a sketch can't navigate the
 window away from Ao or open new windows.
+
+### Waveform, spectrogram and harmony
+
+Beyond levels and the spectrum, Ao hands sketches and scenes the shape of
+the sound. `ao.wave` is the newest ~21 ms of waveform, 512 values `-1..1`,
+trigger-aligned like an oscilloscope so a steady tone holds still, and
+scenes read it as `aoWaveAt(x)`. Scenes also get `aoHistory(x, age)`, the
+spectrum over the last 5.12 s (age `0` now, `1` oldest) for waterfalls and
+terrain. `ao.balance` (`-1` left .. `1` right) and `ao.width` (`0` mono ..
+`1` wide) describe the stereo image. `ao.chroma` holds 12 pitch-class
+levels, C to B, and `ao.key` the strongest (`0..11`), so colour can follow
+the harmony: `ao.hue` is `ao.key / 12`.
+
+```js
+s0.initScene(`
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+  vec2 uv = fragCoord / iResolution.xy;
+  vec3 tint = 0.5 + 0.5 * cos(6.2832 * (aoKey / 12. + vec3(0., .33, .67)));
+  float scope = smoothstep(0.01, 0., abs(uv.y - 0.5 - 0.4 * aoWaveAt(uv.x)));
+  fragColor = vec4(tint * (aoHistory(uv.x, uv.y) + scope), 1.);
+}`)
+src(s0).out()
+```
+
+Scenes see these as `aoWave`, `aoSpectrogram`, `aoBalance`, `aoWidth`,
+`aoChroma[12]` and `aoKey`; `TYPES.md` has the details, and
+`sketches/scope.js` and `sketches/ridges.js` show them off.
+
+## Sketch browser
+
+Ctrl+O (`o` with the editor hidden) shows every sketch as a card with a
+thumbnail over the visuals, the open one marked `● playing`. Type to filter
+by name: the match is fuzzy, so `dns` finds `dunes` and `lamp` finds
+`challenge-…-lava-lamp`, best matches first. Arrows, Tab, or Ctrl+H/J/K/L move
+(Home, End, PgUp and PgDn too), Enter or a click opens the sketch, and Esc or
+a click outside closes the browser. Backspace edits the filter and Ctrl+U
+clears it. While it is open, keys go only to the browser, never to the editor.
+
+Sketches you opened recently come first, then the rest alphabetically;
+Ctrl+S switches to plain a–z. Challenge attempts (`challenge-*`) are hidden
+unless you press Ctrl+A. Both choices are remembered.
+
+Thumbnails live in `state/thumbnails/<name>.png`, 320×180. Ao makes them as
+you go: once a sketch has been on screen for four seconds, and then once a
+minute while it stays, it copies a small frame of the canvas, so the editor,
+bar, cards and night fade never appear in it, and an all-black frame never
+replaces a thumbnail. Renaming a sketch with `:w <name>` moves its thumbnail
+along. A sketch without one gets a gradient card with its name.
+
+To fill in the missing ones at once, render them offscreen with the synthetic
+audio (a few seconds each):
+
+```sh
+make thumbnails                 # sketches without a thumbnail
+make thumbnails FORCE=1         # re-render them all
+make thumbnails SKETCH=dunes,halo FORCE=1
+```
+
+That runs `npx electron . --thumbnails[=a,b] [--force]`, which reuses the
+screenshot path (`--screenshot-delay=<ms>` sets how long each sketch runs,
+3 s by default). A sketch that throws, hangs or draws nothing is reported and
+skipped, the rest carry on, and the run exits with status 1 if any failed.
+It also deletes thumbnails of sketches that no longer exist. The recently
+opened list is `state/recent.json`.
+
+## Autopilot
+
+Ctrl+Shift+A (`a` with the editor hidden) turns on autopilot, Ao's answer to
+MilkDrop's auto-switching: it shuffles through `sketches/`, crossfading to
+the next one when the music drops or changes section, or when the current
+sketch has had its time. The status bar flashes each switch, for example
+`autopilot → prism (drop)`, and `state/ao.log` records it with the reason.
+Whether it's on is saved, and the last sketch follows it as usual.
+
+**Shuffle, no playlists.** Every sketch plays once, in random order, before
+any repeats, and a new round never starts with the one just shown.
+Challenge attempts (`challenge-*`) and sketches with nothing but comments
+are left out; new and deleted sketches count from the next pick. A sketch
+that throws while starting is skipped for the next one. With autopilot on,
+`k` and Ctrl+PgDn crossfade to the next sketch in the shuffle at once, and
+`j` and Ctrl+PgUp go back to the one before.
+
+**When it switches.** Ao follows the energy (loudness and bass together) and
+the shape of the spectrum:
+
+- A **breakdown** is the energy falling well below its level of the last
+  quarter minute and staying there while the music plays on. It doesn't
+  switch by itself; it arms the drop.
+- A **drop** is the energy jumping back abruptly after a breakdown, or after
+  a pause of under three seconds, and holding. A slow return isn't a drop,
+  nor is a single hit in the lull.
+- A **section change** is the spectrum's shape over the last few seconds
+  differing clearly from that of the last half minute: new instruments, a
+  new part. Gradual change never counts. Music after three seconds of
+  silence counts too: it's probably a new track.
+
+A drop or a section change switches once `minSeconds` have passed since the
+last switch; a strong drop (after a long lull, with a big jump) may switch
+after only 15 seconds. When nothing happens in the music, the switch comes
+after `dwellSeconds`. Nothing fires during silence, and each kind of event
+has to settle before it can fire again, so beats never trigger anything.
+Autopilot also holds off while you're editing: while the editor is showing
+and you have typed or run code in the last minute, it doesn't switch, so a
+sketch never vanishes under you. Hide the editor, or leave it alone for a
+minute, and autopilot carries on; a switch that came due meanwhile happens
+then.
+
+**Crossfades.** Every switch to another sketch with Ctrl+PgUp/PgDn, `j`/`k`
+or autopilot crossfades over `fadeSeconds`, whether autopilot is on or not:
+both sketches keep animating while the new one fades in over the old. The
+editor shows the new sketch at once, and Ctrl+Enter runs code on it, even
+mid-fade. Opening a new, empty sketch or a challenge still cuts, and
+`fadeSeconds: 0` makes every switch a cut. Switching away from a sketch
+stops the timers it started and resets `speed`, so nothing of it lingers.
+Recordings and challenge snapshots capture the blend as you see it.
+
+The settings live under `autopilot` in `state/settings.json`:
+
+```json
+{
+  "autopilot": {
+    "enabled": false,
+    "dwellSeconds": 120,
+    "fadeSeconds": 4,
+    "switchOnSections": true,
+    "minSeconds": 45
+  }
+}
+```
+
+- `enabled`: whether autopilot is on; Ctrl+Shift+A saves it.
+- `dwellSeconds`: the longest one sketch stays, `5` and up.
+- `fadeSeconds`: crossfade length for every sketch switch, `0..60`; `0` cuts.
+- `switchOnSections`: switch on drops and section changes too; `false`
+  leaves only the timer.
+- `minSeconds`: the shortest time between a switch and a section-triggered
+  one, `5` and up.
+
+For trying it out, `--autopilot` turns it on for one session without saving,
+`--autopilot=10` also sets a 10 second dwell and minimum, and `--fade=8` sets
+the fade: `npx electron . --autopilot=10 --fade=8`.
+
+**How the crossfade works.** Hydra keeps its state in globals (one synth,
+`o0`–`o3`, `s0`–`s3`, `update`, `speed`), so two sketches can't share one
+instance. Ao runs two Hydra instances, the decks, each on its own canvas,
+and evaluates a sketch inside a scope that maps Hydra's names to its own
+deck, including in the functions it leaves behind, like `() => time` or
+`update`. While idle, only the current deck renders; the other is reset and
+shrunk to a couple of pixels. During a fade both render, the incoming canvas
+over the outgoing one. The recorder captures `#stage`, so while recording
+Ao draws the same blend into it every frame. Hydra's names stay available on
+`window` for the DevTools console, pointing at the current deck.
 
 ## Code explorer
 
@@ -194,6 +359,94 @@ values for `ao.loudness`, `ao.impulse`, `ao.beat`, `ao.bass`, `ao.mid` and
 window, not part of the visuals, and draws nothing while hidden. Ao remembers
 whether it was showing.
 
+## Live values
+
+The meter's information, where you're writing: after each `ao` expression in
+the code, a small sparkline of its last 2.5 seconds and its current value.
+`ao.bass`, `ao.hz(40, 100)` and `ao.fftAt(0.2)` show what they read, and
+`ao.map("bass", 0, 2)` shows the mapped value. An argument Hydra re-reads,
+such as `() => 4 * ao.hz(6000, 12000)`, shows as one value, the one Hydra
+sees. `ao.fft` shows a tiny spectrum. Hover a value for its full precision.
+Ctrl+Shift+L turns them off or back on, and Ao remembers.
+
+Nothing you write is run to get these values. Expressions are read from the
+syntax tree, and only literals, arithmetic, a few `Math` functions and `ao`'s
+own getters and methods (called with literal arguments) count: anything
+else, such as `() => spin + ao.bass`, shows just the `ao` reads inside it.
+Strings and comments are skipped. New `ao` members show up automatically.
+Values are drawn only on visible lines, at most 40 of them, and nothing is
+drawn while they're off or the editor is hidden.
+
+## Tempo
+
+Ao keeps a beat clock, so motion can move with the music rather than only
+react to how loud it is. `ao.beat` pulses on each detected onset, whatever
+its timing; the clock runs steadily at the tempo between hits, carries on
+through breaks, and knows where the next beat will land:
+
+- `ao.bpm`: the tempo, detected or tapped; 120 until something is detected.
+- `ao.phase`: `0..1` through the current beat, wrapping on each beat.
+- `ao.bar`: the beat within a 4-beat bar, `0`, `1`, `2` or `3`.
+- `ao.ramp(n = 1)`: a `0..1` ramp over every `n` beats, aligned to the bar;
+  `ao.ramp(4)` runs once per bar.
+- `ao.pulse(div = 1)`: `1` on every `1/div` of a beat, easing to `0` by the
+  next; `ao.pulse(2)` on eighths, `ao.pulse(1/4)` once a bar.
+- `ao.tempoConfidence`: `0..1`, how sure the detected tempo is; `1` while
+  tapped.
+
+```js
+shape(4, 0.2)
+  .rotate(() => (ao.bar + Math.min(1, 5 * ao.phase)) * Math.PI / 4)  // step each beat
+  .scale(() => 1 + 0.3 * ao.pulse())
+  .add(shape([3, 4, 5, 6], 0.5).rotate(() => 2 * Math.PI * ao.ramp(4)))  // one turn a bar
+  .out()
+```
+
+GLSL scenes get the same clock as `aoBpm`, `aoPhase` and `aoBar`.
+`sketches/tempo.js` puts it together.
+
+**Detection** runs in the main process on the captured audio. It measures
+onset strength about 190 times a second from the energy in three bands
+(kicks weigh most), autocorrelates the last 8 seconds of it, and scores
+every tempo from 70 to 180 bpm by the autocorrelation at one to four beat
+periods. The true beat outscores its half and double because they miss
+some of those peaks; a mild preference for tempos near 120 settles what's
+left. The phase comes from folding recent onsets at the beat period, and a
+free-running clock is steered toward it gently, so phase never jumps on a
+single hit. It locks within about five seconds, follows a tempo change in
+two or three, and through silence or a breakdown it holds the last tempo
+while its confidence fades.
+
+**Tap tempo** is the fallback and override, since no detector is right
+about every track. Press Ctrl+Shift+T (`t` with the editor hidden) on each
+beat, starting on the one: the first tap sets the phase and makes that beat
+bar `0`, keeping the current tempo, and each further tap is the next beat.
+The tempo is the median of the last eight tap intervals, and a pause over
+two seconds starts a new sequence. A tapped tempo stays until you tap twice
+quickly (under a quarter second apart); then detection takes over again,
+keeping the bar where you tapped it. The status bar shows the result, for
+example `tempo 128.0 (tap)` or `tempo 127.9 (auto, 82%)`.
+
+Detection can't tell which beat starts a bar, so until you tap, bar `0` is
+simply the beat the clock happened to start on. Tapping once on the one
+fixes that; two quick taps then return to the detected tempo, keeping it.
+
+**Hydra's `bpm`**, which sets the speed of array sequences such as
+`shape([3, 4, 5, 6])` or `[1, 2].fast(2)`, follows the tempo once detection is
+confident or you've tapped. Ao also lines the sequences up with its beat,
+not just its tempo: `[a, b, c, d]` changes exactly on each beat and starts
+over on each bar, and `.fast(2)` steps on eighths. If a sketch sets `bpm`
+itself, Ao leaves it, and its arrays, to Hydra until the whole sketch next
+runs without setting it.
+
+Things to know:
+
+- Tempos outside 70–180 bpm are reported at their half or double.
+- The phase runs a frame or two behind the sound, like the other levels.
+- [Ableton Link](https://www.ableton.com/en/link/) isn't supported yet, so
+  the clock can't sync with other software.
+- Detection costs about 40 µs per 20 ms audio chunk, 0.2% of a core.
+
 ## Night fade
 
 Late at night the visuals ease down to a dimmer brightness so they aren't
@@ -213,13 +466,15 @@ canvas stream: a recording made at night is captured at full brightness.
 ## Settings
 
 `state/settings.json` holds your preferences. Ao reads it at startup, so
-restart after editing it; toggling the meter or night fade updates just that
-field and keeps the rest of the file. Missing or invalid values fall back to
+restart after editing it; toggling the meter, night fade or autopilot updates
+just that field and keeps the rest of the file. Missing or invalid values fall back to
 the defaults:
 
 ```json
 {
   "meter": false,
+  "liveValues": true,
+  "format": true,
   "night": {
     "mode": "schedule",
     "start": "22:00",
@@ -227,11 +482,14 @@ the defaults:
     "brightness": 0.4,
     "fadeMinutes": 45,
     "speed": 1
-  }
+  },
+  "autopilot": { "enabled": false, "dwellSeconds": 120, "fadeSeconds": 4, "switchOnSections": true, "minSeconds": 45 }
 }
 ```
 
 - `meter`: whether the audio meter is showing.
+- `liveValues`: whether live values show beside `ao` expressions in the code.
+- `format`: whether running code in the editor also formats it.
 - `night.mode`: `"schedule"`, `"on"` (always night), or `"off"` (never).
 - `night.start`, `night.end`: local 24-hour `HH:MM` times of the window;
   equal times make it empty.
@@ -241,6 +499,7 @@ the defaults:
 - `night.speed`: optionally slow Hydra and scene time at night, `0.1..1`, eased
   in with the fade; `1` (the default) leaves speed alone. Audio levels are
   unaffected.
+- `autopilot`: see [Autopilot](#autopilot).
 
 ## Challenge mode
 
@@ -312,16 +571,18 @@ npx electron . --sketch=dunes --hide-editor --record-seconds=30
 ## Screenshots
 
 `make screenshot SKETCH=dunes` renders a sketch offscreen with a synthetic
-kick-and-pad signal and writes `state/dunes.png`. Useful for checking a
-change without watching the screen, and it prints the frame rate it reached.
+kick, pad and hats signal (slightly stereo) and writes `state/dunes.png`.
+Useful for checking a change without watching the screen, and it prints the
+frame rate it reached.
 Screenshots ignore `settings.json`, so the meter and night fade stay out of
 them unless you ask: add `--meter` or `--night=on` to the `electron` command
 (`npx electron . --sketch=dunes --hide-editor --meter --screenshot=state/dunes.png`).
+Live values keep their default (on) whenever the editor shows.
 
 ## Layout
 
 - `src/main`: Electron main process, audio capture, state and sketch files.
-- `src/shared`: audio analysis (FFT, loudness, impulse, beat), kept pure.
+- `src/shared`: audio analysis (FFT, loudness, impulse, beat, tempo), kept pure.
 - `src/preload`: the narrow bridge the renderer may call.
 - `src/renderer`: Hydra host, GLSL scene runner, overlay editor.
 - `sketches`: the visualizers.

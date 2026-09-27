@@ -1,4 +1,6 @@
 import type { AudioFeatures } from "../shared/features";
+import { spectrogram, SpectrumHistory } from "./spectrogram";
+import { barNow, clock, phaseNow } from "./tempo";
 
 export type UniformValue = number | number[] | (() => number | number[]);
 export interface SceneOptions {
@@ -68,9 +70,28 @@ uniform float aoBeat;
 uniform float aoBass;
 uniform float aoMid;
 uniform float aoHigh;
+uniform float aoBpm;
+uniform float aoPhase;
+uniform float aoBar;
 uniform sampler2D aoSpectrum;
 /** Band level at x in 0..1, low to high frequency. */
 float aoFFT(float x) { return texture(aoSpectrum, vec2(clamp(x, 0., 1.), .5)).r; }
+// Waveform, spectrogram history, stereo image and chroma.
+uniform sampler2D aoWave;
+uniform sampler2D aoSpectrogram;
+uniform float aoSpectrogramRow;
+uniform float aoBalance;
+uniform float aoWidth;
+uniform float aoChroma[12];
+uniform float aoKey;
+/** Waveform at x in 0..1 across the newest ~21 ms, -1..1. */
+float aoWaveAt(float x) { return texture(aoWave, vec2(clamp(x, 0., 1.), .5)).r; }
+/** Band level at x (0..1, low to high) as it was age ago: 0 newest, 1 oldest (~5 s). */
+float aoHistory(float x, float age) {
+  float rows = float(textureSize(aoSpectrogram, 0).y);
+  float row = aoSpectrogramRow - clamp(age, 0., 1.) * (rows - 1.);
+  return texture(aoSpectrogram, vec2(clamp(x, 0., 1.), (row + .5) / rows)).r;
+}
 out vec4 aoFragColor;
 `;
 
@@ -109,6 +130,13 @@ export class Scene {
   private setters: ((at: WebGLUniformLocation, v: number[]) => void)[];
   private frame = 0;
   options: SceneOptions = {};
+  // Waveform and spectrogram textures, on units 1 and 2.
+  private wave: WebGLTexture;
+  private waveData = new Float32Array(0);
+  private waveSource: ArrayLike<number> | null = null;
+  private history: WebGLTexture;
+  private historyUploaded = -1;
+  private historyVersion = -1;
 
   /** `onError` hears about uniforms that threw or returned unusable values. */
   constructor(private readonly onError: (message: string) => void = () => {}) {
@@ -130,6 +158,20 @@ export class Scene {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    this.wave = this.createTexture(gl.CLAMP_TO_EDGE);
+    // Rows repeat, so aoHistory reads straight across the ring's wrap.
+    this.history = this.createTexture(gl.REPEAT);
+  }
+
+  private createTexture(wrapT: number): WebGLTexture {
+    const gl = this.gl;
+    const texture = gl.createTexture()!;
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrapT);
+    return texture;
   }
 
   /** Compiles `code` unless it is already running. Throws and keeps the old program on error. */
@@ -200,7 +242,11 @@ export class Scene {
     this.uniform("aoBass", audio.bass);
     this.uniform("aoMid", audio.mid);
     this.uniform("aoHigh", audio.high);
+    this.uniform("aoBpm", clock.bpm);
+    this.uniform("aoPhase", phaseNow());
+    this.uniform("aoBar", barNow());
     this.uniformInt("aoSpectrum", 0);
+    this.renderShaderAudio(audio);
     for (const [name, value] of Object.entries(this.options.uniforms ?? {})) {
       const info = this.uniforms.get(name);
       if (!info) continue; // undeclared, or unused and optimized away
@@ -213,6 +259,64 @@ export class Scene {
       this.setters[info.size - 1](info.location, result.value);
     }
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  /**
+   * Waveform, spectrogram, stereo and chroma inputs. Textures upload only
+   * when their data changed: the waveform when new features arrive, the
+   * spectrogram only its new rows.
+   */
+  private renderShaderAudio(audio: AudioFeatures, history: SpectrumHistory = spectrogram): void {
+    const gl = this.gl;
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.wave);
+    if (audio.wave && audio.wave !== this.waveSource) {
+      this.waveSource = audio.wave;
+      this.uploadRow(audio.wave);
+    }
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, this.history);
+    this.uploadHistory(history);
+    gl.activeTexture(gl.TEXTURE0);
+    this.uniformInt("aoWave", 1);
+    this.uniformInt("aoSpectrogram", 2);
+    this.uniform("aoSpectrogramRow", history.newest);
+    this.uniform("aoBalance", audio.balance ?? 0);
+    this.uniform("aoWidth", audio.width ?? 0);
+    this.uniform("aoKey", audio.key ?? 0);
+    const chroma = this.uniforms.get("aoChroma[0]");
+    if (chroma && audio.chroma?.length === 12) gl.uniform1fv(chroma.location, audio.chroma);
+  }
+
+  /** Streams the waveform into the bound one-row texture, allocated once per length. */
+  private uploadRow(values: ArrayLike<number>): void {
+    const gl = this.gl;
+    if (this.waveData.length !== values.length) {
+      this.waveData = new Float32Array(values.length);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, Math.max(1, values.length), 1, 0, gl.RED, gl.FLOAT, null);
+    }
+    if (!values.length) return;
+    this.waveData.set(values);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, values.length, 1, gl.RED, gl.FLOAT, this.waveData);
+  }
+
+  /** Uploads the spectrogram rows written since the last upload into the bound texture. */
+  private uploadHistory(history: SpectrumHistory): void {
+    if (history.version === this.historyVersion) return;
+    const gl = this.gl;
+    const { bands, rows, data } = history;
+    if (this.historyUploaded < 0 || history.written - this.historyUploaded >= rows) {
+      if (this.historyUploaded < 0) gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, bands, rows, 0, gl.RED, gl.FLOAT, null);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, bands, rows, gl.RED, gl.FLOAT, data);
+    } else {
+      // From the previously newest row, which may have been refreshed since.
+      for (let w = Math.max(0, this.historyUploaded - 1); w < history.written; w++) {
+        const row = w % rows;
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, row, bands, 1, gl.RED, gl.FLOAT, data, row * bands);
+      }
+    }
+    this.historyUploaded = history.written;
+    this.historyVersion = history.version;
   }
 
   /** Streams the spectrum into texture storage that is allocated once per length. */
