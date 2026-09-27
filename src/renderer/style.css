@@ -92,7 +92,7 @@ html, body {
 
 body.ambient #editor { display: none; }
 body.ambient #bar { background: none; }
-body.ambient #sketch, body.ambient #fps:not(.shown) { display: none; }
+body.ambient #sketch, body.ambient #vim-mode, body.ambient #fps:not(.shown) { display: none; }
 body.ambient #status:not(.error) { display: none; }
 
 #help {
@@ -112,3 +112,9 @@ body.ambient #status:not(.error) { display: none; }
 #help dd { margin: 0; }
 #help p { margin: 14px 0 0; opacity: 0.75; }
 kbd { color: var(--accent); font-family: inherit; }
+
+/* Capture and audio messages from the main process; runs don't clear them. */
+#notice { max-width: 40%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; opacity: 0.6; }
+#notice:empty { display: none; }
+#notice.error { color: var(--error); opacity: 1; }
+body.ambient #notice:not(.error) { display: none; }

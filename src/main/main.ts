@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain } from "electron";
 import { watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Capture, startCapture, startFakeCapture } from "./capture";
+import { isAppNavigation } from "./navigation";
 import { Store } from "./store";
 
 interface WindowState { x?: number; y?: number; width: number; height: number; fullscreen: boolean }
@@ -42,6 +43,18 @@ function createWindow(): BrowserWindow {
     },
   });
   if (options.screenshot) win.webContents.setFrameRate(60);
+  // Sketches may load remote media, but never replace Ao with a remote page:
+  // that page would get the preload bridge. New windows are denied outright.
+  win.webContents.on("will-navigate", (event, url) => {
+    if (!isAppNavigation(url, win.webContents.getURL())) {
+      event.preventDefault();
+      store.log(`blocked navigation to ${url}`);
+    }
+  });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    store.log(`blocked window.open(${url})`);
+    return { action: "deny" };
+  });
   const remember = () => {
     if (win.isDestroyed()) return;
     const fullscreen = win.isFullScreen();
