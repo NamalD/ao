@@ -4,10 +4,12 @@ import { defaultNight, NightSettings, normalizeNight } from "./night";
 export interface Settings {
   /** Whether the audio meter overlay is shown. */
   meter: boolean;
+  /** Whether live values show beside `ao` expressions in the editor. */
+  liveValues: boolean;
   night: NightSettings;
 }
 
-export const defaultSettings: Settings = { meter: false, night: defaultNight };
+export const defaultSettings: Settings = { meter: false, liveValues: true, night: defaultNight };
 
 /**
  * Settings from untrusted JSON: known keys are validated and defaulted,
@@ -18,6 +20,7 @@ export function normalizeSettings(raw: unknown): Settings {
   return {
     ...r,
     meter: typeof r.meter === "boolean" ? r.meter : defaultSettings.meter,
+    liveValues: typeof r.liveValues === "boolean" ? r.liveValues : defaultSettings.liveValues,
     night: normalizeNight(r.night),
   };
 }
@@ -31,6 +34,7 @@ export function mergeSettings(current: Settings, patch: unknown): Settings {
   return {
     ...current,
     meter: typeof p.meter === "boolean" ? p.meter : current.meter,
+    liveValues: typeof p.liveValues === "boolean" ? p.liveValues : current.liveValues,
     night: p.night && typeof p.night === "object" ? normalizeNight({ ...current.night, ...p.night }, current.night) : current.night,
   };
 }
