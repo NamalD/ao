@@ -212,19 +212,88 @@ export const solidShapeNames = solidFunctions.filter((fn) => fn.type === "shape"
 /** Methods that continue a solid chain, plus `pipe` and `out`. */
 export const solidMethods = [...solidFunctions.filter((fn) => fn.type !== "shape").map((fn) => fn.name), "pipe", "out"];
 
-/**
- * The name a method chain starts from, such as `sphere` in
- * `sphere(1).spikes(0.3).spin()`, for a node anywhere in that chain.
- */
-export function chainRoot(state: EditorState, node: SyntaxNode | null): string | undefined {
-  const chain = (n: SyntaxNode | null) => n?.name === "MemberExpression" || n?.name === "CallExpression";
-  while (node?.parent && chain(node.parent)) node = node.parent;
-  while (chain(node)) node = node!.firstChild;
-  return node?.name === "VariableName" ? state.sliceDoc(node.from, node.to) : undefined;
+/** What an expression holds, as far as completion after its `.` cares. */
+export type Receiver = "hydra" | "solid" | "ao" | "source" | "output";
+
+const text = (state: EditorState, node: SyntaxNode) => state.sliceDoc(node.from, node.to);
+
+/** The expression `name` was last given before `pos`, by `const name = …` or `name = …`. */
+function assignedValue(state: EditorState, name: string, pos: number): SyntaxNode | null {
+  let value: SyntaxNode | null = null;
+  syntaxTree(state).iterate({
+    from: 0,
+    to: pos,
+    enter(ref) {
+      const target = ref.name === "AssignmentExpression" ? ref.node.firstChild
+        : ref.name === "VariableDefinition" && ref.node.parent?.name === "VariableDeclaration" ? ref.node : null;
+      if (!target || !["VariableName", "VariableDefinition"].includes(target.name) || text(state, target) !== name) return;
+      const equals = target.nextSibling;
+      if (equals?.name === "Equals" && equals.nextSibling && equals.nextSibling.to <= pos) value = equals.nextSibling;
+    },
+  });
+  return value;
 }
 
-/** Whether the chain at a node is a solid, so its methods are the solid ones. */
-export const isSolidChain = (state: EditorState, node: SyntaxNode | null) => solidShapeNames.includes(chainRoot(state, node) ?? "");
+/**
+ * A parameter of a function around `node` named `name`: a solid when it is
+ * the first parameter of an arrow passed to a solid's pipe, else unknown.
+ */
+function parameter(state: EditorState, node: SyntaxNode, name: string, depth: number): Receiver | undefined | null {
+  for (let fn = node.parent; fn; fn = fn.parent) {
+    if (!["ArrowFunction", "FunctionExpression", "FunctionDeclaration"].includes(fn.name)) continue;
+    const params = fn.getChild("ParamList")?.getChildren("VariableDefinition") ?? [];
+    const index = params.findIndex((param) => text(state, param) === name);
+    if (index < 0) continue;
+    const call = fn.parent?.name === "ArgList" ? fn.parent.parent : null;
+    const callee = call?.name === "CallExpression" ? call.firstChild : null;
+    const piped = index === 0 && callee?.name === "MemberExpression" && callee.lastChild && text(state, callee.lastChild) === "pipe"
+      && receiverOf(state, callee.firstChild, depth + 1) === "solid";
+    return piped ? "solid" : undefined;
+  }
+  return null;
+}
+
+/**
+ * What the expression at `node` holds, read from its syntax: a Hydra or
+ * solid chain, `ao`, a source or an output. A variable follows its last
+ * assignment; anything else, such as `ao.bass` or `.out()`, is undefined.
+ */
+export function receiverOf(state: EditorState, node: SyntaxNode | null, depth = 0): Receiver | undefined {
+  if (!node || depth > 20) return undefined;
+  if (node.name === "ParenthesizedExpression") return receiverOf(state, node.firstChild?.nextSibling ?? null, depth + 1);
+  if (node.name === "VariableName") {
+    const name = text(state, node);
+    const param = parameter(state, node, name, depth);
+    if (param !== null) return param;
+    const value = assignedValue(state, name, node.from);
+    if (value) return receiverOf(state, value, depth + 1);
+    if (name === "ao") return "ao";
+    if (/^s[0-3]$/.test(name)) return "source";
+    if (/^(o[0-3]|oS)$/.test(name)) return "output";
+    return undefined;
+  }
+  if (node.name !== "CallExpression") return undefined;
+  const callee = node.firstChild;
+  if (callee?.name === "VariableName") {
+    const name = text(state, callee);
+    if (solidShapeNames.includes(name)) return "solid";
+    const generator = generators.includes(name) || extensionNames().topLevel.some((fn) => fn.kind === "generator" && fn.name === name);
+    return generator ? "hydra" : undefined;
+  }
+  if (callee?.name !== "MemberExpression" || callee.lastChild?.name !== "PropertyName") return undefined;
+  const method = text(state, callee.lastChild);
+  if (method === "out") return undefined;
+  const owner = receiverOf(state, callee.firstChild, depth + 1);
+  if (owner === "solid" && solidMethods.includes(method)) return "solid";
+  if (owner === "hydra" && (chainMethods.includes(method) || extensionNames().chain.some((fn) => fn.name === method))) return "hydra";
+  return undefined;
+}
+
+/** The expression before the `.` at `dot`, or null when that `.` isn't a member access. */
+function receiverNode(state: EditorState, dot: number): SyntaxNode | null {
+  const token = syntaxTree(state).resolveInner(dot, 1);
+  return token.name === "." && token.parent?.name === "MemberExpression" ? token.parent.firstChild : null;
+}
 
 /** Hydra globals that aren't GLSL functions. */
 const globalDocs: Record<string, { type: string; doc: FunctionDoc }> = {
@@ -377,22 +446,32 @@ function extensionOption(fn: ExtensionFunction, used: ReadonlySet<string>): Comp
   };
 }
 
-/**
- * Completion options after `ao.`, `s0.`, `o0.` and friends, or `.` on a
- * chain; `solid` for a solid chain. `used`: the extensions the sketch loads.
- */
-export function memberCompletions(owner: string | undefined, solid = false, used: ReadonlySet<string> = new Set()): Completion[] {
-  if (owner === "ao") {
-    return publicAoMembers().map(({ name, method }) =>
-      documented(name, method ? "method" : "property", aoFunctionDocs.get(name), "Ao audio"));
+/** Completion options after the `.` on a receiver. `used`: the extensions the sketch loads. */
+export function memberCompletions(receiver: Receiver, used: ReadonlySet<string> = new Set()): Completion[] {
+  switch (receiver) {
+    case "ao":
+      return publicAoMembers().map(({ name, method }) =>
+        documented(name, method ? "method" : "property", aoFunctionDocs.get(name), "Ao audio"));
+    case "source": return sourceMembers.map((name) => documented(name, "method", sourceDocs[name], "Hydra source"));
+    case "output": return extensionNames().outputs.map((fn) => extensionOption(fn, used));
+    case "solid": return solidMethods.map((name) => documented(name, "method", solidDocs.get(name), "Solid method"));
+    case "hydra": return [
+      ...chainMethods.map((name) => documented(name, "method", hydraFunctionDocs.get(name), "Hydra chain method")),
+      ...extensionNames().chain.map((fn) => extensionOption(fn, used)),
+    ];
   }
-  if (owner && /^s[0-3]$/.test(owner)) return sourceMembers.map((name) => documented(name, "method", sourceDocs[name], "Hydra source"));
-  if (isOutput(owner)) return extensionNames().outputs.map((fn) => extensionOption(fn, used));
-  if (solid) return solidMethods.map((name) => documented(name, "method", solidDocs.get(name), "Solid method"));
-  return [
-    ...chainMethods.map((name) => documented(name, "method", hydraFunctionDocs.get(name), "Hydra chain method")),
-    ...extensionNames().chain.map((fn) => extensionOption(fn, used)),
-  ];
+}
+
+/** Members of a built-in namespace such as Math or JSON, read from the runtime. */
+function namespaceCompletions(name: string): Completion[] | null {
+  if (!/^[A-Z][\w$]*$/.test(name)) return null;
+  const value: unknown = (globalThis as Record<string, unknown>)[name];
+  if ((typeof value !== "object" && typeof value !== "function") || value === null) return null;
+  return Object.getOwnPropertyNames(value).filter((key) => /^[A-Za-z_$][\w$]*$/.test(key) && key !== "prototype").map((key) => ({
+    label: key,
+    type: typeof (value as Record<string, unknown>)[key] === "function" ? "method" : "property",
+    detail: name,
+  }));
 }
 
 /** Completion options at the start of an expression. `used`: the extensions the sketch loads. */
@@ -443,7 +522,8 @@ export function callParameterContext(state: EditorState, pos: number): { name: s
   for (let child = args.firstChild; child; child = child.nextSibling) {
     if (child.name === "," && child.from < pos) activeParameter++;
   }
-  return { name: callee[2], owner: callee[1], solid: isSolidChain(state, call), activeParameter };
+  const member = call.firstChild?.name === "MemberExpression" ? call.firstChild.firstChild : null;
+  return { name: callee[2], owner: callee[1], solid: receiverOf(state, member) === "solid", activeParameter };
 }
 
 function signatureTooltip(state: EditorState, pos: number): Tooltip | null {
@@ -498,16 +578,21 @@ export function hydraCompletions(context: CompletionContext): CompletionResult |
     if (["String", "TemplateString", "LineComment", "BlockComment"].includes(current.name)) return null;
   }
 
+  if (node.name === "VariableDefinition") return null;
+
   const word = context.matchBefore(/[\w$]+/);
   const justTypedDot = context.state.doc.sliceString(Math.max(0, context.pos - 1), context.pos) === ".";
   if (!word && !context.explicit && !justTypedDot) return null;
   const from = word?.from ?? context.pos;
-  const before = context.state.doc.sliceString(Math.max(0, from - 100), from);
-  const member = before.match(/(?:\b(ao|s[0-3]|o[0-3]|oS)|\))\.$/);
+  const dot = context.state.doc.sliceString(Math.max(0, from - 100), from).match(/\.\s*$/);
   const used = usedExtensions(context.state.doc.toString());
-  if (member || /\.\s*$/.test(before)) {
-    const solid = !member?.[1] && isSolidChain(context.state, node);
-    return { from, options: memberCompletions(member?.[1], solid, used), validFor: /^[\w$]*$/ };
+  if (dot) {
+    const receiver = receiverNode(context.state, from - dot[0].length);
+    const kind = receiverOf(context.state, receiver);
+    const options = kind ? memberCompletions(kind, used)
+      : receiver?.name === "VariableName" && !assignedValue(context.state, text(context.state, receiver), receiver.from)
+        ? namespaceCompletions(text(context.state, receiver)) : null;
+    return options && { from, options, validFor: /^[\w$]*$/ };
   }
   return { from, options: topLevelCompletions(used), validFor: /^[\w$]*$/ };
 }

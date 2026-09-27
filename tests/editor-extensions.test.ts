@@ -26,7 +26,7 @@ describe("extension completion", () => {
   });
 
   it("offers extension chain methods after a dot, without doubling Hydra's own", () => {
-    const options = labels(memberCompletions(undefined));
+    const options = labels(memberCompletions("hydra"));
     expect(options).toEqual(expect.arrayContaining(["mirrorX", "inversion", "lookupX", "sin", "pow", "range", "clamp", "amp", "div"]));
     expect(options.filter((name) => name === "add")).toHaveLength(1);
     expect(options).not.toContain("blinking");
@@ -35,7 +35,7 @@ describe("extension completion", () => {
 
   it("offers hydra-outputs' methods after o0. to o3. and oS.", () => {
     for (const owner of ["o0", "o3", "oS"]) {
-      expect(labels(memberCompletions(owner)), owner).toEqual(expect.arrayContaining(["setLinear", "setNearest", "clear", "setFbos", "setRepeat"]));
+      expect(labels(complete(`${owner}.|`).result!.options), owner).toEqual(expect.arrayContaining(["setLinear", "setNearest", "clear", "setFbos", "setRepeat"]));
     }
     expect(labels(complete("o1.set|").result!.options)).toContain("setLinear");
     expect(labels(complete("o1.set|").result!.options)).not.toContain("rotate");

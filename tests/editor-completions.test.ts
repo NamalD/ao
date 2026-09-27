@@ -1,15 +1,24 @@
+import { CompletionContext } from "@codemirror/autocomplete";
 import { javascript } from "@codemirror/lang-javascript";
-import { syntaxTree } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import hydraFunctions from "hydra-synth/src/glsl/glsl-functions.js";
 import { describe, expect, it } from "vitest";
 import { ao, aoDocs } from "../src/renderer/audio";
 import {
-  aoMemberDocs, chainMethods, functionDoc, generators, hydraDocs, isSolidChain, memberCompletions,
+  aoMemberDocs, chainMethods, functionDoc, generators, hydraCompletions, hydraDocs, memberCompletions,
   publicAoMembers, solidMethods, solidShapeNames, topLevelCompletions,
 } from "../src/renderer/editor";
 
-const labels = (options: { label: string }[]) => options.map((option) => option.label);
+const labels = (options: readonly { label: string }[]) => options.map((option) => option.label);
+
+/** Labels completion offers with the cursor at `|` in `source`, or null for no popup. */
+function completionsAt(source: string, explicit = false): string[] | null {
+  const pos = source.indexOf("|");
+  const doc = source.slice(0, pos) + source.slice(pos + 1);
+  const state = EditorState.create({ doc, selection: { anchor: pos }, extensions: [javascript()] });
+  const result = hydraCompletions(new CompletionContext(state, pos, explicit));
+  return result && labels(result.options);
+}
 
 describe("Hydra documentation", () => {
   it("describes every built-in GLSL function and each of its inputs", () => {
@@ -33,11 +42,11 @@ describe("completion lists", () => {
     expect(generators).not.toContain("rotate");
     expect(chainMethods).toEqual(expect.arrayContaining(["rotate", "modulateHue", "sum", "layer", "out"]));
     expect(chainMethods).not.toContain("osc");
-    expect(labels(memberCompletions(undefined))).toContain("modulateHue");
+    expect(labels(memberCompletions("hydra"))).toContain("modulateHue");
   });
 
   it("offers every HydraSource method plus initScene and clearScene after s0.", () => {
-    const options = labels(memberCompletions("s0"));
+    const options = labels(memberCompletions("source"));
     expect(options).toEqual(expect.arrayContaining(["init", "initImage", "initVideo", "initCam", "initScreen", "clear", "initScene", "clearScene"]));
     expect(options).not.toContain("tick");
     expect(options).not.toContain("constructor");
@@ -85,18 +94,42 @@ describe("ao documentation", () => {
   });
 });
 
-describe("solid completions", () => {
-  const completionsAt = (doc: string) => {
-    const state = EditorState.create({ doc, extensions: [javascript()] });
-    const node = syntaxTree(state).resolveInner(doc.length, -1);
-    return labels(memberCompletions(undefined, isSolidChain(state, node)));
-  };
-
+describe("member completion follows what is before the dot", () => {
   it("offers solid methods after a solid chain and Hydra's after a Hydra one", () => {
-    expect(completionsAt("sphere(1)\n  .spikes(0.3)\n  .")).toEqual(expect.arrayContaining(["spikes", "spin", "add", "pipe", "out"]));
-    expect(completionsAt("sphere(1)\n  .spikes(0.3)\n  .")).not.toContain("modulateHue");
-    expect(completionsAt("osc(10).rotate(0.1).")).toContain("modulateHue");
-    expect(completionsAt("osc(10).add(box().")).toContain("spikes");
+    expect(completionsAt("sphere(1)\n  .spikes(0.3)\n  .|")).toEqual(expect.arrayContaining(["spikes", "spin", "add", "pipe", "out"]));
+    expect(completionsAt("sphere(1)\n  .spikes(0.3)\n  .|")).not.toContain("modulateHue");
+    expect(completionsAt("osc(10).rotate(0.1).|")).toContain("modulateHue");
+    expect(completionsAt("osc(10).add(box().|")).toContain("spikes");
+    expect(completionsAt("(noise()).|")).toContain("modulateHue");
+  });
+
+  it("offers nothing after a value that isn't a chain", () => {
+    for (const source of ["ao.bass.|", "ao.bass.a|", "foo.a|", "let x = 1\nx.a|", "osc().out().|", "ao.map(\"bass\", 0, 1).|", "0.|"]) {
+      expect(completionsAt(source), source).toBeNull();
+      expect(completionsAt(source, true), `${source} (explicit)`).toBeNull();
+    }
+  });
+
+  it("follows a variable to the chain it holds", () => {
+    expect(completionsAt("const wave = osc(10).rotate()\nwave.|")).toContain("modulateHue");
+    expect(completionsAt("let ball = sphere()\nball = ball.spin()\nball.|")).toContain("spikes");
+    expect(completionsAt("ball = sphere()\nball.|")).not.toContain("modulateHue");
+    expect(completionsAt("const out = o1\nout.set|")).toContain("setLinear");
+  });
+
+  it("treats a pipe function's first parameter as the solid it receives", () => {
+    expect(completionsAt("torus().pipe((s, n) => s.|")).toContain("spikes");
+    expect(completionsAt("const s = osc()\nconst f = (s) => s.|")).toBeNull();
+  });
+
+  it("offers a built-in namespace's own members", () => {
+    const math = completionsAt("Math.s|");
+    expect(math).toEqual(expect.arrayContaining(["sin", "sqrt", "PI"]));
+    expect(math).not.toContain("add");
+  });
+
+  it("offers nothing while naming a new variable", () => {
+    expect(completionsAt("const os|")).toBeNull();
   });
 
   it("offers solid shapes at the top level and documents every solid function", () => {
