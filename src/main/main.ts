@@ -5,6 +5,7 @@ import { Capture, startCapture, startFakeCapture } from "./capture";
 import { saveChallenge } from "./challenge-log";
 import { isAppNavigation } from "./navigation";
 import { setupRecording } from "./recording";
+import { generateThumbnails, registerSketchLibraryIpc } from "./sketch-library";
 import { Store } from "./store";
 import { mergeSettings, normalizeSettings, Settings } from "../shared/settings";
 
@@ -13,6 +14,8 @@ interface Options {
   fakeAudio: boolean; sketch?: string; screenshot?: string; delay: number; hideEditor: boolean;
   /** Screenshots ignore saved settings; these opt in to the overlays. */
   meter: boolean; night?: string;
+  /** `--thumbnails[=a,b]`: render missing sketch thumbnails offscreen, then quit. */
+  thumbnails?: string[]; force: boolean;
 }
 
 function parseOptions(argv: string[]): Options {
@@ -25,10 +28,14 @@ function parseOptions(argv: string[]): Options {
     hideEditor: argv.includes("--hide-editor"),
     meter: argv.includes("--meter"),
     night: value("night"),
+    thumbnails: argv.includes("--thumbnails") ? [] : value("thumbnails")?.split(",").filter(Boolean),
+    force: argv.includes("--force"),
   };
 }
 
 const options = parseOptions(process.argv);
+/** Screenshots and the thumbnail batch render offscreen, ignoring saved settings. */
+const headless = Boolean(options.screenshot || options.thumbnails);
 const store = new Store(app.getAppPath());
 app.commandLine.appendSwitch("ozone-platform-hint", "auto");
 // Live coding needs eval, which is exactly what this warning is about.
@@ -41,17 +48,17 @@ function createWindow(): BrowserWindow {
     title: "Ao",
     backgroundColor: "#020208",
     autoHideMenuBar: true,
-    show: !options.screenshot,
+    show: !headless,
     webPreferences: {
       preload: join(__dirname, "preload.cjs"),
       contextIsolation: true,
       sandbox: true,
       backgroundThrottling: false,
       // Screenshots render offscreen: hidden windows are throttled to ~1 fps.
-      offscreen: Boolean(options.screenshot),
+      offscreen: headless,
     },
   });
-  if (options.screenshot) win.webContents.setFrameRate(60);
+  if (headless) win.webContents.setFrameRate(60);
   // Sketches may load remote media, but never replace Ao with a remote page:
   // that page would get the preload bridge. New windows are denied outright.
   win.webContents.on("will-navigate", (event, url) => {
@@ -90,21 +97,22 @@ function registerIpc(win: () => BrowserWindow | null): void {
   ipcMain.handle("sketches:rename", (_e, from: string, to: string, code: string, overwrite: boolean) =>
     store.renameSketch(from, to, code, overwrite));
   ipcMain.handle("state:last-sketch", () => store.read("session", { sketch: "" }).sketch);
-  ipcMain.on("state:set-last-sketch", (_e, sketch: string) => store.write("session", { sketch }));
+  ipcMain.on("state:set-last-sketch", (_e, sketch: string) => { if (!headless) store.write("session", { sketch }); });
   ipcMain.on("window:fullscreen", () => { const w = win(); w?.setFullScreen(!w.isFullScreen()); });
   ipcMain.on("app:quit", () => app.quit());
   ipcMain.on("log", (_e, message: string) => store.log(message));
   ipcMain.handle("settings:read", () => readSettings());
   ipcMain.on("settings:update", (_e, patch: unknown) => {
-    if (!options.screenshot) store.write("settings", mergeSettings(readSettings(), patch));
+    if (!headless) store.write("settings", mergeSettings(readSettings(), patch));
   });
+  registerSketchLibraryIpc(store, !headless);
   ipcMain.handle("challenge:finish", (_e, result: unknown) =>
     saveChallenge(store, result, async () => (await win()!.webContents.capturePage()).toPNG()));
 }
 
 /** `state/settings.json`, or for screenshots only what the flags ask for. */
 function readSettings(): Settings {
-  if (options.screenshot) return normalizeSettings({ meter: options.meter, night: { mode: options.night ?? "off" } });
+  if (headless) return normalizeSettings({ meter: options.meter, night: { mode: options.night ?? "off" } });
   return normalizeSettings(store.read("settings", {}));
 }
 
@@ -135,7 +143,7 @@ void app.whenReady().then(() => {
   const recording = setupRecording(() => win, (message) => store.log(message));
   let capture: Capture;
   win.webContents.once("did-finish-load", () => {
-    capture = options.fakeAudio || options.screenshot
+    capture = options.fakeAudio || headless
       ? startFakeCapture((f) => send("audio", f), recording.pcm)
       : startCapture((f) => send("audio", f), report, recording.pcm);
   });
@@ -150,6 +158,9 @@ void app.whenReady().then(() => {
       writeFileSync(path, image.toPNG());
       app.quit();
     }, options.delay));
+  } else if (options.thumbnails) {
+    const batch = { force: options.force, only: options.thumbnails, delayMs: options.delay };
+    win.webContents.once("did-finish-load", () => void generateThumbnails(win!, store, batch));
   }
 });
 

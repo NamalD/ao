@@ -1,6 +1,8 @@
 import Hydra from "hydra-synth";
 import type { Bridge } from "../preload/preload";
 import { ao, updateAudio } from "./audio";
+import { SketchBrowser } from "./browser/sketch-browser";
+import { ThumbnailCapture } from "./browser/thumbnail-capture";
 import { ChallengeMode } from "./challenges/challenge-mode";
 import { createEditor, setText } from "./editor";
 import { flashStatus } from "./flash";
@@ -284,10 +286,19 @@ const challenges = new ChallengeMode({
   open, save, notify: showStatus, focus: () => { if (editorVisible()) editor.focus(); },
 });
 
+// Sketch browser (Ctrl+O, ambient `o`) and its live thumbnails of the canvas.
+const browser = new SketchBrowser({
+  listSketches: host.listSketches, recentSketches: host.recentSketches, thumbnail: host.thumbnail,
+  current: () => current, open, opening: () => { if (challenges.isOpen) challenges.close(); },
+  focus: () => { if (editorVisible()) editor.focus(); },
+});
+new ThumbnailCapture(canvas, { current: () => current, save: host.saveThumbnail, saved: (name) => browser.thumbnailSaved(name) });
+
 addEventListener("keydown", (e) => {
   const ctrl = e.ctrlKey || e.metaKey;
   const handled = () => { e.preventDefault(); e.stopPropagation(); };
   if (challenges.onKey(e)) return;
+  if (browser.onKey(e)) return;
   if (e.key === "F11") { handled(); host.toggleFullscreen(); return; }
   if (e.key === "F1") { handled(); toggleHelp(); return; }
   if (e.key === "F9") { handled(); if (!e.repeat) void recorder.toggle(); return; }
@@ -304,7 +315,7 @@ addEventListener("keydown", (e) => {
     j: () => void step(-1), k: () => void step(1), f: host.toggleFullscreen,
     e: () => setEditorVisible(true), h: toggleHelp, i: () => fpsLabel.classList.toggle("shown"),
     m: toggleMeter, n: cycleNight, q: host.quit, Escape: host.quit,
-    c: () => challenges.toggle(),
+    c: () => challenges.toggle(), o: () => browser.toggle(),
     r: () => { if (!e.repeat) void recorder.toggle(); },
   };
   const action = actions[e.key];
