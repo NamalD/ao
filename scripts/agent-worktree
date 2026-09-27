@@ -48,7 +48,7 @@ case $command in
       exit 1
     fi
     mkdir -p "$worktree_root"
-    git worktree add -b "$branch" "$target" master
+    git worktree add -b "$branch" "$target" HEAD
     ;;
   list)
     git worktree list
