@@ -5,10 +5,23 @@
 
 await use("softpattern")
 
-blinking(7, 7, () => 0.2 + 0.8 * ao.mid, 0.03)
-  .mult(concentric(4, 2, 0.5, 0.3).brightness(0.15))
+torus()
+  .spikes(ao.map("mid", -1, -1.5), ao.map("bass", 1, 8), 4, ao.map("impulse", 0.1, 0.7))
+  .noise(0.15, ao.map("bass", 1, 2))
+  .spin(0.5, 0)
+  .twist(ao.map("bass", 0, 2))
+  .intersect(sphere().wobble())
   .add(
-    smoothsun(() => 0.2 + 0.3 * ao.bass, 0.2, 1, 0.5).color(1, 0.55, 0.2),
-    () => 0.5 + 0.8 * ao.impulse,
+    cylinder()
+      .noise()
+      .intersect(sphere().noise())
+      .intersect(sphere(0.4))
+      .spikes(ao.map("high", 0.1, 0.9))
+      .spin(0.1, 0.1),
   )
-  .out()
+  .out(s0)
+
+pixel = ao.map("impulse", 2, 200)
+src(s0).out(o3)
+
+render(o3)

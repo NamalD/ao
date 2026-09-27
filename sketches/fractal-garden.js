@@ -26,11 +26,11 @@ src(o1)
   .scale(1.4)
   .rotate(() => 0.05 * time + 0.3 * ao.mid)
   .blend(warp(2, 0.04, 2, 3, ao.map("bass", 1, 1.8)).add(solid(0.4, 0.4, 0.4)), 0.25)
+  .scrollX(0, 0.1)
   .out(o1)
 
 // o0: petals mirrored into a symmetric bed, then coloured.
 src(o1)
-  .mirrorX(0, 1)
   .contrast(() => 1.2 + 0.5 * ao.impulse)
   .lookupX(palette)
   .out()
