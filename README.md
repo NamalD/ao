@@ -37,9 +37,20 @@ With the editor hidden, the old single keys work: `j`/`k` switch sketches,
 
 ## Sketches
 
-A sketch is a `.js` file in `sketches/`. Opening one runs it; saving it from
-the overlay or any other editor re-runs it. If a run fails, the previous
-visuals keep going and the error shows in the status bar.
+A sketch is a `.js` file in `sketches/`. Opening one runs it. After that,
+code runs only when you ask: Ctrl+Enter or Ctrl+Shift+Enter in the overlay.
+The overlay autosaves shortly after you stop typing, and Ctrl+S saves at
+once; neither re-runs the sketch, and saving an unchanged sketch doesn't write
+anything. Saving the file from another editor does re-run it, unless the
+overlay has unsaved edits, in which case the status bar says so and Ctrl+S
+keeps your version.
+
+If a run fails, the previous visuals keep going and the error shows in the
+status bar. Errors while the sketch runs, such as a Hydra argument function,
+`update`, or a scene uniform that throws, a timer callback, or a rejected
+promise, show there too, once each until the next run; the failing value
+falls back to its default and the visuals keep going. Capture problems from
+the main process, like missing `parec`, stay on the right of the status bar.
 
 **Patterns** are plain Hydra. Every Hydra function is available, and the
 global `ao` object carries the audio:
@@ -79,6 +90,22 @@ the scene string. `sketches/dunes.js` is a full raymarched landscape.
 
 Each evaluation runs in its own function scope, so re-running a block that
 declares `const` works; share values between blocks through globals.
+
+**Remote media** works like in Hydra's web editor: sources load images and
+video from `http(s)` URLs, and sketches may `fetch` data.
+
+```js
+s1.initImage("https://example.com/texture.jpg")
+s2.initVideo("https://example.com/loop.mp4")
+src(s1).blend(src(s2), () => ao.impulse).out()
+```
+
+Hydra requests media with `crossOrigin = "anonymous"`. Under `make run` the
+page is a local file and Electron doesn't enforce CORS, so any host works;
+under `make dev` the page is served from `localhost`, and WebGL can only
+sample media whose host sends CORS headers (`Access-Control-Allow-Origin`).
+Scripts still load only from Ao itself, and a sketch can't navigate the
+window away from Ao or open new windows.
 
 ## Screenshots
 
