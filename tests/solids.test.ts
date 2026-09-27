@@ -60,6 +60,14 @@ describe("solid chains", () => {
     expect(code).toContain("float aoReach() { return ((0.0 + abs(spikes_length)) * abs(scale_amount)); }");
     expect(code).toMatch(/float aoSlope\(\) \{ return \(0\.0 \+ 0\.5 \* abs\(spikes_length \* spikes_density\)/);
   });
+
+  it("shades a ray that runs out of steps grazing a spike base, rather than showing the background through it", () => {
+    const { code } = compileSolid(sphere().spikes(0.9, 9, 5));
+    // Tracks where the ray came closest, then falls back to it only when the
+    // loop ran out of steps (not when the ray left the scene past t = 40).
+    expect(code).toMatch(/if \(gap < closest\) \{ closest = gap; closestT = t; closestHit = hit; \}/);
+    expect(code).toContain("if (!found && t <= 40.0 && closest < 0.02) { found = true; t = closestT; hit = closestHit; }");
+  });
 });
 
 describe("solid mistakes fail when the line runs", () => {

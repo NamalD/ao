@@ -371,12 +371,19 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   float t = 0.0;
   vec4 hit = vec4(0.0);
   bool found = false;
+  // A ray grazing a steep surface, such as the base of a spike, creeps along
+  // it in tiny steps and can run out of them; shade it where it came closest.
+  float closestT = 0.0, closest = 1e9;
+  vec4 closestHit = vec4(0.0);
   for (int i = 0; i < 200; i++) {
     hit = aoMap(ro + rd * t);
-    if (abs(hit.a) < 0.0005 * (1.0 + t)) { found = true; break; }
+    float gap = abs(hit.a) / (1.0 + t);
+    if (gap < 0.0005) { found = true; break; }
+    if (gap < closest) { closest = gap; closestT = t; closestHit = hit; }
     t += aoStep * max(hit.a - reach, hit.a / slope);
     if (t > 40.0) break;
   }
+  if (!found && t <= 40.0 && closest < 0.02) { found = true; t = closestT; hit = closestHit; }
 
   vec3 colour = background;
   if (found) {
