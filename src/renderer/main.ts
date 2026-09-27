@@ -161,7 +161,7 @@ host.onSketchChanged(async (name) => {
     return;
   }
   saved = code;
-  setText(editor, code);
+  setText(editor, code, { undoable: true });
   updateLabel();
   await run(code);
 });

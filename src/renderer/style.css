@@ -2,6 +2,7 @@
   --ink: #f2f2f7;
   --shade: rgb(4 4 12 / 0.62);
   --accent: #8fd8ff;
+  --selection: rgb(46 92 140 / 0.92);
   --error: #ff8a8a;
   --mono: "JetBrains Mono", monospace;
 }
@@ -35,10 +36,19 @@ html, body {
 #editor .cm-content { caret-color: var(--accent); max-width: 110ch; }
 #editor .cm-line { width: fit-content; background: var(--shade); padding: 0 6px; }
 #editor .cm-cursor { border-left: 2px solid var(--accent); }
+/* Selections are drawn as decorations on the text (see editor.ts): the
+   drawSelection layer sits behind the lines' dark backing, where it can't be
+   seen, so it is left transparent. */
 #editor .cm-selectionBackground,
-#editor .cm-focused .cm-selectionBackground { background: rgb(143 216 255 / 0.28) !important; }
+#editor .cm-focused .cm-selectionBackground { background: transparent !important; }
+#editor .cm-selected,
+#editor .cm-line.cm-selectedLine { background: var(--selection); }
 #editor .cm-matchingBracket { outline: 1px solid rgb(143 216 255 / 0.6); background: none; }
 #editor .cm-evaluated { background: rgb(143 216 255 / 0.35); transition: background 0.25s; }
+/* Vim's `:` command line. */
+#editor .cm-panels { background: #10111b; color: var(--ink); border-top: 1px solid rgb(143 216 255 / 0.35); }
+#editor .cm-vim-panel { font: 13px/1.8 var(--mono); padding: 0 28px; }
+#editor .cm-vim-panel input { background: transparent; color: var(--ink); caret-color: var(--accent); font: inherit; }
 #editor .cm-tooltip.cm-tooltip-autocomplete {
   background: #10111b;
   color: var(--ink);
