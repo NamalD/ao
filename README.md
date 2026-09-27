@@ -153,8 +153,8 @@ it, lit and shaded, into a source you then use like any other:
 
 ```js
 sphere(1)
-  .wobble(0.1)                        // a slow liquid swell
-  .spikes(() => ao.impulse, 9, 5)     // bristles on hits
+  .wobble(0.1)                         // a slow liquid swell
+  .spikes(() => ao.impulse, 9, 5, 0.6) // bristles on hits, some longer
   .spin(0.2, 0.4)
   .color(1, 0.3, 0.6)
   .out(s0, { glow: () => ao.bass })

@@ -19,14 +19,14 @@ describe("solid chains", () => {
     // move rewrites the point first, then the sphere and its spikes see it.
     expect(code).toContain("vec3 p0 = p - vec3(move_x, move_y, move_z);");
     expect(code).toContain("vec4 s1 = vec4(vec3(0.85), length(p0) - sphere_radius);");
-    expect(code).toContain("s1.a - spikes_length * aoSpikes(p0, spikes_density, spikes_sharpness)");
+    expect(code).toContain("s1.a - spikes_length * aoSpikes(p0, spikes_density, spikes_sharpness, spikes_variety)");
     expect(code).toMatch(/vec4 aoMap\(vec3 p\) \{[\s\S]*return s3;\n\}/);
   });
 
   it("turns every argument into a uniform, filling in defaults", () => {
     const heat = () => 0.5;
     const { uniforms } = compileSolid(sphere().spikes(heat));
-    expect(uniforms).toMatchObject({ sphere_radius: 1, spikes_length: heat, spikes_density: 8, spikes_sharpness: 4 });
+    expect(uniforms).toMatchObject({ sphere_radius: 1, spikes_length: heat, spikes_density: 8, spikes_sharpness: 4, spikes_variety: 0 });
   });
 
   it("keeps the shader the same when only numbers change, so scrubbing never recompiles", () => {

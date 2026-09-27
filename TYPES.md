@@ -219,7 +219,7 @@ vertically at the centre, with `+y` up and `+z` towards the camera.
 | `.scale(amount = 1)` | Grows or shrinks it. |
 | `.repeat(x = 3, y = 0, z = 3)` | Repeats it endlessly with this spacing; `0` doesn't repeat along that axis. |
 | `.twist(amount = 1)` | Twists it around the y axis, radians per unit of height. |
-| `.spikes(length = 0.3, density = 8, sharpness = 4)` | Sharp spikes out of the surface. |
+| `.spikes(length = 0.3, density = 8, sharpness = 4, variety = 0)` | Sharp spikes out of the surface; `variety` gives each spike its own length, from all alike (`0`) to anywhere between nothing and `length` (`1`). |
 | `.wobble(amount = 0.1, frequency = 3, speed = 1)` | A slow liquid swell. |
 | `.noise(amount = 0.15, scale = 2, speed = 0.5)` | Lumpy, evolving noise. |
 | `.spectrum(amount = 0.4)` | Pushes the surface out by the spectrum, lows at the bottom and highs at the top. |
