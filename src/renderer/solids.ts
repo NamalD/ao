@@ -80,12 +80,36 @@ export const solidFunctions: SolidFunction[] = [
   { name: "scale", type: "modify", description: "Grows or shrinks the solid.",
     params: [param("amount", 1, "Size factor: above 1 grows, below 1 shrinks.")],
     point: "{p} / {amount}", distance: "{d} * {amount}", reach: "{reach} * abs({amount})" },
-  { name: "repeat", type: "modify", description: "Repeats the solid endlessly along each axis.",
-    params: [param("x", 3, "Spacing along x; 0 doesn't repeat."), param("y", 0, "Spacing along y; 0 doesn't repeat."), param("z", 3, "Spacing along z; 0 doesn't repeat.")],
-    point: "aoRepeat({p}, vec3({x}, {y}, {z}))" },
+  { name: "repeat", type: "modify", description: "Repeats the solid along each axis, endlessly or a set number of times.",
+    params: [param("x", 3, "Spacing along x; 0 doesn't repeat."), param("y", 0, "Spacing along y; 0 doesn't repeat."), param("z", 3, "Spacing along z; 0 doesn't repeat."), param("count", 0, "Copies along each repeating axis, centred; 0 repeats endlessly.")],
+    point: "aoRepeat({p}, vec3({x}, {y}, {z}), {count})" },
+  { name: "radial", type: "modify", description: "Repeats the solid in a ring around the upright axis; move it out along x first.",
+    params: [param("count", 6, "Copies around the ring; keep each copy inside its slice.")],
+    point: "aoRadial({p}, {count})" },
+  { name: "mirror", type: "modify", description: "Reflects the solid across the centre on each chosen axis; move it off-centre first.",
+    params: [param("x", 1, "1 mirrors left and right, 0 doesn't."), param("y", 0, "1 mirrors up and down, 0 doesn't."), param("z", 0, "1 mirrors front and back, 0 doesn't.")],
+    point: "mix({p}, abs({p}), step(0.5, vec3({x}, {y}, {z})))" },
+  { name: "elongate", type: "modify", description: "Stretches the middle of the solid, keeping its ends: a sphere becomes a capsule.",
+    params: [param("x", 1, "Extra length along x."), param("y", 0, "Extra length along y."), param("z", 0, "Extra length along z.")],
+    point: "aoElongate({p}, vec3({x}, {y}, {z}))" },
   { name: "twist", type: "modify", description: "Twists the solid around its upright axis; large amounts may tear.",
     params: [param("amount", 1, "Radians of twist per unit of height.")],
     point: "aoTwist({p}, {amount})", reach: "1e6", slope: "{slope} + 2.0 * abs({amount})" },
+  { name: "bend", type: "modify", description: "Curls the solid sideways into an arch; large amounts may tear.",
+    params: [param("amount", 0.5, "Radians of bend per unit along x; negative bends the other way.")],
+    point: "aoBend({p}, {amount})", reach: "1e6", slope: "{slope} + 2.0 * abs({amount})" },
+  { name: "taper", type: "modify", description: "Narrows or widens the solid with height: a cylinder becomes a cone.",
+    params: [param("amount", -0.4, "Change in width per unit of height; negative narrows upwards.")],
+    point: "aoTaper({p}, {amount})", distance: "{d} * min(aoTaperWidth({p}.y, {amount}), 1.0)",
+    reach: "1e6", slope: "{slope} + 2.0 * abs({amount})" },
+  { name: "ripple", type: "modify", description: "Rings of waves spreading out from the centre; try it on a plane, driven by the bass.",
+    params: [param("amount", 0.1, "Height of the waves."), param("frequency", 6, "Waves per unit outwards: higher packs them closer."), param("speed", 2, "How fast they spread; negative draws them in.")],
+    point: "{p} - vec3(0.0, {amount} * sin({frequency} * length({p}.xz) - {speed} * iTime), 0.0)",
+    reach: "{reach} + abs({amount})", slope: "{slope} + abs({amount} * {frequency})" },
+  { name: "warp", type: "modify", description: "Bends space itself with evolving noise, smearing the solid like melting wax.",
+    params: [param("amount", 0.2, "How far space moves."), param("scale", 1.5, "Noise frequency; higher gives tighter bends."), param("speed", 0.3, "How fast the noise evolves.")],
+    point: "{p} + {amount} * aoWarp({p} * {scale} + iTime * {speed})",
+    reach: "{reach} + 1.8 * abs({amount})", slope: "{slope} + 3.0 * abs({amount} * {scale})" },
   // Surface
   { name: "spikes", type: "modify", description: "Pushes sharp spikes out of the surface; drive the length with the music.",
     params: [param("length", 0.3, "How far the spikes reach; 0 is smooth."), param("density", 8, "How many spikes: higher packs in more, thinner ones."), param("sharpness", 4, "Higher makes needles, lower makes soft bumps."), param("variety", 0, "How much spike lengths differ: 0 all alike, 1 from nothing to full length.")],
@@ -103,12 +127,27 @@ export const solidFunctions: SolidFunction[] = [
     params: [param("amount", 0.4, "How far a full-level band pushes out.")],
     distance: "{d} - {amount} * aoFFT(0.5 + 0.5 * aoDirection({p}).y)",
     reach: "{reach} + abs({amount})", slope: "{slope} + 8.0 * abs({amount})" },
+  { name: "waveform", type: "modify", description: "Wraps the waveform around the solid's equator, fading out towards its poles.",
+    params: [param("amount", 0.3, "How far a full-scale wave pushes out.")],
+    distance: "{d} - {amount} * aoWaveform({p})",
+    reach: "{reach} + abs({amount})", slope: "{slope} + 16.0 * abs({amount})" },
+  { name: "ridges", type: "modify", description: "Sharp horizontal ridges that scroll along the solid; drive the speed with the tempo.",
+    params: [param("amount", 0.08, "How far the ridges stand out."), param("frequency", 12, "Ridges per unit of height, over π."), param("speed", 1, "How fast they scroll upwards; negative scrolls down.")],
+    distance: "{d} - {amount} * (1.0 - abs(sin({frequency} * {p}.y - {speed} * iTime)))",
+    reach: "{reach} + abs({amount})", slope: "{slope} + abs({amount} * {frequency})" },
+  { name: "cells", type: "modify", description: "Cracks the surface into cells, like dried mud or scales.",
+    params: [param("amount", 0.06, "How deep the cracks cut; negative raises veins instead."), param("scale", 3, "Cells per unit; higher gives smaller cells."), param("speed", 0, "How fast the cells drift.")],
+    distance: "{d} + {amount} * aoCracks({p} * {scale} + iTime * {speed})",
+    reach: "{reach} + abs({amount})", slope: "{slope} + 7.0 * abs({amount} * {scale})" },
   { name: "round", type: "modify", description: "Rounds edges by growing the solid outwards.",
     params: [param("radius", 0.1, "Rounding radius.")],
     distance: "{d} - {radius}" },
   { name: "shell", type: "modify", description: "Hollows the solid into a thin skin; cut it open with sub to see inside.",
     params: [param("thickness", 0.05, "Thickness of the skin.")],
     distance: "abs({d}) - {thickness}" },
+  { name: "onion", type: "modify", description: "Nests shells inside each other like an onion; cut it open with sub to see them.",
+    params: [param("count", 3, "Number of shells."), param("gap", 0.15, "Distance between shells."), param("thickness", 0.03, "Thickness of each shell.")],
+    distance: "aoOnion({d}, {count}, {gap}, {thickness})" },
   // Material
   { name: "color", type: "modify", description: "Colours the solid; values above 1 glow brighter.",
     params: [param("r", 1, "Red."), param("g", 1, "Green."), param("b", 1, "Blue.")],
@@ -306,11 +345,25 @@ vec3 aoRotate(vec3 p, vec3 a) {
   p.yz *= aoTurn(a.x);
   return p;
 }
-vec3 aoRepeat(vec3 p, vec3 s) {
+vec3 aoRepeat(vec3 p, vec3 s, float count) {
   vec3 safe = max(abs(s), vec3(1e-4));
-  return mix(p, p - safe * round(p / safe), step(1e-4, abs(s)));
+  vec3 cell = round(p / safe);
+  // A count keeps the copies centred: indices 0..n-1, shifted by half of n-1.
+  float n = max(round(count), 1.0), middle = 0.5 * (n - 1.0);
+  vec3 limited = clamp(round(p / safe + middle), 0.0, n - 1.0) - middle;
+  cell = mix(cell, limited, step(0.5, count));
+  return mix(p, p - safe * cell, step(1e-4, abs(s)));
 }
+vec3 aoRadial(vec3 p, float count) {
+  float slice = 6.28318531 / max(round(count), 1.0);
+  float a = mod(atan(p.z, p.x) + 0.5 * slice, slice) - 0.5 * slice;
+  return vec3(length(p.xz) * cos(a), p.y, length(p.xz) * sin(a));
+}
+vec3 aoElongate(vec3 p, vec3 e) { vec3 h = 0.5 * abs(e); return p - clamp(p, -h, h); }
 vec3 aoTwist(vec3 p, float k) { p.xz *= aoTurn(k * p.y); return p; }
+vec3 aoBend(vec3 p, float k) { p.xy *= aoTurn(k * p.x); return p; }
+float aoTaperWidth(float y, float k) { return max(1.0 + k * y, 0.05); }
+vec3 aoTaper(vec3 p, float k) { float w = aoTaperWidth(p.y, k); return vec3(p.x / w, p.y, p.z / w); }
 float aoBox(vec3 p, vec3 b) {
   vec3 q = abs(p) - b;
   return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
@@ -345,6 +398,30 @@ float aoNoise(vec3 x) {
                  mix(aoHash(i + vec3(0, 1, 0)), aoHash(i + vec3(1, 1, 0)), f.x), f.y),
              mix(mix(aoHash(i + vec3(0, 0, 1)), aoHash(i + vec3(1, 0, 1)), f.x),
                  mix(aoHash(i + vec3(0, 1, 1)), aoHash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+}
+vec3 aoWarp(vec3 x) {
+  return 2.0 * vec3(aoNoise(x), aoNoise(x + vec3(31.4, 7.1, 17.3)), aoNoise(x + vec3(5.2, 43.7, 23.9))) - 1.0;
+}
+/** 1 on the walls between Voronoi cells, falling to 0 a little way inside each. */
+float aoCracks(vec3 x) {
+  vec3 i = floor(x), f = fract(x);
+  float first = 8.0, second = 8.0;
+  for (int z = -1; z <= 1; z++) for (int y = -1; y <= 1; y++) for (int w = -1; w <= 1; w++) {
+    vec3 o = vec3(w, y, z);
+    vec3 centre = o + vec3(aoHash(i + o), aoHash(i + o + 19.1), aoHash(i + o + 47.3));
+    float d = length(centre - f);
+    second = max(min(second, d), first);
+    first = min(first, d);
+  }
+  return 1.0 - clamp((second - first) / 0.3, 0.0, 1.0);
+}
+/** The waveform around the equator, mirrored so it has no seam, fading out at the poles. */
+float aoWaveform(vec3 p) {
+  return aoWaveAt(abs(atan(p.z, p.x)) / 3.14159265) * length(aoDirection(p).xz);
+}
+float aoOnion(float d, float count, float gap, float thickness) {
+  float layer = clamp(round(-d / max(gap, 1e-4)), 0.0, max(round(count), 1.0) - 1.0);
+  return abs(d + layer * gap) - thickness;
 }
 vec4 aoUnion(vec4 a, vec4 b, float k) {
   k = max(k, 1e-4);

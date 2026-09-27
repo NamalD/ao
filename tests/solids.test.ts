@@ -3,7 +3,7 @@ import { compileSolid, makeSolidShapes, Solid, solidFunctions, solidShapes } fro
 
 // Methods are installed from the solidFunctions table, so the type has no names for them.
 type Chain = any;
-const { sphere, box, torus } = solidShapes as Record<string, (...args: unknown[]) => Chain>;
+const { sphere, box, torus, cylinder, plane } = solidShapes as Record<string, (...args: unknown[]) => Chain>;
 
 describe("solid chains", () => {
   it("installs every function as a shape or a chain method", () => {
@@ -66,6 +66,42 @@ describe("solid chains", () => {
     expect(code).toContain("vec4 s1 = vec4(vec3(color_r, color_g, color_b), s0.a);");
     expect(code).toContain("vec4 s2 = vec4(mix(vec3(dot(s1.rgb, vec3(0.2125, 0.7154, 0.0721))), s1.rgb, saturate_amount), s1.a);");
     expect(uniforms.saturate_amount).toBe(0.2);
+  });
+
+  it("repeats endlessly unless given a count", () => {
+    expect(compileSolid(sphere().repeat()).uniforms.repeat_count).toBe(0);
+    const { code, uniforms } = compileSolid(sphere().repeat(3, 0, 3, 5));
+    expect(code).toContain("aoRepeat(p, vec3(repeat_x, repeat_y, repeat_z), repeat_count)");
+    expect(uniforms.repeat_count).toBe(5);
+  });
+
+  it("mirrors only the axes switched on", () => {
+    const { code, uniforms } = compileSolid(sphere(0.5).move(1, 1).mirror(1, 0, 1));
+    expect(code).toContain("vec3 p0 = mix(p, abs(p), step(0.5, vec3(mirror_x, mirror_y, mirror_z)));");
+    expect(uniforms).toMatchObject({ mirror_x: 1, mirror_y: 0, mirror_z: 1 });
+  });
+
+  it("tapers by the width at the height the solid sees, shrinking the distance where it narrows", () => {
+    const { code } = compileSolid(cylinder().taper(-0.5));
+    expect(code).toContain("vec3 p0 = aoTaper(p, taper_amount);");
+    expect(code).toContain("s1.a * min(aoTaperWidth(p0.y, taper_amount), 1.0)");
+  });
+
+  it("bounds the raymarch for warps that move the point", () => {
+    expect(compileSolid(plane().ripple(0.2, 5)).code)
+      .toContain("float aoReach() { return (0.0 + abs(ripple_amount)); }");
+    expect(compileSolid(sphere().warp()).code)
+      .toContain("float aoSlope() { return (0.0 + 3.0 * abs(warp_amount * warp_scale)); }");
+    // Like twist, bend and taper step by the slope alone, however far away.
+    for (const chain of [box().bend(), cylinder().taper()]) expect(compileSolid(chain).code).toContain("float aoReach() { return (1e6); }");
+  });
+
+  it("pushes the surface by the waveform, cracks and ridges with bounded reach", () => {
+    const { code } = compileSolid(sphere().waveform(0.2).cells(0.1).ridges(0.05).onion(4));
+    expect(code).toContain("aoWaveform(p)");
+    expect(code).toContain("aoCracks(p * cells_scale + iTime * cells_speed)");
+    expect(code).toMatch(/aoOnion\(s\d+\.a, onion_count, onion_gap, onion_thickness\)/);
+    expect(code).toContain("float aoReach() { return (((0.0 + abs(waveform_amount)) + abs(cells_amount)) + abs(ridges_amount)); }");
   });
 
   it("pipes a chain through a function, passing the extra arguments", () => {

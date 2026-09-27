@@ -202,9 +202,11 @@ src(s0).blend(o0, 0.3).out()
 ```
 
 Shapes are `sphere`, `box`, `torus`, `cylinder`, `octahedron` and `plane`.
-Methods place the solid (`move`, `rotate`, `spin`, `scale`, `repeat`,
-`twist`), shape its surface (`spikes`, `wobble`, `noise`, `spectrum`, `round`,
-`shell`), colour it (`color`), and combine it with another solid (`add`,
+Methods place the solid (`move`, `rotate`, `spin`, `scale`), copy it
+(`repeat`, `radial`, `mirror`), bend its space (`elongate`, `twist`, `bend`,
+`taper`, `ripple`, `warp`), shape its surface (`spikes`, `wobble`, `noise`,
+`spectrum`, `waveform`, `ridges`, `cells`, `round`, `shell`, `onion`), colour
+it (`color`, `saturate`), and combine it with another solid (`add`,
 `sub`, `intersect`), where a second argument such as `.add(sphere(0.5).move(1), 0.4)`
 melts the two together like liquid. As in Hydra, every argument can be a
 number or a function read each frame. Numbers become uniforms too, so
@@ -212,7 +214,7 @@ scrubbing one never recompiles the shader. `out` takes `{ scale, camera,
 background, glow, step, trails }`. Solids render at `scale: "auto"` unless
 given a number, so a heavy chain gets softer rather than slower; the fps
 readout (`i`) shows the scale when it drops below 100%. Lower `step` if very long spikes or strong
-twists tear, and `trails` (`0..1`) leaves light trails behind moving solids. Completion and signature help know solid chains apart from Hydra ones.
+twists, bends or tapers tear, and `trails` (`0..1`) leaves light trails behind moving solids. Completion and signature help know solid chains apart from Hydra ones.
 `sketches/urchin.js` is a ball that turns spiky when the song gets intense.
 
 Each evaluation runs in its own function scope, so re-running a block that
