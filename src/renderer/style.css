@@ -118,3 +118,7 @@ kbd { color: var(--accent); font-family: inherit; }
 #notice:empty { display: none; }
 #notice.error { color: var(--error); opacity: 1; }
 body.ambient #notice:not(.error) { display: none; }
+
+/* Editor power */
+/* Alt+drag scrubbing a number (scrub.ts). */
+#editor .cm-editor.cm-scrubbing, #editor .cm-editor.cm-scrubbing .cm-content { cursor: ew-resize; }

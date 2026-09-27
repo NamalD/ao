@@ -12,11 +12,17 @@ import hydraFunctions from "hydra-synth/src/glsl/glsl-functions.js";
 import HydraSourceClass from "hydra-synth/src/hydra-source.js";
 import { ao, aoDocs } from "./audio";
 import { blockAt } from "./blocks";
+import { remix, remixRunRange } from "./remix";
+import { joinsScrub, scrubbing } from "./scrub";
 
 export interface EditorActions {
   run(code: string): void;
   save(): void;
   changed(): void;
+  /** Save under a new name and rename the sketch (`:w name`); `overwrite` for `:w! name`. */
+  rename?(name: string, overwrite: boolean): void;
+  /** Show a message in the status bar. */
+  status?(message: string, error?: boolean): void;
 }
 
 // --- Documentation -----------------------------------------------------------
@@ -389,19 +395,61 @@ const highlight = HighlightStyle.define([
 const editorExtensions = Facet.define<readonly Extension[], readonly Extension[]>({ combine: (values) => values[0] ?? [] });
 const editorActions = Facet.define<EditorActions, EditorActions | null>({ combine: (values) => values[0] ?? null });
 
-/** `:w` and `:write` save the sketch. */
-export function writeCommand(view: EditorView): void {
-  view.state.facet(editorActions)?.save();
+export type WriteArgs = { name?: string; overwrite: boolean } | { error: string };
+
+/**
+ * Parses what follows `:w`, as vim hands it over: `""` or undefined saves,
+ * `" name"` renames, and `"! name"` renames over an existing sketch. Sketches
+ * are always `.js`, so `name.js` means `name`.
+ */
+export function parseWriteArgs(argString: string | undefined): WriteArgs {
+  let rest = argString ?? "";
+  const overwrite = rest.startsWith("!");
+  if (overwrite) rest = rest.slice(1);
+  rest = rest.trim();
+  if (!rest) return { overwrite };
+  if (/\s/.test(rest)) return { error: `:w takes one sketch name, not "${rest}"` };
+  const name = rest.replace(/\.js$/, "");
+  if (!/^[\w-]+$/.test(name)) return { error: `invalid sketch name "${rest}": use letters, digits, _ and -` };
+  return { name, overwrite };
 }
-Vim.defineEx("write", "w", (cm) => writeCommand(cm.cm6 as EditorView));
+
+/** `:w` and `:write` save the sketch; `:w name` saves it as `name` and renames it. */
+export function writeCommand(view: EditorView, argString?: string): void {
+  const actions = view.state.facet(editorActions);
+  if (!actions) return;
+  const args = parseWriteArgs(argString);
+  if ("error" in args) actions.status?.(args.error, true);
+  else if (args.name) actions.rename?.(args.name, args.overwrite);
+  else actions.save();
+}
+Vim.defineEx("write", "w", (cm, params: { argString?: string }) => writeCommand(cm.cm6 as EditorView, params.argString));
+
+/** Alt+R: remix the numbers in the block under the cursor and re-run it. */
+export function remixCommand(view: EditorView, random: () => number = Math.random): boolean {
+  const actions = view.state.facet(editorActions);
+  const result = remix(view.state, random);
+  if (!result) {
+    actions?.status?.("Nothing to remix here: no numbers in this block");
+    return true;
+  }
+  view.dispatch(result.spec);
+  const range = remixRunRange(view.state);
+  if (range) runRange(view, range.from, range.to);
+  actions?.status?.(`Remixed ${result.count} number${result.count === 1 ? "" : "s"}; u or Ctrl+Z undoes`);
+  return true;
+}
+
+/** Runs the code between `from` and `to` and flashes it. */
+function runRange(view: EditorView, from: number, to: number): true {
+  view.state.facet(editorActions)?.run(view.state.sliceDoc(from, to));
+  view.dispatch({ effects: flash.of({ from, to }) });
+  setTimeout(() => view.dispatch({ effects: flash.of(null) }), 250);
+  return true;
+}
 
 function extensionsFor(actions: EditorActions): Extension[] {
-  const evaluate = (view: EditorView, from: number, to: number) => {
-    actions.run(view.state.sliceDoc(from, to));
-    view.dispatch({ effects: flash.of({ from, to }) });
-    setTimeout(() => view.dispatch({ effects: flash.of(null) }), 250);
-    return true;
-  };
+  const evaluate = runRange;
   const runBlock = (view: EditorView) => {
     const block = blockAt(view.state.doc.toString(), view.state.selection.main.head);
     return block ? evaluate(view, block.from, block.to) : true;
@@ -414,9 +462,12 @@ function extensionsFor(actions: EditorActions): Extension[] {
       { key: "Mod-Shift-Enter", run: runAll },
       { key: "Alt-Enter", run: runAll },
       { key: "Mod-s", run: () => { actions.save(); return true; } },
+      { key: "Alt-r", run: (view) => remixCommand(view) },
     ])),
+    scrubbing((code) => actions.run(code)),
     vim({ status: false }),
-    history(),
+    // A scrub gesture is one undo step however many ticks it takes.
+    history({ joinToEvent: (tr, adjacent) => adjacent || joinsScrub(tr) }),
     drawSelection(),
     selectionField,
     closeBrackets(),
