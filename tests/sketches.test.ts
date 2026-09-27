@@ -1,6 +1,8 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { ao } from "../src/renderer/audio";
+// Imported before the browser stubs below, which CodeMirror (via the editor's docs) would trip over.
+import { buildEntries } from "../src/renderer/explorer/entries";
 
 /**
  * Runs every bundled sketch the way Ao does: evaluated by a real Deck, in
@@ -42,10 +44,11 @@ vi.mock("hydra-synth", async () => {
     getParameter: () => null, bindFramebuffer() {}, getFramebufferAttachmentParameter: () => ({}),
     bindTexture() {}, texParameteri() {}, clearColor() {}, clear() {},
   };
-  const regl = { _gl: gl };
+  // Callable, with framebuffers and textures, for hydra-outputs' setBufferCount.
+  const regl = Object.assign(() => () => {}, { _gl: gl, framebuffer: () => ({ destroy() {} }), texture: () => ({}) });
   class FakeOutput {
     regl = regl;
-    fbos = [0, 1].map(() => ({ _framebuffer: { framebuffer: {} }, width: 4, height: 4 }));
+    fbos = [0, 1].map(() => ({ _framebuffer: { framebuffer: {} }, color: [{}], width: 4, height: 4 }));
     constructor(readonly label: string) {}
   }
   class FakeSource {
@@ -163,6 +166,19 @@ describe("bundled sketches", () => {
     expect(await runSketch("cube(1).out()")).toEqual(["running: cube is not defined"]);
     expect(await runSketch("osc(10, 0.1, () => missing).out()")).toEqual(["osc: missing is not defined"]);
     expect(await runSketch("update = () => { wobble += 1 }")).toEqual(["update: wobble is not defined"]);
+  });
+});
+
+describe("explorer extension examples", () => {
+  // The explorer plays examples on the current deck (main.ts), so their `use` lines load there.
+  const examples = buildEntries().filter((e) => e.id.startsWith("ext:"));
+
+  it.each(examples.map((e) => [e.id, e.example]))("%s runs on a deck without undefined names", async (_id, code) => {
+    expect(await runSketch(code)).toEqual([]);
+  });
+
+  it("would catch an example missing its use line", async () => {
+    expect(await runSketch("blinking(8).out()")).toEqual(["running: blinking is not defined"]);
   });
 });
 

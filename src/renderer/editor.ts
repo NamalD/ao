@@ -1,4 +1,6 @@
-import { autocompletion, closeBrackets, type Completion, type CompletionContext } from "@codemirror/autocomplete";
+import {
+  autocompletion, closeBrackets, type Completion, type CompletionContext, type CompletionResult, pickedCompletion,
+} from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab, isolateHistory } from "@codemirror/commands";
 import { javascript } from "@codemirror/lang-javascript";
 import { bracketMatching, HighlightStyle, syntaxHighlighting, syntaxTree } from "@codemirror/language";
@@ -12,6 +14,7 @@ import hydraFunctions from "hydra-synth/src/glsl/glsl-functions.js";
 import HydraSourceClass from "hydra-synth/src/hydra-source.js";
 import { ao, aoDocs } from "./audio";
 import { blockAt } from "./blocks";
+import { addUse, extensionApi, extensionDocs, type ExtensionFunction, usedExtensions } from "./extension-api";
 import { CATALOG } from "./extensions";
 import { keepLiveValues, liveValues } from "./live-values";
 import { formatCode, minimalChange } from "./format";
@@ -271,37 +274,154 @@ export function aoMemberDocs(docs: Record<string, AoDoc>): Map<string, FunctionD
 
 const aoFunctionDocs = aoMemberDocs(aoDocs);
 
+// --- Extensions ----------------------------------------------------------------
+
+/** Where an extension's name comes from and what loads it, for completion details. */
+export const extensionNote = (extension: string, loaded = false) => `${extension} · ${loaded ? "via" : "needs"} use("${extension}")`;
+
+/** Docs for one extension name, its info saying which extension it's from and that it needs `use`. */
+function extensionFunctionDoc(fn: ExtensionFunction): FunctionDoc {
+  const doc = makeDoc(fn.name, fn.params, fn.description, fn.signature);
+  const ext = extensionDocs[fn.extension];
+  const lines = [
+    ...(fn.broken ? [`Broken upstream: ${fn.broken}`] : []),
+    `From the ${fn.extension} extension (${ext.author}, ${ext.licence}): needs await use("${fn.extension}").`,
+  ];
+  return { ...doc, info: [doc.info, ...lines].join("\n") };
+}
+
+interface ExtensionTables {
+  /** Generators and globals, offered at the top level. */
+  topLevel: ExtensionFunction[];
+  /** Chain methods, minus the Hydra built-ins arithmetics wraps (add, sub, mult keep Hydra's docs). */
+  chain: ExtensionFunction[];
+  /** hydra-outputs' methods, offered after o0. to o3. and oS. */
+  outputs: ExtensionFunction[];
+  docs: Map<ExtensionFunction, FunctionDoc>;
+}
+let extensionTables: ExtensionTables | undefined;
+function extensionNames(): ExtensionTables {
+  if (extensionTables) return extensionTables;
+  const api = extensionApi();
+  const builtIn = new Set(chainMethods);
+  extensionTables = {
+    topLevel: api.filter((fn) => fn.kind === "generator" || fn.kind === "global"),
+    chain: api.filter((fn) => fn.kind === "method" && !builtIn.has(fn.name)),
+    outputs: api.filter((fn) => fn.kind === "output"),
+    docs: new Map(api.map((fn) => [fn, extensionFunctionDoc(fn)])),
+  };
+  return extensionTables;
+}
+
+/** Owners whose members are hydra-outputs' methods. */
+const isOutput = (owner: string | undefined) => owner !== undefined && /^(o[0-3]|oS)$/.test(owner);
+
 /** Documentation for `name`, preferring the object it's called on; `solid` for a solid chain. */
 export function functionDoc(name: string, owner?: string, solid = false): FunctionDoc | undefined {
   if (owner === "ao") return aoFunctionDocs.get(name);
   if (owner && /^s[0-3]$/.test(owner)) return sourceDocs[name];
+  const tables = extensionNames();
+  const extensionDoc = (list: ExtensionFunction[]) => {
+    const fn = list.find((f) => f.name === name);
+    return fn && tables.docs.get(fn);
+  };
+  if (isOutput(owner)) return extensionDoc(tables.outputs);
   if (solid || (!owner && solidShapeNames.includes(name))) return solidDocs.get(name);
-  return hydraFunctionDocs.get(name) ?? globalDocs[name]?.doc;
+  // Extension names only on a chain or at the top level, so Math.pow(…) doesn't get arithmetics' help.
+  return hydraFunctionDocs.get(name) ?? globalDocs[name]?.doc
+    ?? (owner ? undefined : extensionDoc(tables.topLevel) ?? extensionDoc(tables.chain));
 }
 
 function documented(label: string, type: string, docs: FunctionDoc | undefined, fallback: string): Completion {
   return { label, type, detail: docs?.signature ?? fallback, info: docs?.info };
 }
 
-/** Completion options after `ao.`, `s0.` and friends, or `.` on a chain; `solid` for a solid chain. */
-export function memberCompletions(owner: string | undefined, solid = false): Completion[] {
+/**
+ * Completing an extension name the sketch doesn't `use` yet also loads it:
+ * the name joins the sketch's `use(...)` call, or `await use("name")` goes
+ * after its opening comments, in the same undo step.
+ */
+function applyWithUse(extension: string) {
+  return (view: EditorView, completion: Completion, from: number, to: number) => {
+    const edit = addUse(view.state.doc.toString(), extension);
+    const changes = view.state.changes([...(edit ? [edit] : []), { from, to, insert: completion.label }]);
+    view.dispatch({
+      changes,
+      selection: { anchor: changes.mapPos(to, 1) },
+      annotations: pickedCompletion.of(completion),
+      userEvent: "input.complete",
+      scrollIntoView: true,
+    });
+  };
+}
+
+/**
+ * Extension names are always offered, so they can be found before the
+ * sketch loads them. Ones from an extension the sketch doesn't `use` rank
+ * just below built-ins that match as well, and picking one adds the `use`.
+ */
+function extensionOption(fn: ExtensionFunction, used: ReadonlySet<string>): Completion {
+  const loaded = used.has(fn.extension);
+  const type = fn.kind === "generator" ? "function" : fn.kind === "global" ? (fn.signature.includes("(") && !fn.signature.includes(".") ? "function" : "variable") : "method";
+  return {
+    label: fn.name,
+    type,
+    detail: extensionNote(fn.extension, loaded),
+    info: loaded ? extensionNames().docs.get(fn)?.info : `${extensionNames().docs.get(fn)?.info}\nPicking it adds use("${fn.extension}") to the sketch.`,
+    boost: loaded ? 0 : -1,
+    ...(loaded ? {} : { apply: applyWithUse(fn.extension) }),
+  };
+}
+
+/**
+ * Completion options after `ao.`, `s0.`, `o0.` and friends, or `.` on a
+ * chain; `solid` for a solid chain. `used`: the extensions the sketch loads.
+ */
+export function memberCompletions(owner: string | undefined, solid = false, used: ReadonlySet<string> = new Set()): Completion[] {
   if (owner === "ao") {
     return publicAoMembers().map(({ name, method }) =>
       documented(name, method ? "method" : "property", aoFunctionDocs.get(name), "Ao audio"));
   }
   if (owner && /^s[0-3]$/.test(owner)) return sourceMembers.map((name) => documented(name, "method", sourceDocs[name], "Hydra source"));
+  if (isOutput(owner)) return extensionNames().outputs.map((fn) => extensionOption(fn, used));
   if (solid) return solidMethods.map((name) => documented(name, "method", solidDocs.get(name), "Solid method"));
-  return chainMethods.map((name) => documented(name, "method", hydraFunctionDocs.get(name), "Hydra chain method"));
+  return [
+    ...chainMethods.map((name) => documented(name, "method", hydraFunctionDocs.get(name), "Hydra chain method")),
+    ...extensionNames().chain.map((fn) => extensionOption(fn, used)),
+  ];
 }
 
-/** Completion options at the start of an expression. */
-export function topLevelCompletions(): Completion[] {
+/** Completion options at the start of an expression. `used`: the extensions the sketch loads. */
+export function topLevelCompletions(used: ReadonlySet<string> = new Set()): Completion[] {
   return [
     ...generators.map((name) => documented(name, "function", hydraFunctionDocs.get(name), "Hydra generator")),
     ...solidShapeNames.map((name) => documented(name, "function", solidDocs.get(name), "Ao solid")),
     ...Object.entries(globalDocs).map(([name, { type, doc }]) => documented(name, type, doc, "Hydra")),
     { label: "ao", type: "variable", detail: "Ao audio levels", info: "ao\nLive audio levels: ao.bass, ao.impulse, ao.fft, …" },
+    ...extensionNames().topLevel.map((fn) => extensionOption(fn, used)),
   ];
+}
+
+/** Extension names inside the string arguments of `use(...)`. */
+export function useCompletions(context: CompletionContext): CompletionResult | null {
+  const node = syntaxTree(context.state).resolveInner(context.pos, -1);
+  if (node.name !== "String" || context.pos <= node.from) return null;
+  const args = node.parent;
+  const call = args?.parent;
+  if (args?.name !== "ArgList" || call?.name !== "CallExpression") return null;
+  if (context.state.sliceDoc(call.from, args.from).trim() !== "use") return null;
+  const text = context.state.sliceDoc(node.from + 1, context.pos);
+  if (!/^[\w-]*$/.test(text)) return null;
+  return {
+    from: node.from + 1,
+    options: CATALOG.map((ext) => ({
+      label: ext.name,
+      type: "constant",
+      detail: `${extensionDocs[ext.name].author}, ${extensionDocs[ext.name].licence}`,
+      info: `use("${ext.name}")\n${extensionDocs[ext.name].intro}\nAdds ${ext.purpose.replace(/^[^:]*: /, "")}`,
+    })),
+    validFor: /^[\w-]*$/,
+  };
 }
 
 // --- Signature help ------------------------------------------------------------
@@ -366,7 +486,9 @@ const signatureHelp = StateField.define<Tooltip | null>({
   provide: (field) => showTooltip.from(field),
 });
 
-function hydraCompletions(context: CompletionContext) {
+export function hydraCompletions(context: CompletionContext): CompletionResult | null {
+  const inUse = useCompletions(context);
+  if (inUse) return inUse;
   const node = syntaxTree(context.state).resolveInner(context.pos, -1);
   for (let current: SyntaxNode | null = node; current; current = current.parent) {
     if (["String", "TemplateString", "LineComment", "BlockComment"].includes(current.name)) return null;
@@ -377,12 +499,13 @@ function hydraCompletions(context: CompletionContext) {
   if (!word && !context.explicit && !justTypedDot) return null;
   const from = word?.from ?? context.pos;
   const before = context.state.doc.sliceString(Math.max(0, from - 100), from);
-  const member = before.match(/(?:\b(ao|s[0-3])|\))\.$/);
+  const member = before.match(/(?:\b(ao|s[0-3]|o[0-3]|oS)|\))\.$/);
+  const used = usedExtensions(context.state.doc.toString());
   if (member || /\.\s*$/.test(before)) {
     const solid = !member?.[1] && isSolidChain(context.state, node);
-    return { from, options: memberCompletions(member?.[1], solid), validFor: /^[\w$]*$/ };
+    return { from, options: memberCompletions(member?.[1], solid, used), validFor: /^[\w$]*$/ };
   }
-  return { from, options: topLevelCompletions(), validFor: /^[\w$]*$/ };
+  return { from, options: topLevelCompletions(used), validFor: /^[\w$]*$/ };
 }
 
 // --- Editor --------------------------------------------------------------------

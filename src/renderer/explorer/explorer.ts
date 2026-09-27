@@ -1,6 +1,7 @@
 /**
  * The code explorer (F2, or K on a word in the editor): a panel on the left
- * listing `ao`, Hydra's functions and globals, source methods and recipes,
+ * listing `ao`, Hydra's functions and globals, source methods, what the
+ * vendored extensions add (one or more sections each) and recipes,
  * each with its docs and an example that plays on the visuals as you browse.
  * Closing it puts your sketch back; `i` inserts the example into it.
  */

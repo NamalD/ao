@@ -275,10 +275,31 @@ warp(2, 0.04, 2, 3, ao.map("bass", 1, 1.8))
 | `gradientmap` | hyper-hydra, `hydra-gradientmap.js` | Gradient maps: `createGradient(...colors)` and `createLinearGradient(angle, ...)` make a gradient texture, `.lookupX(tex)` recolours by brightness. `noise(3).lookupX(createGradient("navy", "gold"))` |
 | `arithmetics` | hyper-hydra, `hydra-arithmetics.js` | Maths on colours: `.sin()`, `.pow(2)`, `.mod(0.5)`, `.range(lo, hi)`, `.clamp()`, `.add(0.1)`, `.div(2)`, … and `x()`, `y()`, `xCenter()`, `lengthCenter()` generators. `x(6).sin().range(0.2, 0.8)` |
 
+The editor knows every name these add. Completion offers the generators
+(`blinking`, `smoothsun`, `warp`, `lengthCenter`, …) and helpers
+(`createGradient`, `oS`) at the top level, chain methods (`.mirrorX`,
+`.lookupX`, `.sin`, `.pow`, `.range`, …) after a dot, and the output methods
+after `o0.` to `o3.`, each with its signature help. They're always offered,
+so you can find them before loading anything; each says which extension it
+comes from (`softpattern · needs use("softpattern")`), and names from an
+extension the sketch doesn't `use` rank just below Hydra's own. Picking one
+of those also adds the extension to the sketch's `use(...)` call, or puts
+`await use("softpattern")` after the opening comments. Inside `use("…")`,
+completion offers the extension names.
+
+The [code explorer](#code-explorer) has a section for each extension
+(arithmetics has four: generators, colour maths, number ops, ranges),
+opening with a `use("…")` entry on what it is, who wrote it and its licence,
+then every name it adds with parameters and an example that loads it.
+
 `use` also takes the file names, with or without `.js` (`"lib-noise"`,
 `"hydra-fractals.js"`); any other name throws, listing these. Nothing is
 fetched: the files are bundled with Ao, unmodified, and
 `src/renderer/vendor/hydra/SOURCES.md` records where each came from.
+The docs Ao shows come from the vendored files (names, parameters and
+defaults, read by running each file against a recording stand-in Hydra) and
+from `src/renderer/extension-docs.ts` (descriptions and what's broken); a
+test fails if a file adds a name the docs don't cover.
 hyper-hydra's own docs describe each extension in full.
 `sketches/fractal-garden.js` uses noise, fractals, gradientmap and outputs
 together, `sketches/lanterns.js` shows softpattern, and
@@ -302,13 +323,16 @@ Things to know:
 - `arithmetics` claims short names, `x`, `y`, `length` and `distance`, as
   Hydra functions. A sketch that assigns an undeclared global of the same
   name overwrites the function on that deck; declare your own with `const`
-  or `let`. Its `length()`, `distance()` and `distanceCenter()` don't
-  compile in Hydra's WebGL 1 shaders: use `lengthCenter()` or
+  or `let`. Its `distance()` and `distanceCenter()` don't compile (their
+  shaders call `length()` with two arguments), and `length()` redefines a
+  GLSL built-in, which strict WebGL 1 drivers reject: use `lengthCenter()` or
   `x().mult(x()).add(y().mult(y())).sqrt()`.
 - `outputs`: `setRepeat()` and `setMirror()` turn an output black at
   Ao's window sizes, because WebGL 1 can't wrap textures whose sides aren't
   powers of two. Use Hydra's `.repeat()` or `fractals`' `.mirrorWrap()`.
-  `setBufferCount(n)` is marked experimental upstream.
+  `setBufferCount(n)`, marked experimental upstream, freezes the output for
+  `n` above 2: Hydra 1.4 keeps showing and sampling one stale buffer.
+- `fractals`: `mirrorY2()` is identical to `mirrorY()` upstream.
 - `noise` loads the noise library; Hydra's own `noise()` is unchanged.
 
 ## Sketch browser
@@ -444,13 +468,16 @@ opens it on the word under the cursor (`osc`, `ao.hz`, `s0.initScene`, `o1`,
 with a live reading of its value, every Hydra function by kind (sources,
 geometry, colour, blend, modulate), Hydra's globals (`out`, outputs,
 `render`, `speed`, `bpm`, arrays, `update`, `setFunction`, …), the `s0`–`s3`
-methods, and a few recipes for mapping audio.
+methods, everything the [Hydra extensions](#hydra-extensions) add (a section
+or more per extension, each example starting with its `use` line), and a few
+recipes for mapping audio.
 
 Each entry has its signature, parameters and one example, which plays on
 the visuals as you move to it; while the panel is open the visuals shrink to
 its right so the example is centred where you can see it. Examples that would
 turn on the camera or screen capture, fetch a URL, or blank everything are
-marked `·` and play only on Enter. Closing the explorer puts your sketch
+marked `·` and play only on Enter, and so are extension functions known to
+be broken upstream. Closing the explorer puts your sketch
 back, re-running it; `i` instead inserts the example into your sketch as a
 new block after the one under the cursor and runs the whole sketch.
 
@@ -465,7 +492,8 @@ new block after the one under the cursor and runs the whole sketch.
 
 Examples play on the canvas, so a recording running meanwhile captures them.
 Content lives in `src/renderer/explorer/content.ts`; a test checks every
-Hydra function, `ao` member and source method has an example.
+Hydra function, `ao` member, source method and extension name has an
+example.
 
 ## Audio meter
 
