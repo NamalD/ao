@@ -31,6 +31,7 @@ past 1 MB the log moves to `ao.log.1`.
 | Alt+R | remix the numbers in the block under the cursor |
 | Ctrl+N | create a new sketch |
 | Ctrl+PgUp / Ctrl+PgDn | previous / next sketch |
+| Ctrl+O | browse sketches by thumbnail (see [Sketch browser](#sketch-browser)) |
 | Ctrl+Shift+H | hide or show the editor (ambient mode) |
 | Ctrl+Shift+M | show or hide the audio meter |
 | Ctrl+Shift+N | night fade: follow the schedule, force on, force off |
@@ -48,7 +49,7 @@ refuses a name that's taken unless you write `:w! <name>`.
 With the editor hidden, the old single keys work: `j`/`k` switch sketches,
 `f` fullscreen, `e` brings the editor back, `i` toggles the FPS counter, `m`
 the audio meter, `n` cycles the night fade, `c` opens a challenge, `r` starts
-or stops recording, and `q` or `Esc` quits.
+or stops recording, `o` opens the sketch browser, and `q` or `Esc` quits.
 
 ## Sketches
 
@@ -149,6 +150,43 @@ under `make dev` the page is served from `localhost`, and WebGL can only
 sample media whose host sends CORS headers (`Access-Control-Allow-Origin`).
 Scripts still load only from Ao itself, and a sketch can't navigate the
 window away from Ao or open new windows.
+
+## Sketch browser
+
+Ctrl+O (`o` with the editor hidden) shows every sketch as a card with a
+thumbnail over the visuals, the open one marked `● playing`. Type to filter
+by name: the match is fuzzy, so `dns` finds `dunes` and `lamp` finds
+`challenge-…-lava-lamp`, best matches first. Arrows, Tab, or Ctrl+H/J/K/L move
+(Home, End, PgUp and PgDn too), Enter or a click opens the sketch, and Esc or
+a click outside closes the browser. Backspace edits the filter and Ctrl+U
+clears it. While it is open, keys go only to the browser, never to the editor.
+
+Sketches you opened recently come first, then the rest alphabetically;
+Ctrl+S switches to plain a–z. Challenge attempts (`challenge-*`) are hidden
+unless you press Ctrl+A. Both choices are remembered.
+
+Thumbnails live in `state/thumbnails/<name>.png`, 320×180. Ao makes them as
+you go: once a sketch has been on screen for four seconds, and then once a
+minute while it stays, it copies a small frame of the canvas, so the editor,
+bar, cards and night fade never appear in it, and an all-black frame never
+replaces a thumbnail. Renaming a sketch with `:w <name>` moves its thumbnail
+along. A sketch without one gets a gradient card with its name.
+
+To fill in the missing ones at once, render them offscreen with the synthetic
+audio (a few seconds each):
+
+```sh
+make thumbnails                 # sketches without a thumbnail
+make thumbnails FORCE=1         # re-render them all
+make thumbnails SKETCH=dunes,halo FORCE=1
+```
+
+That runs `npx electron . --thumbnails[=a,b] [--force]`, which reuses the
+screenshot path (`--screenshot-delay=<ms>` sets how long each sketch runs,
+3 s by default). A sketch that throws, hangs or draws nothing is reported and
+skipped, the rest carry on, and the run exits with status 1 if any failed.
+It also deletes thumbnails of sketches that no longer exist. The recently
+opened list is `state/recent.json`.
 
 ## Audio meter
 
