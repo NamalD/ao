@@ -61,6 +61,14 @@ describe("solid chains", () => {
     expect(code).toMatch(/float aoSlope\(\) \{ return \(0\.0 \+ 0\.5 \* abs\(spikes_length \* spikes_density\)/);
   });
 
+  it("pipes a chain through a function, passing the extra arguments", () => {
+    const spikey = (s: Chain, length: number) => s.spikes(length).spin(0.5, 0);
+    const piped = torus().pipe(spikey, 0.4).add(sphere());
+    expect(piped).toBeInstanceOf(Solid);
+    expect(compileSolid(piped).code).toBe(compileSolid(spikey(torus(), 0.4).add(sphere())).code);
+    expect(compileSolid(piped).uniforms.spikes_length).toBe(0.4);
+  });
+
   it("shades a ray that runs out of steps grazing a spike base, rather than showing the background through it", () => {
     const { code } = compileSolid(sphere().spikes(0.9, 9, 5));
     // Tracks where the ray came closest, then falls back to it only when the
@@ -79,6 +87,12 @@ describe("solid mistakes fail when the line runs", () => {
 
   it("asks for a solid to combine with", () => {
     expect(() => sphere().add(0.5)).toThrow("add: expected a solid such as sphere(), got 0.5");
+  });
+
+  it("asks pipe for a function that returns a solid", () => {
+    expect(() => sphere().pipe(0.5)).toThrow("pipe: expected a function such as (s) => s.spin(), got 0.5");
+    // A braced arrow function without `return` is the usual slip.
+    expect(() => sphere().pipe((s: Chain) => { s.spin(); })).toThrow("pipe: expected the function to return a solid, got undefined");
   });
 
   it("reads the last frame only when asked for trails", () => {

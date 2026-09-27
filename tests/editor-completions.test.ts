@@ -93,7 +93,7 @@ describe("solid completions", () => {
   };
 
   it("offers solid methods after a solid chain and Hydra's after a Hydra one", () => {
-    expect(completionsAt("sphere(1)\n  .spikes(0.3)\n  .")).toEqual(expect.arrayContaining(["spikes", "spin", "add", "out"]));
+    expect(completionsAt("sphere(1)\n  .spikes(0.3)\n  .")).toEqual(expect.arrayContaining(["spikes", "spin", "add", "pipe", "out"]));
     expect(completionsAt("sphere(1)\n  .spikes(0.3)\n  .")).not.toContain("modulateHue");
     expect(completionsAt("osc(10).rotate(0.1).")).toContain("modulateHue");
     expect(completionsAt("osc(10).add(box().")).toContain("spikes");

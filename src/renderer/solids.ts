@@ -212,6 +212,14 @@ export class Solid {
   /** @internal `emit` writes GLSL for this solid at a point, returning a vec4 of colour and distance. */
   constructor(readonly emit: Emit, readonly home: Home) {}
 
+  /** Continues the chain with `fn(this, ...args)`, so a plain function chains like a method. */
+  pipe(fn: unknown, ...args: unknown[]): Solid {
+    if (typeof fn !== "function") throw new Error(`pipe: expected a function such as (s) => s.spin(), got ${show(fn)}`);
+    const result: unknown = fn(this, ...args);
+    if (!(result instanceof Solid)) throw new Error(`pipe: expected the function to return a solid, got ${show(result)}`);
+    return result;
+  }
+
   /** Renders this solid into a Hydra source, `s0` unless given. */
   out(source?: unknown, options: SolidOutOptions = {}): void {
     const target = (source ?? this.home()) as { initScene?: (code: string, options?: SceneOptions) => void } | undefined;

@@ -202,11 +202,15 @@ const solidDocs = new Map<string, FunctionDoc>(solidFunctions.map((fn) => {
 }));
 solidDocs.set("out", makeDoc("out", solidOutParams.map((p) => ({ ...p, default: p.name === "source" ? p.default : null })),
   "Raymarches this solid into a source; show it with src(s0).out().", "out(source = s0, options?)"));
+solidDocs.set("pipe", makeDoc("pipe", [
+  { name: "fn", description: "A function taking the solid and returning a solid, such as (s, n) => s.spikes(n).spin()." },
+  { name: "...args", description: "Passed to fn after the solid." },
+], "Continues the chain through your own function: torus().pipe(spikey, 0.4).add(sphere()).", "pipe(fn, ...args)"));
 
 /** Solid functions that start a chain, such as sphere. */
 export const solidShapeNames = solidFunctions.filter((fn) => fn.type === "shape").map((fn) => fn.name);
-/** Methods that continue a solid chain, plus `out`. */
-export const solidMethods = [...solidFunctions.filter((fn) => fn.type !== "shape").map((fn) => fn.name), "out"];
+/** Methods that continue a solid chain, plus `pipe` and `out`. */
+export const solidMethods = [...solidFunctions.filter((fn) => fn.type !== "shape").map((fn) => fn.name), "pipe", "out"];
 
 /**
  * The name a method chain starts from, such as `sphere` in
