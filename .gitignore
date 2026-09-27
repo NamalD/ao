@@ -4,6 +4,9 @@ state/
 .worktrees/
 .claude/worktrees/
 
+# Challenge attempts (see README); the committed sketches stay examples.
+sketches/challenge-*.js
+
 # Leftovers from the Racket version; safe to delete locally.
 .tooling/
 build/

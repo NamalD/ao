@@ -28,6 +28,7 @@ system audio, never the microphone. Window geometry, the last sketch, and
 | Ctrl+N | create a new sketch |
 | Ctrl+PgUp / Ctrl+PgDn | previous / next sketch |
 | Ctrl+Shift+H | hide or show the editor (ambient mode) |
+| Ctrl+Shift+C | challenge: draw a prompt, or finish the running one |
 | F11 | fullscreen |
 | F1 | help |
 | Ctrl+Q | quit |
@@ -37,8 +38,8 @@ select, `u` undoes, and `:w` saves. Undo history starts fresh with each sketch
 you open.
 
 With the editor hidden, the old single keys work: `j`/`k` switch sketches,
-`f` fullscreen, `e` brings the editor back, `i` toggles the FPS counter, and
-`q` or `Esc` quits.
+`f` fullscreen, `e` brings the editor back, `i` toggles the FPS counter, `c`
+opens a challenge, and `q` or `Esc` quits.
 
 ## Sketches
 
@@ -127,6 +128,29 @@ under `make dev` the page is served from `localhost`, and WebGL can only
 sample media whose host sends CORS headers (`Access-Control-Allow-Origin`).
 Scripts still load only from Ao itself, and a sketch can't navigate the
 window away from Ao or open new windows.
+
+## Challenge mode
+
+Ctrl+Shift+C (or `c` with the editor hidden) draws a challenge to practise
+Hydra: one prompt from one of four buckets, **recreate** ("a lava lamp"),
+**constraint** ("at most 3 lines of code"), **audio-reactive** ("the kick
+feels like a heartbeat"), and **technique** (one-idea drills such as masks,
+`setFunction` or a first raymarched scene). Half the time it adds a prompt
+from another bucket, a quarter of those times a third, and an eighth of
+those a fourth. The card shows the prompts; `H` reveals hints naming useful
+functions, `1`/`2`/`3` pick a 5, 10 or 20 minute time box (10 by default),
+`R` re-rolls, `Enter` starts and `Esc` dismisses.
+
+Starting creates and opens a sketch named `challenge-YYYY-MM-DD-<slug>` whose
+header comment holds the prompt, and the status bar counts down. When time
+runs out, or you press Ctrl+Shift+C and then `Enter` to finish early, Ao saves
+the sketch, briefly hides the editor and status bar to snapshot the visuals to
+`state/challenges/<sketch>.png`, and appends a record (prompts and buckets,
+sketch, start and end times, duration, time box, whether you finished early,
+snapshot path) to `state/challenges.json`. Challenge sketches are git-ignored
+(`sketches/challenge-*.js`), so attempts don't clutter the example sketches.
+Prompts live in `src/shared/challenge-prompts.ts`; add a line to extend a
+bucket.
 
 ## Screenshots
 
