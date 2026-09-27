@@ -2,7 +2,7 @@ import { autocompletion, closeBrackets, type Completion, type CompletionContext 
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { javascript } from "@codemirror/lang-javascript";
 import { bracketMatching, HighlightStyle, syntaxHighlighting, syntaxTree } from "@codemirror/language";
-import { EditorState, type Extension, Facet, Prec, type Range, StateEffect, StateField } from "@codemirror/state";
+import { EditorSelection, EditorState, type Extension, Facet, Prec, type Range, StateEffect, StateField, type TransactionSpec } from "@codemirror/state";
 import { Decoration, type DecorationSet, drawSelection, EditorView, keymap, showTooltip, type Tooltip } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 import { tags } from "@lezer/highlight";
@@ -23,6 +23,8 @@ export interface EditorActions {
   rename?(name: string, overwrite: boolean): void;
   /** Show a message in the status bar. */
   status?(message: string, error?: boolean): void;
+  /** K in normal mode: look up the word at `column` of `line` in the code explorer. */
+  help?(line: string, column: number): void;
 }
 
 // --- Documentation -----------------------------------------------------------
@@ -381,7 +383,8 @@ const selectionField = StateField.define<DecorationSet>({
   provide: (field) => EditorView.decorations.from(field),
 });
 
-const highlight = HighlightStyle.define([
+/** Ao's syntax colours; the code explorer uses them for its examples too. */
+export const highlight = HighlightStyle.define([
   { tag: tags.keyword, color: "#ff9ecb" },
   { tag: [tags.string, tags.special(tags.string)], color: "#b8f5a0" },
   { tag: tags.number, color: "#ffd479" },
@@ -424,6 +427,35 @@ export function writeCommand(view: EditorView, argString?: string): void {
   else actions.save();
 }
 Vim.defineEx("write", "w", (cm, params: { argString?: string }) => writeCommand(cm.cm6 as EditorView, params.argString));
+
+/** K: open the code explorer on the word under the cursor, like vim's keyword lookup. */
+export function helpCommand(view: EditorView): void {
+  const head = view.state.selection.main.head;
+  const line = view.state.doc.lineAt(head);
+  view.state.facet(editorActions)?.help?.(line.text, head - line.from);
+}
+Vim.defineAction("aoHelp", (cm) => helpCommand(cm.cm6 as EditorView));
+Vim.mapCommand("K", "action", "aoHelp", {}, { context: "normal" });
+
+/**
+ * Inserts `code` as a new block after the block under the cursor, or at the
+ * cursor on a blank line, with blank lines around it; the cursor moves to it.
+ */
+export function insertBlock(state: EditorState, code: string): TransactionSpec {
+  const doc = state.doc.toString();
+  const head = state.selection.main.head;
+  const pos = blockAt(doc, head)?.to ?? state.doc.lineAt(head).from;
+  const before = doc.slice(0, pos), after = doc.slice(pos);
+  // Blank lines on either side keep the inserted code a block of its own.
+  const missing = (newlines: string) => "\n".repeat(2 - Math.min(2, newlines.length));
+  const lead = before.trim() ? missing(before.match(/\n*$/)![0]) : "";
+  const trail = after.trim() ? missing(after.match(/^\n*/)![0]) : after ? "" : "\n";
+  return {
+    changes: { from: pos, insert: lead + code + trail },
+    selection: EditorSelection.cursor(pos + lead.length),
+    scrollIntoView: true,
+  };
+}
 
 /** Alt+R: remix the numbers in the block under the cursor and re-run it. */
 export function remixCommand(view: EditorView, random: () => number = Math.random): boolean {
