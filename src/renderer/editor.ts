@@ -12,6 +12,7 @@ import hydraFunctions from "hydra-synth/src/glsl/glsl-functions.js";
 import HydraSourceClass from "hydra-synth/src/hydra-source.js";
 import { ao, aoDocs } from "./audio";
 import { blockAt } from "./blocks";
+import { CATALOG } from "./extensions";
 import { keepLiveValues, liveValues } from "./live-values";
 import { remix, remixRunRange } from "./remix";
 import { joinsScrub, scrubbing } from "./scrub";
@@ -200,6 +201,11 @@ const globalDocs: Record<string, { type: string; doc: FunctionDoc }> = {
   width: { type: "variable", doc: makeDoc("width", [], "Output width in pixels.", "width") },
   height: { type: "variable", doc: makeDoc("height", [], "Output height in pixels.", "height") },
   update: { type: "function", doc: makeDoc("update", [{ name: "dt", description: "Milliseconds since the previous frame." }], "Assign a function to run every frame: update = (dt) => { … }.", "update = (dt) => {}") },
+  use: {
+    type: "function",
+    doc: makeDoc("use", [{ name: "names", description: `Extensions to load: ${CATALOG.map((ext) => `${ext.name} (${ext.purpose})`).join("; ")}.` }],
+      "Loads vendored Hydra extensions into this sketch's deck; they stay loaded until Ao restarts (Ao).", "await use(...names)"),
+  },
 };
 
 /** Public members of the `ao` object: everything but the internal `features`. */

@@ -182,6 +182,62 @@ Scenes see these as `aoWave`, `aoSpectrogram`, `aoBalance`, `aoWidth`,
 `aoChroma[12]` and `aoKey`; `TYPES.md` has the details, and
 `sketches/scope.js` and `sketches/ridges.js` show them off.
 
+## Hydra extensions
+
+Ao bundles a few third-party Hydra extensions. A sketch loads them with
+`use`, before using what they add:
+
+```js
+await use("fractals", "noise")
+
+warp(2, 0.04, 2, 3, ao.map("bass", 1, 1.8))
+  .blend(src(o0).inversion().mirrorWrap().scale(1.4), 0.7)
+  .out()
+```
+
+| Name | From | Adds |
+| --- | --- | --- |
+| `noise` | Thomas Jourdan's [extra-shaders-for-hydra](https://gitlab.com/metagrowing/extra-shaders-for-hydra) `lib-noise.js` | Noise generators: `whitenoise`, `colornoise`, `unoise`, `turb`, `uturb`, `warp` (domain warping), `cwarp`, `ncontour`. `turb(4, 0.1, 3)` |
+| `softpattern` | the same, `lib-softpattern.js` | Soft animated patterns: `blinking`, `blobs`, `concentric`, `phasenoise`, `sdfmove`, `smoothsun`. `blinking(8, 3, 0.5)` |
+| `fractals` | geikha's [hyper-hydra](https://github.com/geikha/hyper-hydra) `hydra-fractals.js` | Folds for fractal feedback: `.mirrorX(pos, coverage)`, `.mirrorY`, `.mirrorX2`, `.mirrorY2`, `.mirrorWrap()`, `.inversion()`. `src(o0).inversion().mirrorWrap()` |
+| `outputs` | hyper-hydra, `hydra-outputs.js` | Output framebuffer settings: `o1.setLinear()` for smooth feedback, `setNearest()`, `clear()`, `setFbos({ mag, min })`, and `oS` for all four outputs. `o1.setLinear()` |
+| `gradientmap` | hyper-hydra, `hydra-gradientmap.js` | Gradient maps: `createGradient(...colors)` and `createLinearGradient(angle, ...)` make a gradient texture, `.lookupX(tex)` recolours by brightness. `noise(3).lookupX(createGradient("navy", "gold"))` |
+| `arithmetics` | hyper-hydra, `hydra-arithmetics.js` | Maths on colours: `.sin()`, `.pow(2)`, `.mod(0.5)`, `.range(lo, hi)`, `.clamp()`, `.add(0.1)`, `.div(2)`, … and `x()`, `y()`, `xCenter()`, `lengthCenter()` generators. `x(6).sin().range(0.2, 0.8)` |
+
+`use` also takes the file names, with or without `.js` (`"lib-noise"`,
+`"hydra-fractals.js"`); any other name throws, listing these. Nothing is
+fetched: the files are bundled with Ao, unmodified, and
+`src/renderer/vendor/hydra/SOURCES.md` records where each came from.
+hyper-hydra's own docs describe each extension in full.
+`sketches/fractal-garden.js` uses four of them together.
+
+Each extension loads into the deck running the sketch (see
+[Autopilot](#autopilot)), so it works on either side of a crossfade; `use`
+on the other deck loads it there too, and loading one twice costs nothing.
+Things to know:
+
+- **Extensions stay loaded.** Nothing can unload them, so what they add stays
+  on that deck until Ao restarts, including for later sketches that never
+  called `use`. They only add names, with one exception: `arithmetics` wraps
+  the built-in `add`, `sub` and `mult` so they also take numbers
+  (`.add(0.1)`). Given a texture, they give the same result as before (to
+  within 1/255). A sketch shouldn't count on a function it didn't `use`,
+  since which deck it lands on is chance.
+- **Per-sketch settings are reset.** On every sketch switch, outputs go back
+  to Hydra's defaults (two buffers, nearest filtering, clamped), undoing
+  `o0.setLinear()` and friends, and gradient textures are freed.
+- `arithmetics` claims short names, `x`, `y`, `length` and `distance`, as
+  Hydra functions. A sketch that assigns an undeclared global of the same
+  name overwrites the function on that deck; declare your own with `const`
+  or `let`. Its `length()`, `distance()` and `distanceCenter()` don't
+  compile in Hydra's WebGL 1 shaders: use `lengthCenter()` or
+  `x().mult(x()).add(y().mult(y())).sqrt()`.
+- `outputs`: `setRepeat()` and `setMirror()` turn an output black at
+  Ao's window sizes, because WebGL 1 can't wrap textures whose sides aren't
+  powers of two. Use Hydra's `.repeat()` or `fractals`' `.mirrorWrap()`.
+  `setBufferCount(n)` is marked experimental upstream.
+- `noise` loads the noise library; Hydra's own `noise()` is unchanged.
+
 ## Sketch browser
 
 Ctrl+O (`o` with the editor hidden) shows every sketch as a card with a
