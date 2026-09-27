@@ -7,13 +7,13 @@ update = (dt) => {
 }
 
 red = ao.map(() => heat, 0.3, 1)
-blue = ao.map(() => heat, 1, 0.6)
+blue = ao.map(() => heat, 0.1, 0.01)
 sphere(1)
   .wobble(() => 0.1 * (1 - heat), 3, 1)
-  .spikes(() => 0.9 * heat, 9, 5, 0.7)
+  .spikes(() => 0.9 * heat, ao.map("bass", 5, 9), 5, ao.map("high", 0, 0.7))
   .spectrum(0.25)
   .spin(0.2, 0.4)
-  .color(red, 0.35, blue)
+  .color(red, 0.01, blue)
   .out(s0, { glow: () => 0.6 + 1.5 * ao.impulse })
 
 src(s0).blend(o0, 0.35).out()
