@@ -168,3 +168,57 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
 }`)
 src(s0).out()
 ```
+
+## Solids
+
+Solid shapes are globals that start a chain; each method returns a new solid,
+so chains can be stored and reused. Every numeric argument is a number or a
+function returning one, read each frame. The view spans about `-2.2..2.2`
+vertically at the centre, with `+y` up and `+z` towards the camera.
+
+| Shape | Meaning |
+| --- | --- |
+| `sphere(radius = 1)` | A ball. |
+| `box(width = 1.4, height = width, depth = width)` | A box. |
+| `torus(radius = 1, thickness = 0.3)` | A ring lying flat in the x-z plane. |
+| `cylinder(radius = 0.6, height = 1.6)` | An upright cylinder. |
+| `octahedron(size = 1.2)` | An eight-sided diamond. |
+| `plane(height = -1)` | An endless floor. |
+
+| Method | Meaning |
+| --- | --- |
+| `.move(x = 0, y = 0, z = 0)` | Moves the solid. |
+| `.rotate(x = 0, y = 0, z = 0)` | Turns it by fixed angles in radians. |
+| `.spin(x = 0, y = 0.5, z = 0)` | Keeps it turning, in radians per second. |
+| `.scale(amount = 1)` | Grows or shrinks it. |
+| `.repeat(x = 3, y = 0, z = 3)` | Repeats it endlessly with this spacing; `0` doesn't repeat along that axis. |
+| `.twist(amount = 1)` | Twists it around the y axis, radians per unit of height. |
+| `.spikes(length = 0.3, density = 8, sharpness = 4)` | Sharp spikes out of the surface. |
+| `.wobble(amount = 0.1, frequency = 3, speed = 1)` | A slow liquid swell. |
+| `.noise(amount = 0.15, scale = 2, speed = 0.5)` | Lumpy, evolving noise. |
+| `.spectrum(amount = 0.4)` | Pushes the surface out by the spectrum, lows at the bottom and highs at the top. |
+| `.round(radius = 0.1)` | Rounds edges by growing outwards. |
+| `.shell(thickness = 0.05)` | Hollows it into a thin skin. |
+| `.color(r = 1, g = 1, b = 1)` | Colours it; values above 1 glow brighter. |
+| `.add(solid, smooth = 0)` | Joins another solid; `smooth` melts them together. |
+| `.sub(solid, smooth = 0)` | Cuts another solid out. |
+| `.intersect(solid, smooth = 0)` | Keeps only the overlap. |
+| `.out(source = s0, options?)` | Raymarches the solid into a Hydra source; with none, the `s0` of the deck the sketch runs on. |
+
+`out` compiles the chain into a GLSL scene, as `initScene` would load one.
+Its options:
+
+```ts
+interface SolidOutOptions {
+  scale?: number;       // Render size relative to the output; defaults to 1.
+  camera?: number | (() => number);                  // Camera distance; 4.
+  background?: number | number[] | (() => number | number[]); // Colour; [0.02, 0.02, 0.04].
+  glow?: number | (() => number);                    // Rim light; 0.6.
+  step?: number | (() => number);                    // Ray step fraction; 0.9.
+}
+```
+
+Uniforms are named after their function and parameter, such as
+`spikes_length`, and a function that throws or returns a non-number reports
+that name in the status bar and falls back to `0`.
+

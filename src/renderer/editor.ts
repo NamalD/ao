@@ -15,6 +15,7 @@ import { blockAt } from "./blocks";
 import { keepLiveValues, liveValues } from "./live-values";
 import { remix, remixRunRange } from "./remix";
 import { joinsScrub, scrubbing } from "./scrub";
+import { solidFunctions, solidOutParams } from "./solids";
 
 export interface EditorActions {
   run(code: string): void;
@@ -180,6 +181,36 @@ export const sourceMembers = [
   "initScene",
 ];
 
+/** Help for solids, the 3D shapes that chain like Hydra (Ao). */
+const solidDocs = new Map<string, FunctionDoc>(solidFunctions.map((fn) => {
+  const params: ParameterDoc[] = [
+    ...(fn.type === "combine" ? [{ name: "solid", description: "The other solid, such as sphere(0.5).move(1)." }] : []),
+    ...fn.params.map((p) => ({ name: p.name, default: p.default, description: p.description })),
+  ];
+  return [fn.name, makeDoc(fn.name, params, `${fn.description} (Ao solid)`)] as const;
+}));
+solidDocs.set("out", makeDoc("out", solidOutParams.map((p) => ({ ...p, default: p.name === "source" ? p.default : null })),
+  "Raymarches this solid into a source; show it with src(s0).out().", "out(source = s0, options?)"));
+
+/** Solid functions that start a chain, such as sphere. */
+export const solidShapeNames = solidFunctions.filter((fn) => fn.type === "shape").map((fn) => fn.name);
+/** Methods that continue a solid chain, plus `out`. */
+export const solidMethods = [...solidFunctions.filter((fn) => fn.type !== "shape").map((fn) => fn.name), "out"];
+
+/**
+ * The name a method chain starts from, such as `sphere` in
+ * `sphere(1).spikes(0.3).spin()`, for a node anywhere in that chain.
+ */
+export function chainRoot(state: EditorState, node: SyntaxNode | null): string | undefined {
+  const chain = (n: SyntaxNode | null) => n?.name === "MemberExpression" || n?.name === "CallExpression";
+  while (node?.parent && chain(node.parent)) node = node.parent;
+  while (chain(node)) node = node!.firstChild;
+  return node?.name === "VariableName" ? state.sliceDoc(node.from, node.to) : undefined;
+}
+
+/** Whether the chain at a node is a solid, so its methods are the solid ones. */
+export const isSolidChain = (state: EditorState, node: SyntaxNode | null) => solidShapeNames.includes(chainRoot(state, node) ?? "");
+
 /** Hydra globals that aren't GLSL functions. */
 const globalDocs: Record<string, { type: string; doc: FunctionDoc }> = {
   ...Object.fromEntries([0, 1, 2, 3].map((i) => [`o${i}`, {
@@ -227,10 +258,11 @@ export function aoMemberDocs(docs: Record<string, AoDoc>): Map<string, FunctionD
 
 const aoFunctionDocs = aoMemberDocs(aoDocs);
 
-/** Documentation for `name`, preferring the object it's called on. */
-export function functionDoc(name: string, owner?: string): FunctionDoc | undefined {
+/** Documentation for `name`, preferring the object it's called on; `solid` for a solid chain. */
+export function functionDoc(name: string, owner?: string, solid = false): FunctionDoc | undefined {
   if (owner === "ao") return aoFunctionDocs.get(name);
   if (owner && /^s[0-3]$/.test(owner)) return sourceDocs[name];
+  if (solid || (!owner && solidShapeNames.includes(name))) return solidDocs.get(name);
   return hydraFunctionDocs.get(name) ?? globalDocs[name]?.doc;
 }
 
@@ -238,13 +270,14 @@ function documented(label: string, type: string, docs: FunctionDoc | undefined, 
   return { label, type, detail: docs?.signature ?? fallback, info: docs?.info };
 }
 
-/** Completion options after `ao.`, `s0.` and friends, or `.` on a chain. */
-export function memberCompletions(owner: string | undefined): Completion[] {
+/** Completion options after `ao.`, `s0.` and friends, or `.` on a chain; `solid` for a solid chain. */
+export function memberCompletions(owner: string | undefined, solid = false): Completion[] {
   if (owner === "ao") {
     return publicAoMembers().map(({ name, method }) =>
       documented(name, method ? "method" : "property", aoFunctionDocs.get(name), "Ao audio"));
   }
   if (owner && /^s[0-3]$/.test(owner)) return sourceMembers.map((name) => documented(name, "method", sourceDocs[name], "Hydra source"));
+  if (solid) return solidMethods.map((name) => documented(name, "method", solidDocs.get(name), "Solid method"));
   return chainMethods.map((name) => documented(name, "method", hydraFunctionDocs.get(name), "Hydra chain method"));
 }
 
@@ -252,6 +285,7 @@ export function memberCompletions(owner: string | undefined): Completion[] {
 export function topLevelCompletions(): Completion[] {
   return [
     ...generators.map((name) => documented(name, "function", hydraFunctionDocs.get(name), "Hydra generator")),
+    ...solidShapeNames.map((name) => documented(name, "function", solidDocs.get(name), "Ao solid")),
     ...Object.entries(globalDocs).map(([name, { type, doc }]) => documented(name, type, doc, "Hydra")),
     { label: "ao", type: "variable", detail: "Ao audio levels", info: "ao\nLive audio levels: ao.bass, ao.impulse, ao.fft, …" },
   ];
@@ -259,7 +293,7 @@ export function topLevelCompletions(): Completion[] {
 
 // --- Signature help ------------------------------------------------------------
 
-export function callParameterContext(state: EditorState, pos: number): { name: string; owner?: string; activeParameter: number } | null {
+export function callParameterContext(state: EditorState, pos: number): { name: string; owner?: string; solid: boolean; activeParameter: number } | null {
   let args: SyntaxNode | null = syntaxTree(state).resolveInner(pos, -1);
   while (args && args.name !== "ArgList") args = args.parent;
   if (!args || pos < args.from || pos > args.to || (pos === args.to && state.sliceDoc(pos - 1, pos) === ")")) return null;
@@ -272,15 +306,15 @@ export function callParameterContext(state: EditorState, pos: number): { name: s
   for (let child = args.firstChild; child; child = child.nextSibling) {
     if (child.name === "," && child.from < pos) activeParameter++;
   }
-  return { name: callee[2], owner: callee[1], activeParameter };
+  return { name: callee[2], owner: callee[1], solid: isSolidChain(state, call), activeParameter };
 }
 
 function signatureTooltip(state: EditorState, pos: number): Tooltip | null {
   if (!state.selection.main.empty) return null;
   const context = callParameterContext(state, pos);
   if (!context) return null;
-  const { name, owner, activeParameter } = context;
-  const docs = functionDoc(name, owner);
+  const { name, owner, solid, activeParameter } = context;
+  const docs = functionDoc(name, owner, solid);
   if (!docs || !docs.params.length) return null;
   return {
     pos,
@@ -331,7 +365,10 @@ function hydraCompletions(context: CompletionContext) {
   const from = word?.from ?? context.pos;
   const before = context.state.doc.sliceString(Math.max(0, from - 100), from);
   const member = before.match(/(?:\b(ao|s[0-3])|\))\.$/);
-  if (member || /\.\s*$/.test(before)) return { from, options: memberCompletions(member?.[1]), validFor: /^[\w$]*$/ };
+  if (member || /\.\s*$/.test(before)) {
+    const solid = !member?.[1] && isSolidChain(context.state, node);
+    return { from, options: memberCompletions(member?.[1], solid), validFor: /^[\w$]*$/ };
+  }
   return { from, options: topLevelCompletions(), validFor: /^[\w$]*$/ };
 }
 

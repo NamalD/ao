@@ -3,6 +3,7 @@ import type { AudioFeatures } from "../shared/features";
 import { describeError } from "./runtime-errors";
 import { Scene, SceneOptions } from "./scenes";
 import { evaluateInScope, sketchScope } from "./scope";
+import { makeSolidShapes } from "./solids";
 
 /** Timer functions a sketch gets from its deck, so switching away can stop them. */
 const TIMERS = ["setTimeout", "setInterval", "clearTimeout", "clearInterval", "requestAnimationFrame", "cancelAnimationFrame"] as const;
@@ -47,7 +48,8 @@ export class Deck {
     this.synth = this.hydra.synth as unknown as Synth;
     for (const source of this.hydra.s) this.patchSource(source);
     this.timers = this.makeTimers();
-    this.scope = sketchScope(this.synth, this.timers);
+    // Solids render into this deck's s0 when `.out()` is given no source.
+    this.scope = sketchScope(this.synth, { ...this.timers, ...makeSolidShapes(() => this.hydra.s[0]) });
   }
 
   /**

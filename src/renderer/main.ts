@@ -15,6 +15,7 @@ import { describeNight } from "../shared/night";
 import { Recorder } from "./recorder";
 import { describeError, ErrorReporter, installRuntimeErrorReporting } from "./runtime-errors";
 import { SketchWriter } from "./sketch-writer";
+import { solidShapes } from "./solids";
 import { installHydraTempo, msToNextBar, releaseHydraBpm, syncHydraBpm, tapTempo } from "./tempo";
 import "./style.css";
 
@@ -55,6 +56,9 @@ const mixer = new Mixer(canvas, width, height, (message) => runtimeErrors.report
 // Follow the canvas's real size; the window may not have its final size yet.
 new ResizeObserver(() => mixer.resize(...pixelSize())).observe(canvas);
 window.ao = ao;
+// 3D solids chain like Hydra and render into a source: `sphere().spikes(0.3).out(s0)`.
+// Sketches get their deck's own (see deck.ts); these serve the DevTools console.
+Object.assign(window, solidShapes);
 host.onAudio(updateAudio);
 installHydraTempo();
 

@@ -136,6 +136,33 @@ resolution for heavy raymarchers; `uniforms` feeds extra values, declared in
 the shader as `uniform float name;`. Shader errors report line numbers within
 the scene string. `sketches/dunes.js` is a full raymarched landscape.
 
+**Solids** are 3D shapes written like Hydra chains, with no GLSL. A shape
+starts the chain, methods move, warp and colour it, and `.out(s0)` raymarches
+it, lit and shaded, into a source you then use like any other:
+
+```js
+sphere(1)
+  .wobble(0.1)                        // a slow liquid swell
+  .spikes(() => ao.impulse, 9, 5)     // bristles on hits
+  .spin(0.2, 0.4)
+  .color(1, 0.3, 0.6)
+  .out(s0, { glow: () => ao.bass })
+
+src(s0).blend(o0, 0.3).out()
+```
+
+Shapes are `sphere`, `box`, `torus`, `cylinder`, `octahedron` and `plane`.
+Methods place the solid (`move`, `rotate`, `spin`, `scale`, `repeat`,
+`twist`), shape its surface (`spikes`, `wobble`, `noise`, `spectrum`, `round`,
+`shell`), colour it (`color`), and combine it with another solid (`add`,
+`sub`, `intersect`), where a second argument such as `.add(sphere(0.5).move(1), 0.4)`
+melts the two together like liquid. As in Hydra, every argument can be a
+number or a function read each frame. Numbers become uniforms too, so
+scrubbing one never recompiles the shader. `out` takes `{ scale, camera,
+background, glow, step }`; lower `step` if very long spikes or strong twists
+tear. Completion and signature help know solid chains apart from Hydra ones.
+`sketches/urchin.js` is a ball that turns spiky when the song gets intense.
+
 Each evaluation runs in its own function scope, so re-running a block that
 declares `const` works; share values between blocks through globals.
 
@@ -540,7 +567,7 @@ Live values keep their default (on) whenever the editor shows.
 - `src/main`: Electron main process, audio capture, state and sketch files.
 - `src/shared`: audio analysis (FFT, loudness, impulse, beat, tempo), kept pure.
 - `src/preload`: the narrow bridge the renderer may call.
-- `src/renderer`: Hydra host, GLSL scene runner, overlay editor.
+- `src/renderer`: Hydra host, GLSL scene runner, solids compiler, overlay editor.
 - `sketches`: the visualizers.
 
 ## Parallel development
