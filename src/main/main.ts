@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain } from "electron";
 import { watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Capture, startCapture, startFakeCapture } from "./capture";
+import { saveChallenge } from "./challenge-log";
 import { isAppNavigation } from "./navigation";
 import { Store } from "./store";
 import { mergeSettings, normalizeSettings, Settings } from "../shared/settings";
@@ -94,6 +95,8 @@ function registerIpc(win: () => BrowserWindow | null): void {
   ipcMain.on("settings:update", (_e, patch: unknown) => {
     if (!options.screenshot) store.write("settings", mergeSettings(readSettings(), patch));
   });
+  ipcMain.handle("challenge:finish", (_e, result: unknown) =>
+    saveChallenge(store, result, async () => (await win()!.webContents.capturePage()).toPNG()));
 }
 
 /** `state/settings.json`, or for screenshots only what the flags ask for. */

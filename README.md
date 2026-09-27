@@ -31,6 +31,7 @@ past 1 MB the log moves to `ao.log.1`.
 | Ctrl+Shift+H | hide or show the editor (ambient mode) |
 | Ctrl+Shift+M | show or hide the audio meter |
 | Ctrl+Shift+N | night fade: follow the schedule, force on, force off |
+| Ctrl+Shift+C | challenge: draw a prompt, or finish the running one |
 | F11 | fullscreen |
 | F1 | help |
 | Ctrl+Q | quit |
@@ -41,7 +42,8 @@ you open.
 
 With the editor hidden, the old single keys work: `j`/`k` switch sketches,
 `f` fullscreen, `e` brings the editor back, `i` toggles the FPS counter, `m`
-the audio meter, `n` cycles the night fade, and `q` or `Esc` quits.
+the audio meter, `n` cycles the night fade, `c`
+opens a challenge, and `q` or `Esc` quits.
 
 ## Sketches
 
@@ -188,6 +190,29 @@ the defaults:
 - `night.speed`: optionally slow Hydra and scene time at night, `0.1..1`, eased
   in with the fade; `1` (the default) leaves speed alone. Audio levels are
   unaffected.
+
+## Challenge mode
+
+Ctrl+Shift+C (or `c` with the editor hidden) draws a challenge to practise
+Hydra: one prompt from one of four buckets, **recreate** ("a lava lamp"),
+**constraint** ("at most 3 lines of code"), **audio-reactive** ("the kick
+feels like a heartbeat"), and **technique** (one-idea drills such as masks,
+`setFunction` or a first raymarched scene). Half the time it adds a prompt
+from another bucket, a quarter of those times a third, and an eighth of
+those a fourth. The card shows the prompts; `H` reveals hints naming useful
+functions, `1`/`2`/`3` pick a 5, 10 or 20 minute time box (10 by default),
+`R` re-rolls, `Enter` starts and `Esc` dismisses.
+
+Starting creates and opens a sketch named `challenge-YYYY-MM-DD-<slug>` whose
+header comment holds the prompt, and the status bar counts down. When time
+runs out, or you press Ctrl+Shift+C and then `Enter` to finish early, Ao saves
+the sketch, briefly hides the editor and status bar to snapshot the visuals to
+`state/challenges/<sketch>.png`, and appends a record (prompts and buckets,
+sketch, start and end times, duration, time box, whether you finished early,
+snapshot path) to `state/challenges.json`. Challenge sketches are git-ignored
+(`sketches/challenge-*.js`), so attempts don't clutter the example sketches.
+Prompts live in `src/shared/challenge-prompts.ts`; add a line to extend a
+bucket.
 
 ## Screenshots
 

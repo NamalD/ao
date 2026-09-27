@@ -1,6 +1,7 @@
 import Hydra from "hydra-synth";
 import type { Bridge } from "../preload/preload";
 import { ao, updateAudio } from "./audio";
+import { ChallengeMode } from "./challenges/challenge-mode";
 import { createEditor, setText } from "./editor";
 import { flashStatus } from "./flash";
 import { Meter } from "./meter";
@@ -238,10 +239,15 @@ function cycleNight() {
   host.updateSettings({ night: { mode } });
   flashStatus(status, describeNight(night.current));
 }
+const challenges = new ChallengeMode({
+  listSketches: host.listSketches, writeSketch: host.writeSketch, finishChallenge: host.finishChallenge,
+  open, save, notify: showStatus, focus: () => { if (editorVisible()) editor.focus(); },
+});
 
 addEventListener("keydown", (e) => {
   const ctrl = e.ctrlKey || e.metaKey;
   const handled = () => { e.preventDefault(); e.stopPropagation(); };
+  if (challenges.onKey(e)) return;
   if (e.key === "F11") { handled(); host.toggleFullscreen(); return; }
   if (e.key === "F1") { handled(); toggleHelp(); return; }
   if (ctrl && !e.shiftKey && e.key.toLowerCase() === "n") { handled(); void createSketch(); return; }
@@ -257,6 +263,7 @@ addEventListener("keydown", (e) => {
     j: () => void step(-1), k: () => void step(1), f: host.toggleFullscreen,
     e: () => setEditorVisible(true), h: toggleHelp, i: () => fpsLabel.classList.toggle("shown"),
     m: toggleMeter, n: cycleNight, q: host.quit, Escape: host.quit,
+    c: () => challenges.toggle(),
   };
   const action = actions[e.key];
   if (action) { handled(); action(); }
