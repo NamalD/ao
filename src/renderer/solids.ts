@@ -137,11 +137,13 @@ export interface SolidOutOptions {
   glow?: SolidArg;
   /** Fraction of the distance each ray step takes; lower fixes torn spikes and twists, at a cost. */
   step?: SolidArg;
+  /** How much of each frame lingers into the next, 0..1: light trails behind moving solids. */
+  trails?: SolidArg;
 }
 
 export const solidOutParams: SolidParam[] = [
   param("source", "s0", "Source to render into, s0–s3; show it with src(s0).out()."),
-  param("options", "{}", "{ scale, camera, background, glow, step }: resolution fraction, camera distance (4), background colour ([0.02, 0.02, 0.04]), rim light (0.6), and ray step (0.9)."),
+  param("options", "{}", "{ scale, camera, background, glow, step, trails }: resolution fraction, camera distance (4), background colour ([0.02, 0.02, 0.04]), rim light (0.6), ray step (0.9), and how much of each frame lingers (none)."),
 ];
 
 /** GLSL for a solid at a point: a vec4 of colour and distance, and bounds for the raymarcher. */
@@ -388,9 +390,18 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     float fog = 1.0 - exp(-0.004 * pow(max(t - aoCamera, 0.0), 2.0));
     colour = mix(colour, background, fog);
   }
-  fragColor = vec4(pow(max(colour, 0.0), vec3(0.4545)), 1.0);
+  fragColor = aoFinish(pow(max(colour, 0.0), vec3(0.4545)), fragCoord);
 }
 `;
+
+const FINISH = "vec4 aoFinish(vec3 colour, vec2 fragCoord) { return vec4(colour, 1.0); }";
+
+/** Keeps the brighter of this frame and the last one, faded: light trails. */
+const FINISH_TRAILS = `
+vec4 aoFinish(vec3 colour, vec2 fragCoord) {
+  vec3 last = texture(aoPrevious, fragCoord / iResolution.xy).rgb;
+  return vec4(max(colour, last * clamp(aoTrails, 0.0, 1.0)), 1.0);
+}`;
 
 /** Compiles a solid into a scene shader and the uniforms that drive it. */
 export function compileSolid(solid: Solid, options: SolidOutOptions = {}): { code: string; uniforms: Record<string, UniformValue> } {
@@ -405,6 +416,8 @@ export function compileSolid(solid: Solid, options: SolidOutOptions = {}): { cod
   setting("background", options.background, [0.02, 0.02, 0.04]);
   setting("glow", options.glow, 0.6);
   setting("step", options.step, 0.9);
+  // Only chains with trails read the last frame, so only they pay to keep it.
+  if (options.trails !== undefined) setting("trails", options.trails, 0);
   const result = solid.emit(compiler, "p");
   const declarations = Object.keys(compiler.uniforms)
     .map((name) => `uniform ${name === "aoBackground" ? "vec3" : "float"} ${name};`);
@@ -417,6 +430,7 @@ export function compileSolid(solid: Solid, options: SolidOutOptions = {}): { cod
     "}",
     `float aoReach() { return ${result.reach}; }`,
     `float aoSlope() { return ${result.slope}; }`,
+    options.trails === undefined ? FINISH : FINISH_TRAILS,
     RENDER,
   ].join("\n");
   return { code, uniforms: compiler.uniforms };

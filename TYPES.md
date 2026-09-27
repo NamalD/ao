@@ -129,7 +129,7 @@ uniforms from Ao:
 | `iResolution` | `vec3` | Render width, height, and depth (`1`). |
 | `iTime` | `float` | Elapsed scene time in seconds. |
 | `iTimeDelta` | `float` | Time since the previous frame in seconds. |
-| `iFrame` | `int` | Scene frame counter, starting at zero. |
+| `iFrame` | `int` | Scene frame counter, starting at zero; it keeps counting across edits and restarts when the buffers clear. |
 | `aoLoudness`, `aoImpulse`, `aoBeat` | `float` | Overall level and transient envelopes. |
 | `aoBass`, `aoMid`, `aoHigh` | `float` | Average frequency band levels. |
 | `aoBpm` | `float` | Tempo in beats per minute, as `ao.bpm`. |
@@ -146,6 +146,7 @@ The optional `options` object has this shape:
 interface SceneOptions {
   scale?: number; // Render size relative to the output; defaults to 1.
   uniforms?: Record<string, number | number[] | (() => number | number[])>;
+  buffers?: string[]; // Up to four GLSL state passes; see below.
 }
 ```
 
@@ -163,6 +164,31 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
 
 The `swirl` example must declare `uniform float swirl;` in the shader if it is
 used there.
+
+### Buffers and the previous frame
+
+Each string in `buffers` is a GLSL pass with its own `mainImage`. Every
+frame the buffers run in order, then the scene; each draws into a
+half-float RGBA texture (`RGBA16F`) at the scene's render size that keeps
+its output. Custom `uniforms` reach every pass, and a function uniform is
+read once a frame however many passes use it.
+
+| Uniform | GLSL type | Meaning |
+| --- | --- | --- |
+| `aoBuffer0` .. `aoBuffer3` | `sampler2D` | The buffers: this frame's output for buffers earlier in the list, the previous frame's for the pass itself and later ones. Buffers a scene doesn't have read as transparent black. |
+| `iChannel0` .. `iChannel3` | `sampler2D` | Aliases for `aoBuffer0` .. `aoBuffer3`, as in Shadertoy. |
+| `aoPrevious` | `sampler2D` | This pass's own output from the previous frame. The scene itself may read it too. |
+
+Textures filter linearly and clamp at the edges. Buffer passes keep alpha
+and may write values outside `0..1`, up to half float's ±65504; a
+component that comes out NaN is stored as `0`. The scene's own output is
+still shown opaque.
+
+State lasts until the number of buffers changes, `s0.clearScene()` is
+called, or the deck switches sketches. Re-running `initScene` with edited
+code keeps it and `iFrame` keeps counting, so seed state with
+`iFrame == 0` or from an empty buffer. When the output or `scale` resizes
+the scene, the state is stretched to the new size.
 
 ### Waveform, spectrogram, stereo and chroma in scenes
 
@@ -241,6 +267,7 @@ interface SolidOutOptions {
   background?: number | number[] | (() => number | number[]); // Colour; [0.02, 0.02, 0.04].
   glow?: number | (() => number);                    // Rim light; 0.6.
   step?: number | (() => number);                    // Ray step fraction; 0.9.
+  trails?: number | (() => number);                  // How much of each frame lingers, 0..1; none.
 }
 ```
 

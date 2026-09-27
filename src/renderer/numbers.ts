@@ -102,18 +102,23 @@ function fullTree(state: EditorState): Tree {
   return ensureSyntaxTree(state, state.doc.length, 200) ?? syntaxTree(state);
 }
 
+/** The key of a `key: value` property node, or null. */
+function propertyKey(state: EditorState, node: SyntaxNode | null): string | null {
+  const key = node?.name === "Property" ? node.getChild("PropertyDefinition") : null;
+  return key && state.sliceDoc(key.from, key.to);
+}
+
 /**
- * Whether a string node holds GLSL: the first argument of `initScene`, or a
- * `glsl:` property as passed to `setFunction`. Other strings are left alone,
- * so URLs, labels and plain template strings never change.
+ * Whether a string node holds GLSL: the first argument of `initScene`, an
+ * element of its `buffers: [...]` option, or a `glsl:` property as passed to
+ * `setFunction`. Other strings are left alone, so URLs, labels and plain
+ * template strings never change.
  */
 export function isShaderString(state: EditorState, node: SyntaxNode): boolean {
   if (node.name !== "TemplateString" && node.name !== "String") return false;
   const parent = node.parent;
-  if (parent?.name === "Property") {
-    const key = parent.getChild("PropertyDefinition");
-    return !!key && state.sliceDoc(key.from, key.to) === "glsl";
-  }
+  if (parent?.name === "Property") return propertyKey(state, parent) === "glsl";
+  if (parent?.name === "ArrayExpression") return propertyKey(state, parent.parent) === "buffers";
   if (parent?.name === "ArgList" && parent.parent?.name === "CallExpression") {
     // Only the first argument: the options object after it is JavaScript.
     let first = parent.firstChild?.nextSibling;
