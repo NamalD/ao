@@ -31,9 +31,36 @@ vi.mock("hydra-synth", async () => {
     deferArgs(name, args);
     return chain(name);
   };
+  // Enough WebGL and regl for the vendored extensions `use` loads, as in extensions.test.ts.
+  const gl = {
+    NEAREST: 9728, LINEAR: 9729, REPEAT: 10497, CLAMP_TO_EDGE: 33071, MIRRORED_REPEAT: 33648,
+    TEXTURE_MIN_FILTER: 10241, TEXTURE_MAG_FILTER: 10240, TEXTURE_WRAP_S: 10242, TEXTURE_WRAP_T: 10243,
+    FRAMEBUFFER: 36160, FRAMEBUFFER_BINDING: 36006, TEXTURE_BINDING_2D: 32873, TEXTURE_2D: 3553,
+    COLOR_ATTACHMENT0: 36064, FRAMEBUFFER_ATTACHMENT_OBJECT_NAME: 36049, COLOR_BUFFER_BIT: 16384,
+    getParameter: () => null, bindFramebuffer() {}, getFramebufferAttachmentParameter: () => ({}),
+    bindTexture() {}, texParameteri() {}, clearColor() {}, clear() {},
+  };
+  const regl = { _gl: gl };
+  class FakeOutput {
+    regl = regl;
+    fbos = [0, 1].map(() => ({ _framebuffer: { framebuffer: {} }, width: 4, height: 4 }));
+    constructor(readonly label: string) {}
+  }
+  class FakeSource {
+    regl = regl;
+    constructor(readonly label: string) {}
+    init() {}
+    initImage() {}
+    initVideo() {}
+    initCam() {}
+    clear() {}
+  }
   return {
     default: class FakeHydra {
-      s = [0, 1, 2, 3].map((i) => ({ label: `s${i}`, init() {}, initImage() {}, initVideo() {}, initCam() {}, clear() {} }));
+      regl = regl;
+      sandbox = { makeGlobal: false };
+      o = [0, 1, 2, 3].map((i) => new FakeOutput(`o${i}`));
+      s = [0, 1, 2, 3].map((i) => new FakeSource(`s${i}`));
       width = 640;
       height = 360;
       loadScript = async () => {};
@@ -48,7 +75,7 @@ vi.mock("hydra-synth", async () => {
 
       constructor() {
         for (const fn of hydraFunctions()) if (fn.type === "src") this.synth[fn.name] = generator(fn.name);
-        [0, 1, 2, 3].forEach((i) => { this.synth[`o${i}`] = { label: `o${i}` }; });
+        this.o.forEach((output, i) => { this.synth[`o${i}`] = output; });
         this.s.forEach((source, i) => { this.synth[`s${i}`] = source; });
       }
     },
@@ -69,7 +96,11 @@ vi.mock("../src/renderer/scenes", () => ({
 
 // The little of the browser a Deck and the bundled sketches touch.
 vi.stubGlobal("window", globalThis);
-vi.stubGlobal("document", { createElement: () => ({ style: {}, getContext: () => null }) });
+// A 2D context where every call succeeds, for extensions that draw textures (gradientmap).
+const context2d: object = new Proxy({}, { get: (_, key) => (key === "then" ? undefined : () => context2d) });
+vi.stubGlobal("document", {
+  createElement: () => ({ style: {}, width: 1, height: 1, getContext: (type: string) => (type === "2d" ? context2d : null) }),
+});
 vi.stubGlobal("innerWidth", 640);
 vi.stubGlobal("innerHeight", 360);
 vi.stubGlobal("devicePixelRatio", 1);
