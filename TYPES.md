@@ -36,6 +36,7 @@ one log-frequency axis: `0` is about 30 Hz, `0.5` about 700 Hz, `1` about
 | `ao.fftAt(x)` | `number` | Spectrum level at position `x` (`0..1`), linearly interpolated like GLSL `aoFFT(x)`. |
 | `ao.hz(lo, hi?)` | `number` | Average level of the bands between `lo` and `hi` Hz. With one argument, or a range narrower than a band, the interpolated level at that frequency. |
 | `ao.map(level, lo = 0, hi = 1)` | `() => number` | A function mapping a level onto `lo..hi`, for Hydra arguments. |
+| `ao.glide(level, seconds = 1)` | `() => number` | A function following a level, `"bpm"`, or any function, easing each change in so it is within 2% after `seconds`. |
 | `ao.ramp(n = 1)` | `number` | `0..1` ramp over every `n` beats, aligned to the bar: `ao.ramp(4)` runs once per bar. `0` for `n <= 0`. |
 | `ao.pulse(div = 1)` | `number` | `1` on every `1/div` of a beat, easing to `0` (as `(1 - t)^4`) by the next. `0` for `div <= 0`. |
 
@@ -62,6 +63,24 @@ osc(20, 0.05, () => 1 + ao.bass)
 
 The accepted level names are `"loudness"`, `"impulse"`, `"beat"`, `"bass"`,
 `"mid"`, `"high"`, `"peak"`, and `"centroid"`.
+
+`ao.glide` fades a value that would otherwise jump, such as `ao.bpm` when the
+tempo is re-detected or tapped. It takes the same level names plus `"bpm"`, or
+any function. Create it once, outside the argument function, since each glide
+remembers where it has got to; it steps by real time, so it keeps the same
+pace at any frame rate and can be read more than once a frame:
+
+```js
+const bpm = ao.glide("bpm", 2)   // settles two seconds after a tempo change
+
+sphere()
+  .ripple(0.1, () => bpm() / 20)
+  .out(s0)
+```
+
+Glide a frequency or size rather than a `speed` that multiplies elapsed time:
+the pattern's position is `speed * time`, so even a slow change in speed
+sends it lurching forwards or backwards.
 
 ### Waveform, stereo image and chroma
 

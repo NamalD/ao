@@ -32,6 +32,13 @@ describe("ao", () => {
     expect(ao.map("peak")()).toBe(ao.peak);
   });
 
+  it("glides level names, bpm and functions, starting at the current value", () => {
+    withSpectrum(() => 0.5);
+    expect(ao.glide("bass")()).toBe(ao.bass);
+    expect(ao.glide("bpm", 2)()).toBe(ao.bpm);
+    expect(ao.glide(() => 3, 0)()).toBe(3);
+  });
+
   it("documents every public member", () => {
     const members = Object.keys(Object.getOwnPropertyDescriptors(ao)).filter((key) => key !== "features");
     expect(Object.keys(aoDocs).sort()).toEqual(members.sort());

@@ -1,6 +1,7 @@
 import { AudioFeatures, silentFeatures } from "../shared/features";
 import { centroidPosition, hzLevel, peakPosition, spectrumAt } from "../shared/spectrum";
 import { keyHue } from "../shared/chroma";
+import { glide } from "../shared/glide";
 import { waveAt } from "../shared/waveform";
 import { spectrogram } from "./spectrogram";
 import { barNow, clock, followTempo, phaseNow, pulse, ramp } from "./tempo";
@@ -37,6 +38,14 @@ export const ao = {
   map(level: Level | (() => number), lo = 0, hi = 1) {
     const read = typeof level === "function" ? level : () => this[level];
     return () => lo + (hi - lo) * read();
+  },
+  /**
+   * A Hydra argument that follows a level, `"bpm"`, or any function, fading
+   * each change in over about `seconds`: `ripple(0.1, ao.glide("bpm", 2))`.
+   */
+  glide(level: Level | "bpm" | (() => number), seconds = 1) {
+    const read = typeof level === "function" ? level : () => this[level];
+    return glide(read, seconds, () => performance.now());
   },
   // --- Waveform, stereo image and chroma ---
   /** The newest ~21 ms of waveform, 512 values -1..1, starting on a rising zero crossing. */
@@ -82,6 +91,7 @@ export const aoDocs: Record<string, { signature: string; description: string }> 
   high: { signature: "ao.high", description: "Average level above 2 kHz, 0..1." },
   fft: { signature: "ao.fft", description: "64 log-spaced band levels, 0..1, from ~30 Hz to ~16 kHz." },
   map: { signature: "ao.map(level, lo = 0, hi = 1)", description: "Maps a level name, or a function such as () => ao.hz(40, 100), onto lo..hi; returns a function Hydra re-reads every frame." },
+  glide: { signature: "ao.glide(level, seconds = 1)", description: "Follows a level name, \"bpm\", or any function, fading each change in over about `seconds` instead of snapping: ao.glide(\"bpm\", 2). Returns a function Hydra re-reads every frame." },
   fftAt: { signature: "ao.fftAt(x)", description: "Spectrum level at position x, 0..1 from low to high, interpolated like GLSL aoFFT(x)." },
   hz: { signature: "ao.hz(lo, hi?)", description: "Average level between two frequencies in Hz, or at one frequency: ao.hz(40, 100) for kicks." },
   peak: { signature: "ao.peak", description: "Position of the loudest band, 0..1 from low to high; glides between bands." },
