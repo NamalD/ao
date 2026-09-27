@@ -130,8 +130,8 @@ export const solidFunctions: SolidFunction[] = [
 
 /** Options for `.out(source, options)`. */
 export interface SolidOutOptions {
-  /** Render at this fraction of the output resolution; lower is faster. */
-  scale?: number;
+  /** Render at this fraction of the output resolution; lower is faster. Automatic unless given. */
+  scale?: number | "auto";
   /** Camera distance from the centre. */
   camera?: SolidArg;
   /** Background and fog colour: one number for grey, or [r, g, b]. */
@@ -146,7 +146,7 @@ export interface SolidOutOptions {
 
 export const solidOutParams: SolidParam[] = [
   param("source", "s0", "Source to render into, s0–s3; show it with src(s0).out()."),
-  param("options", "{}", "{ scale, camera, background, glow, step, trails }: resolution fraction, camera distance (4), background colour ([0.02, 0.02, 0.04]), rim light (0.6), ray step (0.9), and how much of each frame lingers (none)."),
+  param("options", "{}", "{ scale, camera, background, glow, step, trails }: resolution fraction (\"auto\" by default: as sharp as the GPU keeps up with), camera distance (4), background colour ([0.02, 0.02, 0.04]), rim light (0.6), ray step (0.9), and how much of each frame lingers (none)."),
 ];
 
 /** GLSL for a solid at a point: a vec4 of colour and distance, and bounds for the raymarcher. */
@@ -228,7 +228,8 @@ export class Solid {
     const target = (source ?? this.home()) as { initScene?: (code: string, options?: SceneOptions) => void } | undefined;
     if (typeof target?.initScene !== "function") throw new Error(`out: expected a source such as s0, got ${show(source)}`);
     const { code, uniforms } = compileSolid(this, options);
-    target.initScene(code, { scale: options.scale, uniforms });
+    // Raymarching costs every pixel dozens of steps; let the GPU's pace pick the resolution.
+    target.initScene(code, { scale: options.scale ?? "auto", uniforms });
   }
 }
 

@@ -180,7 +180,7 @@ const sourceDocs: Record<string, FunctionDoc> = {
   clear: makeDoc("clear", [], "Stops any camera, screen or stream and empties this source.", "clear()"),
   initScene: makeDoc("initScene", [
     { name: "source", description: "GLSL ES 3.0 fragment shader defining mainImage(out vec4, in vec2)." },
-    { name: "options", description: "{ scale, uniforms, buffers }: render resolution as a fraction of the output, extra uniforms, and up to four GLSL state passes read as aoBuffer0..3." },
+    { name: "options", description: "{ scale, uniforms, buffers }: render resolution as a fraction of the output or \"auto\", extra uniforms, and up to four GLSL state passes read as aoBuffer0..3." },
   ], "Loads a Shadertoy-style shader into this source (Ao).", "initScene(source, options?)"),
   clearScene: makeDoc("clearScene", [], "Empties this source's scene buffers and restarts iFrame; editing the scene keeps them (Ao).", "clearScene()"),
 };

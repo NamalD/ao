@@ -1,11 +1,15 @@
 import type { AudioFeatures } from "../shared/features";
+import { sceneResolution } from "./resolution";
 import { spectrogram, SpectrumHistory } from "./spectrogram";
 import { barNow, clock, phaseNow } from "./tempo";
 
 export type UniformValue = number | number[] | (() => number | number[]);
 export interface SceneOptions {
-  /** Render at this fraction of the output resolution; lower is faster. */
-  scale?: number;
+  /**
+   * Render at this fraction of the output resolution; lower is faster.
+   * "auto" picks it from how long the GPU takes (see resolution.ts).
+   */
+  scale?: number | "auto";
   /** Extra uniforms, declared in the shader as `uniform float name;` (or vec2..vec4). */
   uniforms?: Record<string, UniformValue>;
   /**
@@ -27,6 +31,10 @@ export function sceneSources(code: string, options: SceneOptions = {}): string[]
   const buffers = options.buffers ?? [];
   if (!Array.isArray(buffers)) throw new Error("initScene buffers: expected an array of GLSL strings, such as [velocity, dye]");
   if (buffers.length > MAX_BUFFERS) throw new Error(`initScene buffers: at most ${MAX_BUFFERS}, got ${buffers.length}`);
+  const scale = options.scale;
+  if (scale !== undefined && scale !== "auto" && !(typeof scale === "number" && scale > 0 && Number.isFinite(scale))) {
+    throw new Error(`initScene scale: expected a number above 0 or "auto", got ${typeof scale === "string" ? JSON.stringify(scale) : String(scale)}`);
+  }
   buffers.forEach((buffer, i) => {
     if (typeof buffer !== "string") throw new Error(`initScene buffers[${i}]: expected GLSL source, got ${typeof buffer}`);
   });
@@ -173,6 +181,12 @@ export function formatShaderLog(log: string): string {
 
 interface UniformInfo { location: WebGLUniformLocation; size: number }
 
+/** A GPU timer query in flight, with the scale its frame was drawn at. */
+interface Timing { query: WebGLQuery; scale: number }
+/** Frames that may be timed at once; results arrive a few frames late. */
+const MAX_TIMINGS = 4;
+interface TimerQuery { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number }
+
 /** A compiled pass: a buffer, or the image the scene shows. */
 interface Pass { program: WebGLProgram; uniforms: Map<string, UniformInfo> }
 
@@ -222,6 +236,9 @@ export class Scene {
   private copy: WebGLProgram;
   private copyLocations: { source: WebGLUniformLocation | null; size: WebGLUniformLocation | null };
   private floatTargets: boolean;
+  // Without timer queries, "auto" scenes draw at full size.
+  private timer: TimerQuery | null;
+  private timings: Timing[] = [];
 
   /** `onError` hears about uniforms that threw or returned unusable values. */
   constructor(private readonly onError: (message: string) => void = () => {}) {
@@ -230,6 +247,7 @@ export class Scene {
     this.gl = gl;
     // Rendering into RGBA16F needs this; WebGL2 filters half floats without help.
     this.floatTargets = !!gl.getExtension("EXT_color_buffer_float");
+    this.timer = gl.getExtension("EXT_disjoint_timer_query_webgl2") as TimerQuery | null;
     this.setters = [
       (at, v) => gl.uniform1fv(at, v), (at, v) => gl.uniform2fv(at, v),
       (at, v) => gl.uniform3fv(at, v), (at, v) => gl.uniform4fv(at, v),
@@ -365,7 +383,11 @@ export class Scene {
       }
     }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    if (free) this.states = [];
+    if (free) {
+      this.states = [];
+      for (const timing of this.timings) gl.deleteQuery(timing.query);
+      this.timings = [];
+    }
     this.frame = 0;
   }
 
@@ -441,13 +463,20 @@ export class Scene {
   render(width: number, height: number, time: number, dt: number, audio: AudioFeatures): void {
     if (!this.passes.length) return;
     const gl = this.gl;
-    const scale = this.options.scale ?? 1;
+    const auto = this.options.scale === "auto" && this.timer !== null;
+    if (this.timings.length) this.collectTimings();
+    const scale = auto ? sceneResolution.scaleAt(performance.now()) : typeof this.options.scale === "number" ? this.options.scale : 1;
     const w = Math.max(1, Math.round(width * scale)), h = Math.max(1, Math.round(height * scale));
-    if (this.canvas.width !== w || this.canvas.height !== h) {
+    const resized = this.canvas.width !== w || this.canvas.height !== h;
+    if (resized) {
       this.canvas.width = w;
       this.canvas.height = h;
     }
     const states = this.passes.map((_, i) => this.stateFor(i, w, h));
+    // A frame that reallocated its canvas is slow for that reason alone; timing
+    // it would shrink the scale again, and the next resize would do the same.
+    const timing = auto && !resized && this.timings.length < MAX_TIMINGS ? { query: gl.createQuery()!, scale } : null;
+    if (timing) gl.beginQuery(this.timer!.TIME_ELAPSED_EXT, timing.query);
     this.uploadAudio(audio);
     // Each user uniform is read once a frame, however many passes use it.
     const values = new Map<string, number[]>();
@@ -474,8 +503,27 @@ export class Scene {
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       this.drawCopy(image.read.texture, w, h);
     }
+    if (timing) {
+      gl.endQuery(this.timer!.TIME_ELAPSED_EXT);
+      this.timings.push(timing);
+    }
     gl.activeTexture(gl.TEXTURE0);
     this.frame++;
+  }
+
+  /** Reports the GPU time of frames whose timer queries have finished, oldest first. */
+  private collectTimings(): void {
+    const gl = this.gl;
+    // A disjoint period, such as a GPU clock change, spoils every timing in flight.
+    const disjoint = gl.getParameter(this.timer!.GPU_DISJOINT_EXT) as boolean;
+    while (this.timings.length) {
+      const { query, scale } = this.timings[0];
+      if (!gl.getQueryParameter(query, gl.QUERY_RESULT_AVAILABLE)) break;
+      const ns = gl.getQueryParameter(query, gl.QUERY_RESULT) as number;
+      if (!disjoint) sceneResolution.report(this, ns / 1e6, scale, performance.now());
+      gl.deleteQuery(query);
+      this.timings.shift();
+    }
   }
 
   /** Uploads the audio textures that changed, once a frame for every pass. */

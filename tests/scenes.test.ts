@@ -50,4 +50,12 @@ describe("sceneSources", () => {
     expect(() => sceneSources("image", { buffers: ["a", undefined as unknown as string] }))
       .toThrow("initScene buffers[1]: expected GLSL source, got undefined");
   });
+
+  it("accepts a positive scale or \"auto\", and rejects any other when the line runs", () => {
+    for (const scale of [0.5, 1, 2, "auto" as const, undefined]) expect(() => sceneSources("image", { scale })).not.toThrow();
+    expect(() => sceneSources("image", { scale: "half" as "auto" }))
+      .toThrow('initScene scale: expected a number above 0 or "auto", got "half"');
+    expect(() => sceneSources("image", { scale: 0 })).toThrow('initScene scale: expected a number above 0 or "auto", got 0');
+    expect(() => sceneSources("image", { scale: NaN })).toThrow("got NaN");
+  });
 });

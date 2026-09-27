@@ -14,6 +14,7 @@ import { NightFade } from "./night";
 import { defaultAutopilot } from "../shared/autopilot";
 import { describeNight } from "../shared/night";
 import { Recorder } from "./recorder";
+import { sceneResolution } from "./resolution";
 import { describeError, ErrorReporter, installRuntimeErrorReporting } from "./runtime-errors";
 import { SketchWriter } from "./sketch-writer";
 import { solidShapes } from "./solids";
@@ -80,7 +81,9 @@ function frame(now: number) {
   }
   frames++;
   if (now - fpsWindow > 500) {
-    fpsLabel.textContent = `${Math.round((frames * 1000) / (now - fpsWindow))} fps`;
+    // Automatic scenes, such as solids, may be drawing below full size.
+    const scale = sceneResolution.active(now) ? sceneResolution.scaleAt(now) : 1;
+    fpsLabel.textContent = `${Math.round((frames * 1000) / (now - fpsWindow))} fps${scale < 1 ? ` · scenes at ${Math.round(scale * 100)}%` : ""}`;
     frames = 0;
     fpsWindow = now;
   }

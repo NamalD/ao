@@ -147,7 +147,9 @@ Scenes get `iResolution`, `iTime`, `iTimeDelta`, `iFrame`, the audio levels as
 `aoLoudness`, `aoImpulse`, `aoBeat`, `aoBass`, `aoMid`, and `aoHigh`, the
 tempo as `aoBpm`, `aoPhase` and `aoBar` (see [Tempo](#tempo)), and
 `aoFFT(x)` to sample the spectrum. `scale` renders at a fraction of the output
-resolution for heavy raymarchers; `uniforms` feeds extra values, declared in
+resolution for heavy raymarchers, and `scale: "auto"` picks the fraction from
+how long the GPU takes, keeping all automatic scenes within about 10 ms a
+frame; `uniforms` feeds extra values, declared in
 the shader as `uniform float name;`. Shader errors report line numbers within
 the scene string. `sketches/dunes.js` is a full raymarched landscape.
 
@@ -207,7 +209,9 @@ Methods place the solid (`move`, `rotate`, `spin`, `scale`, `repeat`,
 melts the two together like liquid. As in Hydra, every argument can be a
 number or a function read each frame. Numbers become uniforms too, so
 scrubbing one never recompiles the shader. `out` takes `{ scale, camera,
-background, glow, step, trails }`; lower `step` if very long spikes or strong
+background, glow, step, trails }`. Solids render at `scale: "auto"` unless
+given a number, so a heavy chain gets softer rather than slower; the fps
+readout (`i`) shows the scale when it drops below 100%. Lower `step` if very long spikes or strong
 twists tear, and `trails` (`0..1`) leaves light trails behind moving solids. Completion and signature help know solid chains apart from Hydra ones.
 `sketches/urchin.js` is a ball that turns spiky when the song gets intense.
 

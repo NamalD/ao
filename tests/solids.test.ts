@@ -124,6 +124,12 @@ describe("solid mistakes fail when the line runs", () => {
     expect(calls[0][1]).toMatchObject({ scale: 0.5, uniforms: { sphere_radius: 1 } });
   });
 
+  it("renders at an automatic scale unless given one", () => {
+    const calls: unknown[][] = [];
+    sphere().out({ initScene: (...args: unknown[]) => calls.push(args) });
+    expect(calls[0][1]).toMatchObject({ scale: "auto" });
+  });
+
   // Each deck evaluates its sketch with its own shapes, so a bare .out()
   // must reach that deck's s0 and not whichever deck the window points at.
   it("renders a bare out() into the home source of the shapes that started the chain", () => {
