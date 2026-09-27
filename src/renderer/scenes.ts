@@ -1,5 +1,6 @@
 import type { AudioFeatures } from "../shared/features";
 import { spectrogram, SpectrumHistory } from "./spectrogram";
+import { barNow, clock, phaseNow } from "./tempo";
 
 export type UniformValue = number | number[] | (() => number | number[]);
 export interface SceneOptions {
@@ -69,6 +70,9 @@ uniform float aoBeat;
 uniform float aoBass;
 uniform float aoMid;
 uniform float aoHigh;
+uniform float aoBpm;
+uniform float aoPhase;
+uniform float aoBar;
 uniform sampler2D aoSpectrum;
 /** Band level at x in 0..1, low to high frequency. */
 float aoFFT(float x) { return texture(aoSpectrum, vec2(clamp(x, 0., 1.), .5)).r; }
@@ -238,6 +242,9 @@ export class Scene {
     this.uniform("aoBass", audio.bass);
     this.uniform("aoMid", audio.mid);
     this.uniform("aoHigh", audio.high);
+    this.uniform("aoBpm", clock.bpm);
+    this.uniform("aoPhase", phaseNow());
+    this.uniform("aoBar", barNow());
     this.uniformInt("aoSpectrum", 0);
     this.renderShaderAudio(audio);
     for (const [name, value] of Object.entries(this.options.uniforms ?? {})) {

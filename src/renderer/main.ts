@@ -14,6 +14,7 @@ import { Recorder } from "./recorder";
 import { describeError, ErrorReporter, installRuntimeErrorReporting } from "./runtime-errors";
 import { Scene, SceneOptions } from "./scenes";
 import { SketchWriter } from "./sketch-writer";
+import { installHydraTempo, releaseHydraBpm, syncHydraBpm, tapTempo } from "./tempo";
 import "./style.css";
 
 declare global {
@@ -72,6 +73,7 @@ for (const source of hydra.s) {
 }
 window.ao = ao;
 host.onAudio(updateAudio);
+installHydraTempo();
 
 let last = performance.now(), frames = 0, fpsWindow = last;
 function frame(now: number) {
@@ -89,6 +91,7 @@ function frame(now: number) {
       runtimeErrors.report(`scene: ${describeError(e)}`);
     }
   }
+  syncHydraBpm();
   try {
     hydra.tick(dt);
   } catch (e) {
@@ -113,6 +116,8 @@ const writer = new SketchWriter((name, code) => host.writeSketch(name, code));
 async function run(code: string): Promise<void> {
   // A still-broken sketch reports its runtime errors again after this run.
   runtimeErrors.reset();
+  // A whole-sketch run hands Hydra's bpm back to Ao unless the sketch sets it.
+  if (code === editor.state.doc.toString()) releaseHydraBpm();
   try {
     // Each evaluation gets its own scope so re-running `const` blocks works.
     // Hydra's functions, `ao`, and scene sources are globals.
@@ -308,6 +313,7 @@ addEventListener("keydown", (e) => {
   if (ctrl && e.shiftKey && e.key.toLowerCase() === "m") { handled(); toggleMeter(); return; }
   if (ctrl && e.shiftKey && e.key.toLowerCase() === "l") { handled(); host.updateSettings({ liveValues: toggleLiveValues(editor) }); return; }
   if (ctrl && e.shiftKey && e.key.toLowerCase() === "n") { handled(); cycleNight(); return; }
+  if (ctrl && e.shiftKey && e.key.toLowerCase() === "t") { handled(); if (!e.repeat) flashStatus(status, tapTempo()); return; }
   if (ctrl && e.key === "PageDown") { handled(); void step(1); return; }
   if (ctrl && e.key === "PageUp") { handled(); void step(-1); return; }
   if (ctrl && e.key.toLowerCase() === "q") { handled(); host.quit(); return; }
@@ -319,6 +325,7 @@ addEventListener("keydown", (e) => {
     m: toggleMeter, n: cycleNight, q: host.quit, Escape: host.quit,
     c: () => challenges.toggle(), o: () => browser.toggle(),
     r: () => { if (!e.repeat) void recorder.toggle(); },
+    t: () => { if (!e.repeat) flashStatus(status, tapTempo()); },
   };
   const action = actions[e.key];
   if (action) { handled(); action(); }

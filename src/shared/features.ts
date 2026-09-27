@@ -1,3 +1,5 @@
+import type { TempoState } from "./tempo";
+
 /** Audio features sent from the capture process to the renderer each analysis step. */
 export interface AudioFeatures {
   /** Seconds since capture started. */
@@ -26,6 +28,8 @@ export interface AudioFeatures {
   chroma: number[];
   /** The dominant pitch class, 0 (C) .. 11 (B). */
   key: number;
+  /** Detected tempo and beat count (tempo.ts); absent before capture starts. */
+  tempo?: TempoState;
 }
 
 export const SPECTRUM_BANDS = 64;

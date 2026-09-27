@@ -17,6 +17,12 @@ declare module "hydra-synth/src/glsl/glsl-functions.js" {
   export default function hydraFunctions(): HydraFunctionDefinition[];
 }
 
+declare module "hydra-synth/src/lib/array-utils.js" {
+  type ArrayValue = (props: { time: number; bpm: number }) => number;
+  const arrayUtils: { init(): void; getValue(arr?: unknown[]): ArrayValue };
+  export default arrayUtils;
+}
+
 declare module "hydra-synth/src/hydra-source.js" {
   const HydraSource: { prototype: object };
   export default HydraSource;
