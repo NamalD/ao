@@ -111,12 +111,15 @@ async function run(code: string): Promise<boolean> {
   }
 }
 
+// From settings.json once it's read; Ctrl+Enter formats until then.
+let formatOnRun = true;
 let autosaveTimer: ReturnType<typeof setTimeout>;
 // Set while `:w name` renames the sketch; saves wait for it.
 let renaming: Promise<void> | undefined;
 const editorRoot = $("editor");
 const editor = createEditor(editorRoot, {
   run: (code) => { autopilot.edited(); void run(code); },
+  autoFormat: () => formatOnRun,
   save: () => void save(),
   changed: () => {
     if (!loadingText) autopilot.edited();
@@ -377,6 +380,7 @@ setEditorVisible(params.get("hideEditor") !== "1");
 const settings = await host.settings();
 meter.setVisible(settings.meter);
 setLiveValues(editor, settings.liveValues);
+formatOnRun = settings.format;
 night.set(settings.night);
 autopilot.configure(settings.autopilot);
 sketches = await host.listSketches();
