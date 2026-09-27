@@ -23,6 +23,22 @@ export const ao = {
   },
 };
 
+/**
+ * Documentation for each public `ao` member, used by the editor's completion
+ * and signature help. Every public member of `ao` must have an entry.
+ */
+export const aoDocs: Record<string, { signature: string; description: string }> = {
+  time: { signature: "ao.time", description: "Seconds since capture started." },
+  loudness: { signature: "ao.loudness", description: "Smoothed overall level, 0..1. Rises quickly, falls slowly." },
+  impulse: { signature: "ao.impulse", description: "Transient envelope, 0..1. Jumps on hits, then decays within ~0.3s." },
+  beat: { signature: "ao.beat", description: "Onset pulse, 0..1. Set to 1 on a detected beat, decays within ~0.15s." },
+  bass: { signature: "ao.bass", description: "Average level below 250 Hz, 0..1." },
+  mid: { signature: "ao.mid", description: "Average level from 250 Hz to 2 kHz, 0..1." },
+  high: { signature: "ao.high", description: "Average level above 2 kHz, 0..1." },
+  fft: { signature: "ao.fft", description: "64 log-spaced band levels, 0..1, from ~30 Hz to ~16 kHz." },
+  map: { signature: "ao.map(level, lo = 0, hi = 1)", description: "Maps an audio level onto lo..hi and returns a function Hydra re-reads every frame." },
+};
+
 export function updateAudio(features: AudioFeatures): void {
   ao.features = features;
 }
