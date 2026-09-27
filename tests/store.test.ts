@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -48,5 +48,58 @@ describe("Store", () => {
     for (let i = 0; i < 10; i++) store.log(line);
     expect(statSync(log).size).toBeLessThanOrEqual(200);
     expect(statSync(`${log}.1`).size).toBeLessThanOrEqual(200);
+  });
+});
+
+describe("Store.renameSketch", () => {
+  const fresh = () => {
+    const store = new Store(mkdtempSync(join(tmpdir(), "ao-store-")));
+    store.writeSketch("waves", "old");
+    return store;
+  };
+
+  it("saves the new text under the new name and removes the old file", () => {
+    const store = fresh();
+    expect(store.renameSketch("waves", "tides", "new")).toBe("tides");
+    expect(store.listSketches()).toEqual(["tides"]);
+    expect(store.readSketch("tides")).toBe("new");
+    expect(readdirSync(store.sketchDir)).toEqual(["tides.js"]);
+  });
+
+  it("accepts a .js name, since sketches are always .js", () => {
+    const store = fresh();
+    expect(store.renameSketch("waves", "tides.js", "new")).toBe("tides");
+    expect(store.listSketches()).toEqual(["tides"]);
+  });
+
+  it("validates the name like sketchPath", () => {
+    const store = fresh();
+    for (const bad of ["../escape", "a b", "a.txt", ".js", ""]) {
+      expect(() => store.renameSketch("waves", bad, "new")).toThrow(/invalid sketch name/);
+    }
+    expect(store.listSketches()).toEqual(["waves"]);
+    expect(readdirSync(store.sketchDir)).toEqual(["waves.js"]);
+  });
+
+  it("refuses to overwrite an existing sketch unless asked", () => {
+    const store = fresh();
+    store.writeSketch("tides", "keep me");
+    expect(() => store.renameSketch("waves", "tides", "new")).toThrow(/tides already exists/);
+    expect(store.readSketch("tides")).toBe("keep me");
+    expect(store.readSketch("waves")).toBe("old");
+    expect(readdirSync(store.sketchDir).sort()).toEqual(["tides.js", "waves.js"]);
+
+    store.renameSketch("waves", "tides", "new", true);
+    expect(store.listSketches()).toEqual(["tides"]);
+    expect(store.readSketch("tides")).toBe("new");
+  });
+
+  it("saves in place when the name doesn't change, and renames a sketch already gone", () => {
+    const store = fresh();
+    expect(store.renameSketch("waves", "waves.js", "new")).toBe("waves");
+    expect(store.readSketch("waves")).toBe("new");
+    unlinkSync(join(store.sketchDir, "waves.js"));
+    store.renameSketch("waves", "tides", "back");
+    expect(store.listSketches()).toEqual(["tides"]);
   });
 });

@@ -122,6 +122,8 @@ async function run(code: string): Promise<void> {
 }
 
 let autosaveTimer: ReturnType<typeof setTimeout>;
+// Set while `:w name` renames the sketch; saves wait for it.
+let renaming: Promise<void> | undefined;
 const editorRoot = $("editor");
 const editor = createEditor(editorRoot, {
   run: (code) => void run(code),
@@ -131,6 +133,8 @@ const editor = createEditor(editorRoot, {
     clearTimeout(autosaveTimer);
     autosaveTimer = setTimeout(() => void save(), 700);
   },
+  rename: (name, overwrite) => void rename(name, overwrite),
+  status: showStatus,
 });
 
 const dirty = () => editor.state.doc.toString() !== saved;
@@ -153,6 +157,8 @@ async function open(name: string): Promise<void> {
 }
 
 async function save(): Promise<void> {
+  // After a rename, save under the new name, never recreating the old file.
+  await renaming;
   if (!current) return;
   const code = editor.state.doc.toString();
   const name = current;
@@ -166,6 +172,35 @@ async function save(): Promise<void> {
   } catch (error) {
     showStatus(`Autosave failed: ${error instanceof Error ? error.message : String(error)}`, true);
   }
+}
+
+// `:w name`: save the current text as `name` and rename the open sketch,
+// keeping the editor and its undo history.
+async function rename(target: string, overwrite: boolean): Promise<void> {
+  if (!current || renaming) return;
+  const from = current;
+  const task = (async () => {
+    clearTimeout(autosaveTimer);
+    // Let queued writes of the old name land first, so none recreates it
+    // later. The old file then holds this text, should the rename be refused.
+    const before = editor.state.doc.toString();
+    await writer.save(from, before).then(() => { saved = before; }, () => {});
+    const code = editor.state.doc.toString();
+    const name = await host.renameSketch(from, target, code, overwrite);
+    current = name;
+    saved = code;
+    writer.known(name, code);
+    host.setLastSketch(name);
+    sketches = await host.listSketches();
+    updateLabel();
+    showStatus(name === from ? `saved ${name}` : `renamed ${from} to ${name}`);
+  })();
+  renaming = task.catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    showStatus(`Can't rename to ${target}: ${message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "")}`, true);
+    updateLabel();
+  }).finally(() => { renaming = undefined; });
+  await renaming;
 }
 
 async function createSketch(): Promise<void> {

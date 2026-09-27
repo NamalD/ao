@@ -8,6 +8,8 @@ const bridge = {
   listSketches: (): Promise<string[]> => ipcRenderer.invoke("sketches:list"),
   readSketch: (name: string): Promise<string> => ipcRenderer.invoke("sketches:read", name),
   writeSketch: (name: string, code: string): Promise<void> => ipcRenderer.invoke("sketches:write", name, code),
+  renameSketch: (from: string, to: string, code: string, overwrite: boolean): Promise<string> =>
+    ipcRenderer.invoke("sketches:rename", from, to, code, overwrite),
   lastSketch: (): Promise<string> => ipcRenderer.invoke("state:last-sketch"),
   setLastSketch: (name: string) => ipcRenderer.send("state:set-last-sketch", name),
   toggleFullscreen: () => ipcRenderer.send("window:fullscreen"),

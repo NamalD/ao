@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, linkSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
 export interface StoreOptions {
@@ -75,5 +75,40 @@ export class Store {
 
   writeSketch(name: string, code: string): void {
     writeFileSync(this.sketchPath(name), code);
+  }
+
+  /**
+   * Saves `code` as `to` and removes `from`, for `:w name`. `to` may end in
+   * `.js`. The new file appears whole, and unless `overwrite` is set an
+   * existing sketch is never replaced, even one created a moment ago.
+   * Returns the new name.
+   */
+  renameSketch(from: string, to: string, code: string, overwrite = false): string {
+    const name = to.replace(/\.js$/, "");
+    const source = this.sketchPath(from);
+    const target = this.sketchPath(name);
+    if (name === from) {
+      this.writeSketch(name, code);
+      return name;
+    }
+    // Written beside the target, then moved or linked into place in one step.
+    const temp = join(this.sketchDir, `.${name}.${process.pid}.tmp`);
+    writeFileSync(temp, code);
+    try {
+      if (overwrite) renameSync(temp, target);
+      else linkSync(temp, target); // fails with EEXIST rather than replacing
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new Error(`${name} already exists; :w! ${name} replaces it`);
+      throw error;
+    } finally {
+      try { unlinkSync(temp); } catch { /* already moved into place */ }
+    }
+    try {
+      unlinkSync(source);
+    } catch (error) {
+      // An unsaved sketch whose file is already gone just gains its new name.
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    return name;
   }
 }

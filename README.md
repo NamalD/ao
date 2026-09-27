@@ -26,6 +26,9 @@ past 1 MB the log moves to `ao.log.1`.
 | Ctrl+Enter | run the block under the cursor (lines between blank lines) |
 | Ctrl+Shift+Enter, Alt+Enter | run the whole sketch |
 | Ctrl+S, `:w` | save the sketch |
+| `:w <name>`, `:w! <name>` | save as `sketches/<name>.js` and rename the sketch (`!` replaces an existing one) |
+| Alt+scroll, Alt+drag | scrub the number under the pointer; Shift steps ten times coarser |
+| Alt+R | remix the numbers in the block under the cursor |
 | Ctrl+N | create a new sketch |
 | Ctrl+PgUp / Ctrl+PgDn | previous / next sketch |
 | Ctrl+Shift+H | hide or show the editor (ambient mode) |
@@ -38,7 +41,8 @@ past 1 MB the log moves to `ao.log.1`.
 
 The editor uses vim keys: `i` inserts, `Esc` returns to normal mode, `v`/`V`
 select, `u` undoes, and `:w` saves. Undo history starts fresh with each sketch
-you open.
+you open. `:w <name>` renames the open sketch, keeping its undo history; it
+refuses a name that's taken unless you write `:w! <name>`.
 
 With the editor hidden, the old single keys work: `j`/`k` switch sketches,
 `f` fullscreen, `e` brings the editor back, `i` toggles the FPS counter, `m`
@@ -54,6 +58,18 @@ once; neither re-runs the sketch, and saving an unchanged sketch doesn't write
 anything. Saving the file from another editor does re-run it, unless the
 overlay has unsaved edits, in which case the status bar says so and Ctrl+S
 keeps your version.
+
+**Scrubbing and remix.** Hold Alt and scroll over a number, or Alt+drag it
+sideways, and the block around it re-runs as it changes. Each step is the
+number's last decimal place, so `0.05` moves by `0.01` and `10` by `1`; write
+`0.050` for finer steps, or hold Shift for steps ten times coarser. Numbers
+can cross zero. Alt+R remixes the block under the cursor instead: each number
+moves 10–40% up or down, keeping its sign and decimal places, and integers
+stay integers. Both work on GLSL floats inside `initScene` and `glsl:` strings
+too, re-running the whole scene; remix leaves GLSL integers (loop counts,
+indices) alone, and neither touches other strings or comments. A whole scrub
+gesture, or a whole remix, is one undo step: `u` or Ctrl+Z brings the exact
+text back, and autosave then saves that too.
 
 If a run fails, the previous visuals keep going and the error shows in the
 status bar. Errors while the sketch runs, such as a Hydra argument function,

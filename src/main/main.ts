@@ -86,6 +86,8 @@ function registerIpc(win: () => BrowserWindow | null): void {
   ipcMain.handle("sketches:list", () => store.listSketches());
   ipcMain.handle("sketches:read", (_e, name: string) => store.readSketch(name));
   ipcMain.handle("sketches:write", (_e, name: string, code: string) => store.writeSketch(name, code));
+  ipcMain.handle("sketches:rename", (_e, from: string, to: string, code: string, overwrite: boolean) =>
+    store.renameSketch(from, to, code, overwrite));
   ipcMain.handle("state:last-sketch", () => store.read("session", { sketch: "" }).sketch);
   ipcMain.on("state:set-last-sketch", (_e, sketch: string) => store.write("session", { sketch }));
   ipcMain.on("window:fullscreen", () => { const w = win(); w?.setFullScreen(!w.isFullScreen()); });

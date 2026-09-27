@@ -186,3 +186,6 @@ body.challenge-capture #help,
 body.challenge-capture #challenge,
 body.challenge-capture #meter,
 body.challenge-capture #night { display: none; }
+/* Editor power */
+/* Alt+drag scrubbing a number (scrub.ts). */
+#editor .cm-editor.cm-scrubbing, #editor .cm-editor.cm-scrubbing .cm-content { cursor: ew-resize; }
