@@ -35,6 +35,7 @@ past 1 MB the log moves to `ao.log.1`.
 | Ctrl+Shift+M | show or hide the audio meter |
 | Ctrl+Shift+N | night fade: follow the schedule, force on, force off |
 | Ctrl+Shift+C | challenge: draw a prompt, or finish the running one |
+| Ctrl+Shift+T | tap tempo on each beat, starting on the one; two quick taps return to auto (see [Tempo](#tempo)) |
 | F11 | fullscreen |
 | F9 | start or stop recording video with audio |
 | F1 | help |
@@ -48,7 +49,7 @@ refuses a name that's taken unless you write `:w! <name>`.
 With the editor hidden, the old single keys work: `j`/`k` switch sketches,
 `f` fullscreen, `e` brings the editor back, `i` toggles the FPS counter, `m`
 the audio meter, `n` cycles the night fade, `c` opens a challenge, `r` starts
-or stops recording, and `q` or `Esc` quits.
+or stops recording, `t` taps the tempo, and `q` or `Esc` quits.
 
 ## Sketches
 
@@ -125,7 +126,8 @@ src(s0).modulate(osc(8), 0.02).out()
 ```
 
 Scenes get `iResolution`, `iTime`, `iTimeDelta`, `iFrame`, the audio levels as
-`aoLoudness`, `aoImpulse`, `aoBeat`, `aoBass`, `aoMid`, and `aoHigh`, and
+`aoLoudness`, `aoImpulse`, `aoBeat`, `aoBass`, `aoMid`, and `aoHigh`, the
+tempo as `aoBpm`, `aoPhase` and `aoBar` (see [Tempo](#tempo)), and
 `aoFFT(x)` to sample the spectrum. `scale` renders at a fraction of the output
 resolution for heavy raymarchers; `uniforms` feeds extra values, declared in
 the shader as `uniform float name;`. Shader errors report line numbers within
@@ -159,6 +161,76 @@ values for `ao.loudness`, `ao.impulse`, `ao.beat`, `ao.bass`, `ao.mid` and
 `ao.centroid` (lilac) marked on the spectrum. It is an overlay on top of the
 window, not part of the visuals, and draws nothing while hidden. Ao remembers
 whether it was showing.
+
+## Tempo
+
+Ao keeps a beat clock, so motion can move with the music rather than only
+react to how loud it is. `ao.beat` pulses on each detected onset, whatever
+its timing; the clock runs steadily at the tempo between hits, carries on
+through breaks, and knows where the next beat will land:
+
+- `ao.bpm`: the tempo, detected or tapped; 120 until something is detected.
+- `ao.phase`: `0..1` through the current beat, wrapping on each beat.
+- `ao.bar`: the beat within a 4-beat bar, `0`, `1`, `2` or `3`.
+- `ao.ramp(n = 1)`: a `0..1` ramp over every `n` beats, aligned to the bar;
+  `ao.ramp(4)` runs once per bar.
+- `ao.pulse(div = 1)`: `1` on every `1/div` of a beat, easing to `0` by the
+  next; `ao.pulse(2)` on eighths, `ao.pulse(1/4)` once a bar.
+- `ao.tempoConfidence`: `0..1`, how sure the detected tempo is; `1` while
+  tapped.
+
+```js
+shape(4, 0.2)
+  .rotate(() => (ao.bar + Math.min(1, 5 * ao.phase)) * Math.PI / 4)  // step each beat
+  .scale(() => 1 + 0.3 * ao.pulse())
+  .add(shape([3, 4, 5, 6], 0.5).rotate(() => 2 * Math.PI * ao.ramp(4)))  // one turn a bar
+  .out()
+```
+
+GLSL scenes get the same clock as `aoBpm`, `aoPhase` and `aoBar`.
+`sketches/tempo.js` puts it together.
+
+**Detection** runs in the main process on the captured audio. It measures
+onset strength about 190 times a second from the energy in three bands
+(kicks weigh most), autocorrelates the last 8 seconds of it, and scores
+every tempo from 70 to 180 bpm by the autocorrelation at one to four beat
+periods. The true beat outscores its half and double because they miss
+some of those peaks; a mild preference for tempos near 120 settles what's
+left. The phase comes from folding recent onsets at the beat period, and a
+free-running clock is steered toward it gently, so phase never jumps on a
+single hit. It locks within about five seconds, follows a tempo change in
+two or three, and through silence or a breakdown it holds the last tempo
+while its confidence fades.
+
+**Tap tempo** is the fallback and override, since no detector is right
+about every track. Press Ctrl+Shift+T (`t` with the editor hidden) on each
+beat, starting on the one: the first tap sets the phase and makes that beat
+bar `0`, keeping the current tempo, and each further tap is the next beat.
+The tempo is the median of the last eight tap intervals, and a pause over
+two seconds starts a new sequence. A tapped tempo stays until you tap twice
+quickly (under a quarter second apart); then detection takes over again,
+keeping the bar where you tapped it. The status bar shows the result, for
+example `tempo 128.0 (tap)` or `tempo 127.9 (auto, 82%)`.
+
+Detection can't tell which beat starts a bar, so until you tap, bar `0` is
+simply the beat the clock happened to start on. Tapping once on the one
+fixes that; two quick taps then return to the detected tempo, keeping it.
+
+**Hydra's `bpm`**, which sets the speed of array sequences such as
+`shape([3, 4, 5, 6])` or `[1, 2].fast(2)`, follows the tempo once detection is
+confident or you've tapped. Ao also lines the sequences up with its beat,
+not just its tempo: `[a, b, c, d]` changes exactly on each beat and starts
+over on each bar, and `.fast(2)` steps on eighths. If a sketch sets `bpm`
+itself, Ao leaves it, and its arrays, to Hydra until the whole sketch next
+runs without setting it.
+
+Things to know:
+
+- Tempos outside 70–180 bpm are reported at their half or double.
+- The phase runs a frame or two behind the sound, like the other levels.
+- [Ableton Link](https://www.ableton.com/en/link/) isn't supported yet, so
+  the clock can't sync with other software.
+- Detection costs about 40 µs per 20 ms audio chunk, 0.2% of a core.
 
 ## Night fade
 
@@ -287,7 +359,7 @@ them unless you ask: add `--meter` or `--night=on` to the `electron` command
 ## Layout
 
 - `src/main`: Electron main process, audio capture, state and sketch files.
-- `src/shared`: audio analysis (FFT, loudness, impulse, beat), kept pure.
+- `src/shared`: audio analysis (FFT, loudness, impulse, beat, tempo), kept pure.
 - `src/preload`: the narrow bridge the renderer may call.
 - `src/renderer`: Hydra host, GLSL scene runner, overlay editor.
 - `sketches`: the visualizers.

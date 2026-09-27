@@ -22,6 +22,10 @@ normalized to `0..1` and update as audio is captured.
 | `ao.fft` | `number[]` | 64 log-spaced band levels, from about 30 Hz to 16 kHz, low to high. |
 | `ao.peak` | `number` | Position of the loudest band, `0..1` from low to high; glides between bands. |
 | `ao.centroid` | `number` | Spectral centroid, `0..1`: the level-weighted mean position, a steady measure of brightness. |
+| `ao.bpm` | `number` | Tempo in beats per minute, detected (`70..180`) or tapped; `120` until detected. |
+| `ao.phase` | `number` | `0..1` through the current beat on the tempo clock, wrapping on each beat. |
+| `ao.bar` | `number` | Beat within the 4-beat bar: `0`, `1`, `2` or `3`. Bar `0` is the tapped one, or arbitrary until you tap. |
+| `ao.tempoConfidence` | `number` | `0..1`: how sure the detected tempo is; fades while held through silence, `1` while tapped. |
 
 Spectrum positions (`ao.fftAt`, `ao.peak`, `ao.centroid`, GLSL `aoFFT`) share
 one log-frequency axis: `0` is about 30 Hz, `0.5` about 700 Hz, `1` about
@@ -32,6 +36,14 @@ one log-frequency axis: `0` is about 30 Hz, `0.5` about 700 Hz, `1` about
 | `ao.fftAt(x)` | `number` | Spectrum level at position `x` (`0..1`), linearly interpolated like GLSL `aoFFT(x)`. |
 | `ao.hz(lo, hi?)` | `number` | Average level of the bands between `lo` and `hi` Hz. With one argument, or a range narrower than a band, the interpolated level at that frequency. |
 | `ao.map(level, lo = 0, hi = 1)` | `() => number` | A function mapping a level onto `lo..hi`, for Hydra arguments. |
+| `ao.ramp(n = 1)` | `number` | `0..1` ramp over every `n` beats, aligned to the bar: `ao.ramp(4)` runs once per bar. `0` for `n <= 0`. |
+| `ao.pulse(div = 1)` | `number` | `1` on every `1/div` of a beat, easing to `0` (as `(1 - t)^4`) by the next. `0` for `div <= 0`. |
+
+`ao.beat` and the tempo members differ: `ao.beat` pulses when an onset is
+heard, whenever it comes, while `ao.phase`, `ao.bar`, `ao.ramp` and
+`ao.pulse` run on a steady clock at `ao.bpm` that keeps going between hits
+and through silence. See the README's Tempo section for tap tempo and
+Hydra's `bpm`.
 
 Rough frequency ranges for `ao.hz`: kick `40..100`, bass line `60..250`,
 snare body `150..300`, voice `300..3000`, snare crack `2000..5000`, hats and
@@ -66,6 +78,9 @@ uniforms from Ao:
 | `iFrame` | `int` | Scene frame counter, starting at zero. |
 | `aoLoudness`, `aoImpulse`, `aoBeat` | `float` | Overall level and transient envelopes. |
 | `aoBass`, `aoMid`, `aoHigh` | `float` | Average frequency band levels. |
+| `aoBpm` | `float` | Tempo in beats per minute, as `ao.bpm`. |
+| `aoPhase` | `float` | `0..1` through the current beat, as `ao.phase`. |
+| `aoBar` | `float` | Beat within the bar, `0.0` to `3.0`, as `ao.bar`. |
 | `aoSpectrum` | `sampler2D` | 64 spectrum levels in a one-row texture. |
 
 The helper `float aoFFT(float x)` samples `aoSpectrum` at normalized position
