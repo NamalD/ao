@@ -1,3 +1,5 @@
+import type { TempoState } from "./tempo";
+
 /** Audio features sent from the capture process to the renderer each analysis step. */
 export interface AudioFeatures {
   /** Seconds since capture started. */
@@ -14,6 +16,8 @@ export interface AudioFeatures {
   high: number;
   /** Log-spaced band levels, 0..1, from ~30 Hz to ~16 kHz. */
   spectrum: number[];
+  /** Detected tempo and beat count (tempo.ts); absent before capture starts. */
+  tempo?: TempoState;
 }
 
 export const SPECTRUM_BANDS = 64;
