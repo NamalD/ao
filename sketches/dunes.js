@@ -3,7 +3,8 @@
 // Loudness sets the flight speed, bass thickens the haze, the beat swells
 // the sun, highs make the sand glint, and hits flare the drone's light.
 
-let travel = 0
+// Shared with the scene block below, so it lives on the global object.
+globalThis.travel ??= 0
 update = (dt) => { travel += dt * 0.001 * (2.5 + 5 * ao.loudness) }
 
 s0.initScene(`

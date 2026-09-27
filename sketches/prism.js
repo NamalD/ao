@@ -3,7 +3,8 @@
 // light the petals, the hats (6-12 kHz) scatter sparks, and the loudest
 // frequency, ao.peak, turns the colour wheel.
 
-let spin = 0
+// Shared with the block below, so it lives on the global object.
+globalThis.spin ??= 0
 update = (dt) => { spin += dt * 0.001 * (0.1 + 2 * ao.hz(300, 2000)) }
 
 shape(6, ao.map(() => ao.hz(40, 100), 0.1, 0.35), 0.25)
