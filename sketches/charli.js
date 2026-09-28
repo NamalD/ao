@@ -1,18 +1,15 @@
-await use("fractals", "softpattern")
+await use("softpattern", "fractals")
 
 bpm = ao.bpm
 
-smoothBeat = ao.
-
-smoothsun(() => ao.beat * 0.3)
-  .mask(
-    shape([5, 3])
-      .mirrorY([0])
-      .rotate(0, 1)
-      .scale(() => 1.5 * ao.beat)
-      .repeat()
-      .kaleid([3, 9]),
-  )
-  .add()
-  .color(0.7, 0.8, 0)
+shape(3, 0.3, ao.map("bass", 0.4, 0.3))
+  .scrollY(ao.map("bass", 0.05, 0.1))
+  .scale(1.8)
+  .kaleid(5)
+  .rotate(0, () => ao.bar / 10)
+  .mirrorY(0, 0.5)
+  .mirrorX()
+  .add(shape(4).scale().invert())
+  .thresh(0.9)
+  .color(0.7, 0.85, 0)
   .out()
