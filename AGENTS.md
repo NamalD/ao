@@ -30,7 +30,8 @@ make worktree-create NAME=<short-feature-name>
 cd .worktrees/<short-feature-name>
 ```
 
-This creates branch `agent/<short-feature-name>` from the current `HEAD`.
+This creates branch `agent/<short-feature-name>` from the last commit on
+`master`, even if the primary checkout has uncommitted changes.
 Use a distinct, lowercase hyphenated name for each task. Before finishing,
 commit the coherent change on that branch, return to the primary checkout, and
 merge it into `master`:

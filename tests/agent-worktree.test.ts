@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 const script = resolve("scripts/agent-worktree");
 
 describe("agent-worktree create", () => {
-  it("branches from the current HEAD, not master", () => {
+  it("branches from master's last commit, despite another HEAD and uncommitted changes", () => {
     const repo = mkdtempSync(join(tmpdir(), "ao-worktree-"));
     const git = (...args: string[]) => execFileSync("git", args, { cwd: repo, encoding: "utf8" }).trim();
     git("init", "-q", "-b", "master");
@@ -19,11 +19,12 @@ describe("agent-worktree create", () => {
     writeFileSync(join(repo, ".gitignore"), ".worktrees/\n");
     git("add", ".");
     git("commit", "-qm", "base");
+    const master = git("rev-parse", "master");
     git("checkout", "-qb", "feature");
     git("commit", "-q", "--allow-empty", "-m", "feature work");
-    const head = git("rev-parse", "HEAD");
+    writeFileSync(join(repo, "untitled.js"), "osc().out()\n");
 
     execFileSync("bash", ["scripts/agent-worktree", "create", "probe"], { cwd: repo, stdio: "pipe" });
-    expect(git("rev-parse", "agent/probe")).toBe(head);
+    expect(git("rev-parse", "agent/probe")).toBe(master);
   });
 });
