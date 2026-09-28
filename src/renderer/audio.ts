@@ -44,6 +44,18 @@ export const ao = {
     return () => lo + (hi - lo) * read();
   },
   /**
+   * A Hydra argument that maps a level, `"bpm"`, `"key"`, or any function from
+   * inLo..inHi onto lo..hi, clamped: `ao.fit("bpm", 80, 160, 0, 0.5)`.
+   */
+  fit(level: Level | "bpm" | "key" | (() => number), inLo: number, inHi: number, lo = 0, hi = 1) {
+    const read = typeof level === "function" ? level : () => this[level];
+    return () => {
+      const v = read();
+      const t = inHi === inLo ? (v >= inHi ? 1 : 0) : Math.min(1, Math.max(0, (v - inLo) / (inHi - inLo)));
+      return lo + (hi - lo) * t;
+    };
+  },
+  /**
    * A Hydra argument that follows a level, `"bpm"`, or any function, fading
    * each change in over about `seconds`: `ripple(0.1, ao.glide("bpm", 2))`.
    */
@@ -97,6 +109,7 @@ export const aoDocs: Record<string, { signature: string; description: string }> 
   drop: { signature: "ao.drop", description: "Drop pulse, 0..1. Set to 1 when the energy jumps back after a breakdown (about 0.3 s after the drop lands), fading within ~1.5 s." },
   fft: { signature: "ao.fft", description: "64 log-spaced band levels, 0..1, from ~30 Hz to ~16 kHz." },
   map: { signature: "ao.map(level, lo = 0, hi = 1)", description: "Maps a level name, or a function such as () => ao.hz(40, 100), onto lo..hi; returns a function Hydra re-reads every frame." },
+  fit: { signature: "ao.fit(level, inLo, inHi, lo = 0, hi = 1)", description: "Maps a level name, \"bpm\", \"key\", or any function from inLo..inHi onto lo..hi, clamped at the ends: ao.fit(\"bpm\", 80, 160, 0, 0.5). Returns a function Hydra re-reads every frame." },
   glide: { signature: "ao.glide(level, seconds = 1)", description: "Follows a level name, \"bpm\", or any function, fading each change in over about `seconds` instead of snapping: ao.glide(\"bpm\", 2). Returns a function Hydra re-reads every frame." },
   fftAt: { signature: "ao.fftAt(x)", description: "Spectrum level at position x, 0..1 from low to high, interpolated like GLSL aoFFT(x)." },
   hz: { signature: "ao.hz(lo, hi?)", description: "Average level between two frequencies in Hz, or at one frequency: ao.hz(40, 100) for kicks." },

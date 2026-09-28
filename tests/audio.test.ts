@@ -32,6 +32,21 @@ describe("ao", () => {
     expect(ao.map("peak")()).toBe(ao.peak);
   });
 
+  it("fits level names and functions from an input range onto an output range, clamped", () => {
+    withSpectrum(() => 0.5);
+    let x = 120;
+    const fitted = ao.fit(() => x, 80, 160, 0, 0.5);
+    expect(fitted()).toBeCloseTo(0.25, 12);
+    x = 40;
+    expect(fitted()).toBe(0);
+    x = 200;
+    expect(fitted()).toBe(0.5);
+    expect(ao.fit(() => 3, 0, 4, 1, 0)()).toBeCloseTo(0.25, 12);
+    expect(ao.fit("bpm", 0, ao.bpm * 2)()).toBeCloseTo(0.5, 12);
+    expect(ao.fit("bass", 0, 0.5, 0, 2)()).toBeCloseTo(2 * Math.min(1, ao.bass / 0.5), 12);
+    expect(ao.fit(() => 5, 5, 5)()).toBe(1);
+  });
+
   it("glides level names, bpm and functions, starting at the current value", () => {
     withSpectrum(() => 0.5);
     expect(ao.glide("bass")()).toBe(ao.bass);

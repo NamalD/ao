@@ -88,6 +88,7 @@ describe("reading live values", () => {
     expect(valueOf("ao.bass")).toBe(0.5);
     expect(valueOf(`ao.map("bass", 0, 2)`)).toBe(1);
     expect(valueOf("ao.map(() => ao.bass * 2, 1, 3)")).toBe(3);
+    expect(valueOf(`ao.fit("bass", 0, 1, 0, 4)`)).toBe(2);
     expect(valueOf("() => -(ao.bass ** 2) % 1 - +0.5 / 2")).toBeCloseTo(-0.5);
     expect(valueOf("ao.fftAt(0.5)")).toBeCloseTo(ao.fftAt(0.5));
     expect(valueOf("ao.fft[3]")).toBe(spectrum[3]);
