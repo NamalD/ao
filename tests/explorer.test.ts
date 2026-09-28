@@ -5,7 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 import { createEditorState, helpCommand, insertBlock, publicAoMembers, type Receiver, sourceMembers } from "../src/renderer/editor";
 import { extensionApi, extensionDocs } from "../src/renderer/extension-api";
 import { CATALOG } from "../src/renderer/extensions";
-import { aoExamples, extensionExamples, globalEntries, hydraExamples, sourceExamples, synonyms } from "../src/renderer/explorer/content";
+import { aoExamples, extensionExamples, globalEntries, hydraExamples, sourceExamples } from "../src/renderer/explorer/content";
+import { synonyms } from "../src/renderer/synonyms";
 import { buildEntries, filterEntries, findEntry, sections, wordAt } from "../src/renderer/explorer/entries";
 
 const entries = buildEntries();

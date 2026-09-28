@@ -7,7 +7,8 @@ import hydraFunctions from "hydra-synth/src/glsl/glsl-functions.js";
 import { functionDoc, publicAoMembers, type Receiver, sourceMembers } from "../editor";
 import { extensionApi, extensionDocs, extensionGroups } from "../extension-api";
 import { CATALOG } from "../extensions";
-import { aoExamples, type Example, extensionExamples, globalEntries, hydraExamples, recipes, sourceExamples, synonyms } from "./content";
+import { aoExamples, type Example, extensionExamples, globalEntries, hydraExamples, recipes, sourceExamples } from "./content";
+import { synonyms } from "../synonyms";
 
 /** Built-in sections, and one or more per vendored extension (`ext:noise`, `ext:arithmetics-maths`, …). */
 export type SectionId = "ao" | "src" | "coord" | "color" | "combine" | "combineCoord" | "globals" | "sources" | "recipes" | `ext:${string}`;

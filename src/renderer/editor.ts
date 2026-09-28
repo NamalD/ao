@@ -21,6 +21,7 @@ import { formatCode, minimalChange } from "./format";
 import { remix, remixRunRange } from "./remix";
 import { joinsScrub, scrubbing } from "./scrub";
 import { solidFunctions, solidOutParams } from "./solids";
+import { synonyms } from "./synonyms";
 
 export interface EditorActions {
   run(code: string): void;
@@ -587,6 +588,7 @@ export function hydraCompletions(context: CompletionContext): CompletionResult |
   const justTypedDot = context.state.doc.sliceString(Math.max(0, context.pos - 1), context.pos) === ".";
   if (!word && !context.explicit && !justTypedDot) return null;
   const from = word?.from ?? context.pos;
+  const typed = word?.text ?? "";
   const dot = context.state.doc.sliceString(Math.max(0, from - 100), from).match(/\.\s*$/);
   const used = usedExtensions(context.state.doc.toString());
   if (dot) {
@@ -595,9 +597,58 @@ export function hydraCompletions(context: CompletionContext): CompletionResult |
     const options = kind ? memberCompletions(kind, used)
       : receiver?.name === "VariableName" && !assignedValue(context.state, text(context.state, receiver), receiver.from)
         ? namespaceCompletions(text(context.state, receiver)) : null;
-    return options && { from, options, validFor: /^[\w$]*$/ };
+    if (!options) return null;
+    return { from, options: kind ? [...options, ...synonymCompletions(options, kind, typed)] : options, validFor: validFor(typed) };
   }
-  return { from, options: topLevelCompletions(used), validFor: /^[\w$]*$/ };
+  const options = topLevelCompletions(used);
+  return { from, options: [...options, ...synonymCompletions(options, undefined, typed)], validFor: validFor(typed) };
+}
+
+/** Letters to type before completion offers names by their synonyms, so one or two don't bring up every one. */
+const SYNONYM_MIN = 3;
+
+/**
+ * Keeps a list while typing within it, but asks again once `SYNONYM_MIN`
+ * letters are typed, since from then on which synonyms match depends on
+ * every letter.
+ */
+function validFor(typed: string): (text: string) => boolean {
+  return typed.length >= SYNONYM_MIN ? () => false : (text) => /^[\w$]*$/.test(text) && text.length < SYNONYM_MIN;
+}
+
+/**
+ * Options for the names that `typed` starts a synonym for, written on
+ * `receiver` (undefined: on its own), from `options`: typing `smoo` after
+ * `ao.` offers glide. Each matches by the synonym but shows and inserts the
+ * real name, below the real names. A name `typed` already starts needs none.
+ */
+export function synonymCompletions(options: readonly Completion[], receiver: Receiver | undefined, typed: string): Completion[] {
+  const t = typed.toLowerCase();
+  if (t.length < SYNONYM_MIN) return [];
+  const byName = new Map(options.map((option) => [option.label, option]));
+  const offered = new Set<string>();
+  const out: Completion[] = [];
+  for (const { on, words, to } of synonyms) {
+    const word = on === receiver && words.find((w) => w.startsWith(t));
+    if (!word) continue;
+    for (const id of to) {
+      const name = id.slice(id.indexOf(":") + 1);
+      const option = byName.get(name);
+      if (!option || offered.has(name) || name.toLowerCase().startsWith(t)) continue;
+      offered.add(name);
+      const { apply } = option;
+      out.push({
+        ...option,
+        label: word,
+        displayLabel: name,
+        detail: `for ${word}`,
+        boost: -50,
+        // An extension's apply inserts the label, so hand it the real name.
+        apply: typeof apply === "function" ? (view, completion, from, to) => apply(view, { ...completion, label: name }, from, to) : apply ?? name,
+      });
+    }
+  }
+  return out;
 }
 
 // --- Editor --------------------------------------------------------------------
