@@ -101,3 +101,15 @@ export function describeNight(night: NightSettings): string {
   if (night.mode === "off") return "night fade: off";
   return `night fade: scheduled (active ${night.start}–${night.end})`;
 }
+
+/**
+ * The tooltip for the status bar's night indicator at `date`, or undefined
+ * when the fade isn't dimming anything (off, or outside the window).
+ */
+export function nightIndicator(night: NightSettings, date: Date): string | undefined {
+  const level = nightLevel(night, date);
+  if (level <= 0) return undefined;
+  const brightness = Math.round(nightBrightness(night, date) * 100);
+  if (night.mode === "on") return `night fade on: ${brightness}% brightness`;
+  return `night fade until ${night.end}: ${brightness}% brightness${level < 1 ? ", easing" : ""}`;
+}

@@ -1,4 +1,4 @@
-import { defaultNight, nextNightMode, nightBrightness, NightSettings, nightSpeed } from "../shared/night";
+import { defaultNight, nextNightMode, nightBrightness, nightIndicator, NightSettings, nightSpeed } from "../shared/night";
 
 /** How often the schedule is re-read; the CSS transition smooths the steps. */
 const TICK_MS = 30_000;
@@ -7,13 +7,14 @@ const TICK_MS = 30_000;
  * Night fade: a black layer over the stage, under the editor, whose opacity
  * follows the nightly schedule. It updates on a slow timer, not per frame.
  * `timeScale` is the optional night slowdown for Hydra and scene time.
+ * `indicator`, the moon in the status bar, shows while the fade is dimming.
  */
 export class NightFade {
   private readonly layer = document.createElement("div");
   private settings: NightSettings = { ...defaultNight, mode: "off" };
   timeScale = 1;
 
-  constructor(stage: HTMLElement) {
+  constructor(stage: HTMLElement, private readonly indicator: HTMLElement) {
     this.layer.id = "night";
     stage.after(this.layer);
     this.apply();
@@ -39,5 +40,8 @@ export class NightFade {
     const now = new Date();
     this.layer.style.opacity = (1 - nightBrightness(this.settings, now)).toFixed(3);
     this.timeScale = nightSpeed(this.settings, now);
+    const title = nightIndicator(this.settings, now);
+    this.indicator.hidden = title === undefined;
+    this.indicator.title = title ?? "";
   }
 }
