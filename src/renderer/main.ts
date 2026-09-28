@@ -83,6 +83,7 @@ function frame(now: number) {
   if (now - fpsWindow > 500) {
     // Automatic scenes, such as solids, may be drawing below full size.
     const scale = sceneResolution.active(now) ? sceneResolution.scaleAt(now) : 1;
+    fpsLabel.dataset.sceneMs = sceneResolution.measuredMs().toFixed(2);
     fpsLabel.textContent = `${Math.round((frames * 1000) / (now - fpsWindow))} fps${scale < 1 ? ` · scenes at ${Math.round(scale * 100)}%` : ""}`;
     frames = 0;
     fpsWindow = now;

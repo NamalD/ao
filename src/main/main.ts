@@ -171,8 +171,10 @@ void app.whenReady().then(() => {
   if (options.screenshot) {
     const path = options.screenshot;
     win.webContents.once("did-finish-load", () => setTimeout(async () => {
-      const fps = await win!.webContents.executeJavaScript("document.getElementById('fps').textContent");
-      console.log(`screenshot ${path} at ${fps}`);
+      const [fps, sceneMs] = await win!.webContents.executeJavaScript(
+        "[document.getElementById('fps').textContent, document.getElementById('fps').dataset.sceneMs]");
+      // Automatic scenes are timed on the GPU; their full-scale cost compares shader changes.
+      console.log(`screenshot ${path} at ${fps}${Number(sceneMs) > 0 ? `, scenes ${sceneMs} GPU ms at full scale` : ""}`);
       const image = await win!.webContents.capturePage();
       writeFileSync(path, image.toPNG());
       app.quit();

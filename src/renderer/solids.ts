@@ -28,9 +28,18 @@ export interface SolidFunction {
   description: string;
   /** shape: the distance at point `{p}`. combine: a vec4 from `{a}` and `{b}`. */
   glsl?: string;
+  /**
+   * shape: the radius of a sphere around the origin the solid fits inside.
+   * modify: that radius from the chain's `{bound}`; unchanged if omitted.
+   * Rays that miss the sphere skip raymarching.
+   */
+  bound?: string;
   /** modify: the point the chain before it sees, from `{p}`. */
   point?: string;
-  /** modify: the new distance, from the chain's distance `{d}` at point `{p}`. */
+  /**
+   * modify: the new distance, from the chain's distance `{d}` at point `{p}`.
+   * combine: the distance alone, from the distances `{a}` and `{b}`.
+   */
   distance?: string;
   /** modify: the new colour, from the chain's colour `{c}`. */
   color?: string;
@@ -51,26 +60,26 @@ export const solidFunctions: SolidFunction[] = [
   // Shapes
   { name: "sphere", type: "shape", description: "A ball centred on the origin.",
     params: [param("radius", 1, "Radius; the view spans about -2.2..2.2 up and down.")],
-    glsl: "length({p}) - {radius}" },
+    glsl: "length({p}) - {radius}", bound: "abs({radius})" },
   { name: "box", type: "shape", description: "A box centred on the origin.",
     params: [param("width", 1.4, "Size along x."), param("height", "width", "Size along y; defaults to width."), param("depth", "width", "Size along z; defaults to width.")],
-    glsl: "aoBox({p}, 0.5 * vec3({width}, {height}, {depth}))" },
+    glsl: "aoBox({p}, 0.5 * vec3({width}, {height}, {depth}))", bound: "0.5 * length(vec3({width}, {height}, {depth}))" },
   { name: "torus", type: "shape", description: "A ring lying flat in the x-z plane.",
     params: [param("radius", 1, "Distance from the centre to the middle of the tube."), param("thickness", 0.3, "Radius of the tube.")],
-    glsl: "length(vec2(length({p}.xz) - {radius}, {p}.y)) - {thickness}" },
+    glsl: "length(vec2(length({p}.xz) - {radius}, {p}.y)) - {thickness}", bound: "abs({radius}) + abs({thickness})" },
   { name: "cylinder", type: "shape", description: "An upright cylinder centred on the origin.",
     params: [param("radius", 0.6, "Radius."), param("height", 1.6, "Height along y.")],
-    glsl: "aoCylinder({p}, {radius}, {height})" },
+    glsl: "aoCylinder({p}, {radius}, {height})", bound: "length(vec2({radius}, 0.5 * {height}))" },
   { name: "octahedron", type: "shape", description: "An eight-sided diamond.",
     params: [param("size", 1.2, "Distance from the centre to each point.")],
-    glsl: "(dot(abs({p}), vec3(1.0)) - {size}) * 0.57735" },
+    glsl: "(dot(abs({p}), vec3(1.0)) - {size}) * 0.57735", bound: "abs({size})" },
   { name: "plane", type: "shape", description: "An endless floor; pair it with repeat for fields of shapes.",
     params: [param("height", -1, "Height of the floor; below 0 is under the centre.")],
-    glsl: "{p}.y - {height}" },
+    glsl: "{p}.y - {height}", bound: "1e6" },
   // Placement
   { name: "move", type: "modify", description: "Moves the solid.",
     params: [param("x", 0, "Right."), param("y", 0, "Up."), param("z", 0, "Towards the camera.")],
-    point: "{p} - vec3({x}, {y}, {z})" },
+    point: "{p} - vec3({x}, {y}, {z})", bound: "{bound} + length(vec3({x}, {y}, {z}))" },
   { name: "rotate", type: "modify", description: "Turns the solid by fixed angles, in radians.",
     params: [param("x", 0, "Tilt around the x axis."), param("y", 0, "Turn around the upright y axis."), param("z", 0, "Roll around the z axis, facing the camera.")],
     point: "aoRotate({p}, vec3({x}, {y}, {z}))" },
@@ -79,10 +88,12 @@ export const solidFunctions: SolidFunction[] = [
     point: "aoRotate({p}, vec3({x}, {y}, {z}) * iTime)" },
   { name: "scale", type: "modify", description: "Grows or shrinks the solid.",
     params: [param("amount", 1, "Size factor: above 1 grows, below 1 shrinks.")],
-    point: "{p} / {amount}", distance: "{d} * {amount}", reach: "{reach} * abs({amount})" },
+    point: "{p} / {amount}", distance: "{d} * {amount}", reach: "{reach} * abs({amount})", bound: "{bound} * abs({amount})" },
   { name: "repeat", type: "modify", description: "Repeats the solid along each axis, endlessly or a set number of times.",
     params: [param("x", 3, "Spacing along x; 0 doesn't repeat."), param("y", 0, "Spacing along y; 0 doesn't repeat."), param("z", 3, "Spacing along z; 0 doesn't repeat."), param("count", 0, "Copies along each repeating axis, centred; 0 repeats endlessly.")],
-    point: "aoRepeat({p}, vec3({x}, {y}, {z}), {count})" },
+    point: "aoRepeat({p}, vec3({x}, {y}, {z}), {count})",
+    // Endless copies have no bound; counted ones sit at most half the row from the centre.
+    bound: "mix(1e6, {bound} + length(abs(vec3({x}, {y}, {z})) * 0.5 * (max(round({count}), 1.0) - 1.0)), step(0.5, {count}))" },
   { name: "radial", type: "modify", description: "Repeats the solid in a ring around the upright axis; move it out along x first.",
     params: [param("count", 6, "Copies around the ring; keep each copy inside its slice.")],
     point: "aoRadial({p}, {count})" },
@@ -91,7 +102,7 @@ export const solidFunctions: SolidFunction[] = [
     point: "mix({p}, abs({p}), step(0.5, vec3({x}, {y}, {z})))" },
   { name: "elongate", type: "modify", description: "Stretches the middle of the solid, keeping its ends: a sphere becomes a capsule.",
     params: [param("x", 1, "Extra length along x."), param("y", 0, "Extra length along y."), param("z", 0, "Extra length along z.")],
-    point: "aoElongate({p}, vec3({x}, {y}, {z}))" },
+    point: "aoElongate({p}, vec3({x}, {y}, {z}))", bound: "{bound} + 0.5 * length(vec3({x}, {y}, {z}))" },
   { name: "twist", type: "modify", description: "Twists the solid around its upright axis; large amounts may tear.",
     params: [param("amount", 1, "Radians of twist per unit of height.")],
     point: "aoTwist({p}, {amount})", reach: "1e6", slope: "{slope} + 2.0 * abs({amount})" },
@@ -101,53 +112,53 @@ export const solidFunctions: SolidFunction[] = [
   { name: "taper", type: "modify", description: "Narrows or widens the solid with height: a cylinder becomes a cone.",
     params: [param("amount", -0.4, "Change in width per unit of height; negative narrows upwards.")],
     point: "aoTaper({p}, {amount})", distance: "{d} * min(aoTaperWidth({p}.y, {amount}), 1.0)",
-    reach: "1e6", slope: "{slope} + 2.0 * abs({amount})" },
+    reach: "1e6", slope: "{slope} + 2.0 * abs({amount})", bound: "{bound} * (1.0 + abs({amount}) * {bound})" },
   { name: "ripple", type: "modify", description: "Rings of waves spreading out from the centre; try it on a plane, driven by the bass.",
     params: [param("amount", 0.1, "Height of the waves."), param("frequency", 6, "Waves per unit outwards: higher packs them closer."), param("speed", 2, "How fast they spread; negative draws them in.")],
     point: "{p} - vec3(0.0, {amount} * sin({frequency} * length({p}.xz) - {speed} * iTime), 0.0)",
-    reach: "{reach} + abs({amount})", slope: "{slope} + abs({amount} * {frequency})" },
+    reach: "{reach} + abs({amount})", slope: "{slope} + abs({amount} * {frequency})", bound: "{bound} + abs({amount})" },
   { name: "warp", type: "modify", description: "Bends space itself with evolving noise, smearing the solid like melting wax.",
     params: [param("amount", 0.2, "How far space moves."), param("scale", 1.5, "Noise frequency; higher gives tighter bends."), param("speed", 0.3, "How fast the noise evolves.")],
     point: "{p} + {amount} * aoWarp({p} * {scale} + iTime * {speed})",
-    reach: "{reach} + 1.8 * abs({amount})", slope: "{slope} + 3.0 * abs({amount} * {scale})" },
+    reach: "{reach} + 1.8 * abs({amount})", slope: "{slope} + 3.0 * abs({amount} * {scale})", bound: "{bound} + 1.8 * abs({amount})" },
   // Surface
   { name: "spikes", type: "modify", description: "Pushes sharp spikes out of the surface; drive the length with the music.",
     params: [param("length", 0.3, "How far the spikes reach; 0 is smooth."), param("density", 8, "How many spikes: higher packs in more, thinner ones."), param("sharpness", 4, "Higher makes needles, lower makes soft bumps."), param("variety", 0, "How much spike lengths differ: 0 all alike, 1 from nothing to full length.")],
     distance: "{d} - {length} * aoSpikes({p}, {density}, {sharpness}, {variety})",
-    reach: "{reach} + abs({length})", slope: "{slope} + 0.5 * abs({length} * {density}) * sqrt(max({sharpness}, 1.0))" },
+    reach: "{reach} + abs({length})", slope: "{slope} + 0.5 * abs({length} * {density}) * sqrt(max({sharpness}, 1.0))", bound: "{bound} + abs({length})" },
   { name: "wobble", type: "modify", description: "A slow, liquid swell over the surface.",
     params: [param("amount", 0.1, "How far the surface moves."), param("frequency", 3, "Number of swells across the solid."), param("speed", 1, "How fast the swells move.")],
     distance: "{d} - {amount} * aoWobble({p}, {frequency}, {speed})",
-    reach: "{reach} + 2.0 * abs({amount})", slope: "{slope} + abs({amount} * {frequency})" },
+    reach: "{reach} + 2.0 * abs({amount})", slope: "{slope} + abs({amount} * {frequency})", bound: "{bound} + 2.0 * abs({amount})" },
   { name: "noise", type: "modify", description: "Lumpy, evolving noise over the surface.",
     params: [param("amount", 0.15, "How far the surface moves."), param("scale", 2, "Noise frequency; higher gives finer lumps."), param("speed", 0.5, "How fast the noise evolves.")],
     distance: "{d} - {amount} * (2.0 * aoNoise({p} * {scale} + iTime * {speed}) - 1.0)",
-    reach: "{reach} + 2.0 * abs({amount})", slope: "{slope} + 2.0 * abs({amount} * {scale})" },
+    reach: "{reach} + 2.0 * abs({amount})", slope: "{slope} + 2.0 * abs({amount} * {scale})", bound: "{bound} + 2.0 * abs({amount})" },
   { name: "spectrum", type: "modify", description: "Pushes the surface out by the spectrum: lows at the bottom, highs at the top.",
     params: [param("amount", 0.4, "How far a full-level band pushes out.")],
     distance: "{d} - {amount} * aoFFT(0.5 + 0.5 * aoDirection({p}).y)",
-    reach: "{reach} + abs({amount})", slope: "{slope} + 8.0 * abs({amount})" },
+    reach: "{reach} + abs({amount})", slope: "{slope} + 8.0 * abs({amount})", bound: "{bound} + abs({amount})" },
   { name: "waveform", type: "modify", description: "Wraps the waveform around the solid's equator, fading out towards its poles.",
     params: [param("amount", 0.3, "How far a full-scale wave pushes out.")],
     distance: "{d} - {amount} * aoWaveform({p})",
-    reach: "{reach} + abs({amount})", slope: "{slope} + 16.0 * abs({amount})" },
+    reach: "{reach} + abs({amount})", slope: "{slope} + 16.0 * abs({amount})", bound: "{bound} + abs({amount})" },
   { name: "ridges", type: "modify", description: "Sharp horizontal ridges that scroll along the solid; drive the speed with the tempo.",
     params: [param("amount", 0.08, "How far the ridges stand out."), param("frequency", 12, "Ridges per unit of height, over π."), param("speed", 1, "How fast they scroll upwards; negative scrolls down.")],
     distance: "{d} - {amount} * (1.0 - abs(sin({frequency} * {p}.y - {speed} * iTime)))",
-    reach: "{reach} + abs({amount})", slope: "{slope} + abs({amount} * {frequency})" },
+    reach: "{reach} + abs({amount})", slope: "{slope} + abs({amount} * {frequency})", bound: "{bound} + abs({amount})" },
   { name: "cells", type: "modify", description: "Cracks the surface into cells, like dried mud or scales.",
     params: [param("amount", 0.06, "How deep the cracks cut; negative raises veins instead."), param("scale", 3, "Cells per unit; higher gives smaller cells."), param("speed", 0, "How fast the cells drift.")],
     distance: "{d} + {amount} * aoCracks({p} * {scale} + iTime * {speed})",
-    reach: "{reach} + abs({amount})", slope: "{slope} + 7.0 * abs({amount} * {scale})" },
+    reach: "{reach} + abs({amount})", slope: "{slope} + 7.0 * abs({amount} * {scale})", bound: "{bound} + abs({amount})" },
   { name: "round", type: "modify", description: "Rounds edges by growing the solid outwards.",
     params: [param("radius", 0.1, "Rounding radius.")],
-    distance: "{d} - {radius}" },
+    distance: "{d} - {radius}", bound: "{bound} + abs({radius})" },
   { name: "shell", type: "modify", description: "Hollows the solid into a thin skin; cut it open with sub to see inside.",
     params: [param("thickness", 0.05, "Thickness of the skin.")],
-    distance: "abs({d}) - {thickness}" },
+    distance: "abs({d}) - {thickness}", bound: "{bound} + abs({thickness})" },
   { name: "onion", type: "modify", description: "Nests shells inside each other like an onion; cut it open with sub to see them.",
     params: [param("count", 3, "Number of shells."), param("gap", 0.15, "Distance between shells."), param("thickness", 0.03, "Thickness of each shell.")],
-    distance: "aoOnion({d}, {count}, {gap}, {thickness})" },
+    distance: "aoOnion({d}, {count}, {gap}, {thickness})", bound: "{bound} + abs({thickness})" },
   // Material
   { name: "color", type: "modify", description: "Colours the solid; values above 1 glow brighter.",
     params: [param("r", 1, "Red."), param("g", 1, "Green."), param("b", 1, "Blue.")],
@@ -158,13 +169,13 @@ export const solidFunctions: SolidFunction[] = [
   // Combining
   { name: "add", type: "combine", description: "Joins another solid to this one; smooth melts them together like liquid.",
     params: [param("smooth", 0, "Blend distance; 0 is a hard join, 0.5 is very blobby.")],
-    glsl: "aoUnion({a}, {b}, {smooth})" },
+    glsl: "aoUnion({a}, {b}, {smooth})", distance: "aoUnionDistance({a}, {b}, {smooth})" },
   { name: "sub", type: "combine", description: "Cuts another solid out of this one.",
     params: [param("smooth", 0, "Blend distance; 0 is a sharp cut.")],
-    glsl: "aoSubtract({a}, {b}, {smooth})" },
+    glsl: "aoSubtract({a}, {b}, {smooth})", distance: "aoSubtractDistance({a}, {b}, {smooth})" },
   { name: "intersect", type: "combine", description: "Keeps only where this solid and another overlap.",
     params: [param("smooth", 0, "Blend distance; 0 is a sharp edge.")],
-    glsl: "aoIntersect({a}, {b}, {smooth})" },
+    glsl: "aoIntersect({a}, {b}, {smooth})", distance: "aoIntersectDistance({a}, {b}, {smooth})" },
 ];
 
 /** Options for `.out(source, options)`. */
@@ -188,14 +199,28 @@ export const solidOutParams: SolidParam[] = [
   param("options", "{}", "{ scale, camera, background, glow, step, trails }: resolution fraction (\"auto\" by default: as sharp as the GPU keeps up with), camera distance (4), background colour ([0.02, 0.02, 0.04]), rim light (0.6), ray step (0.9), and how much of each frame lingers (none)."),
 ];
 
-/** GLSL for a solid at a point: a vec4 of colour and distance, and bounds for the raymarcher. */
-interface Emitted { value: string; reach: string; slope: string }
+/**
+ * GLSL for a solid at a point: a vec4 of colour and distance, or with a
+ * distance-only compiler just the float distance, and bounds for the raymarcher.
+ */
+interface Emitted { value: string; reach: string; slope: string; bound: string }
 type Emit = (compiler: Compiler, point: string) => Emitted;
 
+/**
+ * Writes one GLSL function for a chain. Rays march with the distance alone
+ * and read the colour once where they hit, so a chain compiles twice; the
+ * two compilers share the uniforms.
+ */
 class Compiler {
   readonly lines: string[] = [];
-  readonly uniforms: Record<string, UniformValue> = {};
   private count = 0;
+
+  constructor(
+    readonly colour: boolean,
+    readonly uniforms: Record<string, UniformValue> = {},
+    /** Each call's uniform names, so both compilations of it read the same ones. */
+    readonly bound = new Map<Resolved[], Record<string, string>>(),
+  ) {}
 
   temp(prefix: string): string {
     return `${prefix}${this.count++}`;
@@ -239,11 +264,14 @@ function fill(template: string, names: Record<string, string>): string {
  * parameter. An omitted argument that copies another shares its uniform.
  */
 function bind(compiler: Compiler, fn: SolidFunction, values: Resolved[]): Record<string, string> {
+  const known = compiler.bound.get(values);
+  if (known) return known;
   const names: Record<string, string> = {};
   fn.params.forEach((p, i) => {
     const value = values[i];
     names[p.name] = typeof value === "object" ? names[value.copies] : compiler.uniform(`${fn.name}_${p.name}`, value);
   });
+  compiler.bound.set(values, names);
   return names;
 }
 
@@ -251,7 +279,7 @@ function bind(compiler: Compiler, fn: SolidFunction, values: Resolved[]): Record
 type Home = () => unknown;
 
 export class Solid {
-  /** @internal `emit` writes GLSL for this solid at a point, returning a vec4 of colour and distance. */
+  /** @internal `emit` writes GLSL for this solid at a point, returning a vec4 of colour and distance, or the distance alone. */
   constructor(readonly emit: Emit, readonly home: Home) {}
 
   /** Continues the chain with `fn(this, ...args)`, so a plain function chains like a method. */
@@ -281,9 +309,9 @@ export function makeSolidShapes(home: Home): Record<string, (...args: unknown[])
     const values = resolveArgs(fn, args);
     return new Solid((compiler, point) => {
       const names = { ...bind(compiler, fn, values), p: point };
-      const out = compiler.temp("s");
-      compiler.lines.push(`vec4 ${out} = vec4(vec3(0.85), ${fill(fn.glsl!, names)});`);
-      return { value: out, reach: "0.0", slope: "0.0" };
+      const out = compiler.temp("s"), distance = fill(fn.glsl!, names);
+      compiler.lines.push(compiler.colour ? `vec4 ${out} = vec4(vec3(0.85), ${distance});` : `float ${out} = ${distance};`);
+      return { value: out, reach: "0.0", slope: "0.0", bound: `(${fill(fn.bound!, names)})` };
     }, home);
   }]));
 }
@@ -305,14 +333,21 @@ for (const fn of solidFunctions) {
             compiler.lines.push(`vec3 ${inner} = ${fill(fn.point, { ...names, p: point })};`);
           }
           const before = this.emit(compiler, inner);
-          const color = fn.color ? fill(fn.color, { ...names, c: `${before.value}.rgb` }) : `${before.value}.rgb`;
-          const distance = fn.distance ? fill(fn.distance, { ...names, p: inner, d: `${before.value}.a` }) : `${before.value}.a`;
-          const out = compiler.temp("s");
-          compiler.lines.push(`vec4 ${out} = vec4(${color}, ${distance});`);
+          let value = before.value;
+          if (compiler.colour) {
+            const color = fn.color ? fill(fn.color, { ...names, c: `${before.value}.rgb` }) : `${before.value}.rgb`;
+            const distance = fn.distance ? fill(fn.distance, { ...names, p: inner, d: `${before.value}.a` }) : `${before.value}.a`;
+            value = compiler.temp("s");
+            compiler.lines.push(`vec4 ${value} = vec4(${color}, ${distance});`);
+          } else if (fn.distance) {
+            value = compiler.temp("s");
+            compiler.lines.push(`float ${value} = ${fill(fn.distance, { ...names, p: inner, d: before.value })};`);
+          }
           return {
-            value: out,
+            value,
             reach: fn.reach ? `(${fill(fn.reach, { ...names, reach: before.reach })})` : before.reach,
             slope: fn.slope ? `(${fill(fn.slope, { ...names, slope: before.slope })})` : before.slope,
+            bound: fn.bound ? `(${fill(fn.bound, { ...names, bound: before.bound })})` : before.bound,
           };
         }, this.home);
       },
@@ -326,9 +361,12 @@ for (const fn of solidFunctions) {
           const a = this.emit(compiler, point), b = other.emit(compiler, point);
           const names: Record<string, string> = { ...bind(compiler, fn, values), a: a.value, b: b.value };
           const out = compiler.temp("s");
-          compiler.lines.push(`vec4 ${out} = ${fill(fn.glsl!, names)};`);
+          compiler.lines.push(compiler.colour ? `vec4 ${out} = ${fill(fn.glsl!, names)};` : `float ${out} = ${fill(fn.distance!, names)};`);
           // A smooth blend moves the surface by up to a quarter of its distance.
-          return { value: out, reach: `(max(${a.reach}, ${b.reach}) + 0.25 * abs(${names.smooth}))`, slope: `max(${a.slope}, ${b.slope})` };
+          const blend = `0.25 * abs(${names.smooth})`;
+          // Smooth cuts and overlaps only ever shrink a solid.
+          const bound = fn.name === "add" ? `(max(${a.bound}, ${b.bound}) + ${blend})` : fn.name === "sub" ? a.bound : `min(${a.bound}, ${b.bound})`;
+          return { value: out, reach: `(max(${a.reach}, ${b.reach}) + ${blend})`, slope: `max(${a.slope}, ${b.slope})`, bound };
         }, this.home);
       },
     });
@@ -423,29 +461,41 @@ float aoOnion(float d, float count, float gap, float thickness) {
   float layer = clamp(round(-d / max(gap, 1e-4)), 0.0, max(round(count), 1.0) - 1.0);
   return abs(d + layer * gap) - thickness;
 }
-vec4 aoUnion(vec4 a, vec4 b, float k) {
+float aoUnionDistance(float a, float b, float k) {
   k = max(k, 1e-4);
-  float h = clamp(0.5 + 0.5 * (b.a - a.a) / k, 0.0, 1.0);
-  return vec4(mix(b.rgb, a.rgb, h), mix(b.a, a.a, h) - k * h * (1.0 - h));
+  float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+  return mix(b, a, h) - k * h * (1.0 - h);
+}
+float aoSubtractDistance(float a, float b, float k) {
+  k = max(k, 1e-4);
+  float h = clamp(0.5 - 0.5 * (a + b) / k, 0.0, 1.0);
+  return mix(a, -b, h) + k * h * (1.0 - h);
+}
+float aoIntersectDistance(float a, float b, float k) {
+  k = max(k, 1e-4);
+  float h = clamp(0.5 - 0.5 * (b - a) / k, 0.0, 1.0);
+  return mix(b, a, h) + k * h * (1.0 - h);
+}
+vec4 aoUnion(vec4 a, vec4 b, float k) {
+  float h = clamp(0.5 + 0.5 * (b.a - a.a) / max(k, 1e-4), 0.0, 1.0);
+  return vec4(mix(b.rgb, a.rgb, h), aoUnionDistance(a.a, b.a, k));
 }
 vec4 aoSubtract(vec4 a, vec4 b, float k) {
-  k = max(k, 1e-4);
-  float h = clamp(0.5 - 0.5 * (a.a + b.a) / k, 0.0, 1.0);
-  return vec4(a.rgb, mix(a.a, -b.a, h) + k * h * (1.0 - h));
+  return vec4(a.rgb, aoSubtractDistance(a.a, b.a, k));
 }
 vec4 aoIntersect(vec4 a, vec4 b, float k) {
-  k = max(k, 1e-4);
-  float h = clamp(0.5 - 0.5 * (b.a - a.a) / k, 0.0, 1.0);
-  return vec4(mix(b.rgb, a.rgb, h), mix(b.a, a.a, h) + k * h * (1.0 - h));
+  float h = clamp(0.5 - 0.5 * (b.a - a.a) / max(k, 1e-4), 0.0, 1.0);
+  return vec4(mix(b.rgb, a.rgb, h), aoIntersectDistance(a.a, b.a, k));
 }
 `;
 
 const RENDER = `
+// Four samples at the corners of a tetrahedron, rather than six on the axes.
 vec3 aoNormal(vec3 p) {
-  vec2 e = vec2(0.002, 0.0);
-  return normalize(vec3(aoMap(p + e.xyy).a - aoMap(p - e.xyy).a,
-                        aoMap(p + e.yxy).a - aoMap(p - e.yxy).a,
-                        aoMap(p + e.yyx).a - aoMap(p - e.yyx).a));
+  const vec2 k = vec2(1.0, -1.0);
+  const float e = 0.0012;
+  return normalize(k.xyy * aoDist(p + k.xyy * e) + k.yyx * aoDist(p + k.yyx * e) +
+                   k.yxy * aoDist(p + k.yxy * e) + k.xxx * aoDist(p + k.xxx * e));
 }
 
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
@@ -457,26 +507,27 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   // Surface detail makes distances overestimate: far away, step by the
   // distance less how far the detail reaches; close up, by a fraction of it.
   float reach = aoReach(), slope = 1.0 + aoSlope();
-  float t = 0.0;
-  vec4 hit = vec4(0.0);
+  // March only where the ray crosses the sphere the solid fits inside.
+  float radius = aoBound() + 0.05, b = dot(ro, rd), h = b * b - dot(ro, ro) + radius * radius;
+  float t = max(-b - sqrt(max(h, 0.0)), 0.0), far = h < 0.0 ? -1.0 : min(-b + sqrt(h), 40.0);
   bool found = false;
   // A ray grazing a steep surface, such as the base of a spike, creeps along
   // it in tiny steps and can run out of them; shade it where it came closest.
   float closestT = 0.0, closest = 1e9;
-  vec4 closestHit = vec4(0.0);
   for (int i = 0; i < 200; i++) {
-    hit = aoMap(ro + rd * t);
-    float gap = abs(hit.a) / (1.0 + t);
+    if (t > far) break;
+    float d = aoDist(ro + rd * t);
+    float gap = abs(d) / (1.0 + t);
     if (gap < 0.0005) { found = true; break; }
-    if (gap < closest) { closest = gap; closestT = t; closestHit = hit; }
-    t += aoStep * max(hit.a - reach, hit.a / slope);
-    if (t > 40.0) break;
+    if (gap < closest) { closest = gap; closestT = t; }
+    t += aoStep * max(d - reach, d / slope);
   }
-  if (!found && t <= 40.0 && closest < 0.02) { found = true; t = closestT; hit = closestHit; }
+  if (!found && t <= far && closest < 0.02) { found = true; t = closestT; }
 
   vec3 colour = background;
   if (found) {
     vec3 p = ro + rd * t, n = aoNormal(p);
+    vec4 hit = aoMap(p);
     vec3 light = normalize(vec3(0.6, 0.8, 0.5));
     float diffuse = max(dot(n, light), 0.0);
     float sky = 0.5 + 0.5 * n.y;
@@ -501,7 +552,7 @@ vec4 aoFinish(vec3 colour, vec2 fragCoord) {
 
 /** Compiles a solid into a scene shader and the uniforms that drive it. */
 export function compileSolid(solid: Solid, options: SolidOutOptions = {}): { code: string; uniforms: Record<string, UniformValue> } {
-  const compiler = new Compiler();
+  const compiler = new Compiler(true);
   const setting = (name: string, value: UniformValue | undefined, fallback: UniformValue) => {
     if (value !== undefined && typeof value !== "number" && typeof value !== "function" && !Array.isArray(value)) {
       throw new Error(`out(${name}): expected a number or a function, got ${show(value)}`);
@@ -515,6 +566,8 @@ export function compileSolid(solid: Solid, options: SolidOutOptions = {}): { cod
   // Only chains with trails read the last frame, so only they pay to keep it.
   if (options.trails !== undefined) setting("trails", options.trails, 0);
   const result = solid.emit(compiler, "p");
+  const distance = new Compiler(false, compiler.uniforms, compiler.bound);
+  const distanceResult = solid.emit(distance, "p");
   const declarations = Object.keys(compiler.uniforms)
     .map((name) => `uniform ${name === "aoBackground" ? "vec3" : "float"} ${name};`);
   const code = [
@@ -524,6 +577,11 @@ export function compileSolid(solid: Solid, options: SolidOutOptions = {}): { cod
     ...compiler.lines.map((line) => `  ${line}`),
     `  return ${result.value};`,
     "}",
+    "float aoDist(vec3 p) {",
+    ...distance.lines.map((line) => `  ${line}`),
+    `  return ${distanceResult.value};`,
+    "}",
+    `float aoBound() { return ${result.bound}; }`,
     `float aoReach() { return ${result.reach}; }`,
     `float aoSlope() { return ${result.slope}; }`,
     options.trails === undefined ? FINISH : FINISH_TRAILS,

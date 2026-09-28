@@ -115,9 +115,37 @@ describe("solid chains", () => {
   it("shades a ray that runs out of steps grazing a spike base, rather than showing the background through it", () => {
     const { code } = compileSolid(sphere().spikes(0.9, 9, 5));
     // Tracks where the ray came closest, then falls back to it only when the
-    // loop ran out of steps (not when the ray left the scene past t = 40).
-    expect(code).toMatch(/if \(gap < closest\) \{ closest = gap; closestT = t; closestHit = hit; \}/);
-    expect(code).toContain("if (!found && t <= 40.0 && closest < 0.02) { found = true; t = closestT; hit = closestHit; }");
+    // loop ran out of steps (not when the ray left the solid's bounds).
+    expect(code).toContain("if (gap < closest) { closest = gap; closestT = t; }");
+    expect(code).toContain("if (!found && t <= far && closest < 0.02) { found = true; t = closestT; }");
+  });
+
+  it("marches with the distance alone and reads the colour once, where the ray hits", () => {
+    const { code, uniforms } = compileSolid(sphere(1).color(1, 0, 0).add(box(1).spikes(0.2), 0.3));
+    expect(code).toMatch(/float aoDist\(vec3 p\) \{\n  float s0 = length\(p\) - sphere_radius;\n  float s1 = aoBox/);
+    expect(code).toContain("aoUnionDistance(s0, s2, add_smooth)");
+    // The distance-only function has no colours at all.
+    const dist = code.slice(code.indexOf("float aoDist"), code.indexOf("float aoBound"));
+    expect(dist).not.toMatch(/vec4|color_/);
+    // Both functions read the same uniforms rather than copies of them.
+    expect(Object.keys(uniforms).filter((name) => name.startsWith("sphere_radius"))).toEqual(["sphere_radius"]);
+    expect(code).toMatch(/for \(int i = 0; i < 200; i\+\+\) \{[^}]*aoDist\(ro \+ rd \* t\)/);
+    expect(code).toContain("vec4 hit = aoMap(p);");
+  });
+
+  it("bounds each solid by a sphere around the centre, which rays that miss skip", () => {
+    const bound = (chain: Chain) => compileSolid(chain).code.match(/float aoBound\(\) \{ return (.*); \}/)![1];
+    expect(bound(sphere(1.5))).toBe("(abs(sphere_radius))");
+    expect(bound(sphere().spikes(0.4).move(1).scale(2)))
+      .toBe("((((abs(sphere_radius)) + abs(spikes_length)) + length(vec3(move_x, move_y, move_z))) * abs(scale_amount))");
+    // Spins, twists and mirrors keep every point as far from the centre.
+    expect(bound(torus().spin().twist().mirror())).toBe("(abs(torus_radius) + abs(torus_thickness))");
+    expect(bound(sphere().add(box(), 0.2))).toBe("(max((abs(sphere_radius)), (0.5 * length(vec3(box_width, box_width, box_width)))) + 0.25 * abs(add_smooth))");
+    expect(bound(sphere().sub(box()))).toBe("(abs(sphere_radius))");
+    expect(bound(sphere().intersect(box()))).toMatch(/^min\(/);
+    // Floors and endless repeats have no useful bound.
+    expect(bound(plane())).toBe("(1e6)");
+    expect(bound(sphere().repeat())).toContain("mix(1e6, ");
   });
 });
 

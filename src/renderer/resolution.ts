@@ -24,6 +24,8 @@ interface Cost { fullScaleMs: number; at: number }
 
 export class ResolutionGovernor {
   private costs = new Map<object, Cost>();
+  /** Every full-scale cost reported, unsmoothed, for measuring a sketch. */
+  private totals = new Map<object, { sum: number; count: number }>();
   private current = 1;
   private changedAt = -Infinity;
 
@@ -36,6 +38,8 @@ export class ResolutionGovernor {
   report(scene: object, ms: number, scale: number, now: number): number {
     if (!(ms >= 0) || !(scale > 0)) return this.scaleAt(now);
     const fullScaleMs = ms / (scale * scale);
+    const total = this.totals.get(scene) ?? { sum: 0, count: 0 };
+    this.totals.set(scene, { sum: total.sum + fullScaleMs, count: total.count + 1 });
     const old = this.costs.get(scene);
     // Loud passages make displaced solids suddenly slower: follow heavier
     // frames within a few frames, and lighter ones slowly, so neither one
@@ -70,6 +74,16 @@ export class ResolutionGovernor {
       this.changedAt = now;
     }
     return this.current;
+  }
+
+  /**
+   * The mean GPU milliseconds a frame of every scene reported so far would
+   * take at full scale, summed over the scenes: what screenshots print.
+   */
+  measuredMs(): number {
+    let sum = 0;
+    for (const total of this.totals.values()) sum += total.sum / total.count;
+    return sum;
   }
 
   /** Whether any automatic scene has reported recently. */

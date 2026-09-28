@@ -94,4 +94,14 @@ describe("automatic scene resolution", () => {
     expect(governor.report({}, 5, 0, 0)).toBe(1);
     expect(governor.active(0)).toBe(false);
   });
+
+  it("measures each scene's mean full-scale cost, unsmoothed, summed over scenes", () => {
+    const governor = new ResolutionGovernor(10);
+    const a = {}, b = {};
+    governor.report(a, 2, 1, 0);
+    // 1 ms at half size is 4 ms at full size, so a averages 3 ms.
+    governor.report(a, 1, 0.5, 16);
+    governor.report(b, 5, 1, 16);
+    expect(governor.measuredMs()).toBe(8);
+  });
 });
