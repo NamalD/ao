@@ -18,6 +18,7 @@ import { addUse, extensionApi, extensionDocs, type ExtensionFunction, usedExtens
 import { CATALOG } from "./extensions";
 import { keepLiveValues, liveValues } from "./live-values";
 import { formatCode, minimalChange } from "./format";
+import { chainExtraDocs } from "./glow";
 import { remix, remixRunRange } from "./remix";
 import { joinsScrub, scrubbing } from "./scrub";
 import { solidFunctions, solidOutParams } from "./solids";
@@ -144,8 +145,10 @@ const functions = hydraFunctions() as HydraFunction[];
 
 /** Hydra's generators: functions that start a chain. */
 export const generators = functions.filter((fn) => fn.type === "src").map((fn) => fn.name);
+/** Ao's own chain methods (glow.ts). */
+export const aoChainMethods = Object.keys(chainExtraDocs) as (keyof typeof chainExtraDocs)[];
 /** Methods that continue a chain, plus `out`. */
-export const chainMethods = [...functions.filter((fn) => fn.type !== "src").map((fn) => fn.name), "out"];
+export const chainMethods = [...functions.filter((fn) => fn.type !== "src").map((fn) => fn.name), ...aoChainMethods, "out"];
 
 const hydraFunctionDocs = new Map<string, FunctionDoc>(functions.map((fn) => {
   const docs = hydraDocs[fn.name];
@@ -160,6 +163,10 @@ const hydraFunctionDocs = new Map<string, FunctionDoc>(functions.map((fn) => {
   ];
   return [fn.name, makeDoc(fn.name, params, docs?.description ?? "")] as const;
 }));
+for (const name of aoChainMethods) {
+  const { params, description } = chainExtraDocs[name];
+  hydraFunctionDocs.set(name, makeDoc(name, [...params], description));
+}
 hydraFunctionDocs.set("out", makeDoc("out", [{ name: "output", description: "Output buffer; o0 is the one on screen." }],
   "Renders this chain to an output buffer.", "out(output = o0)"));
 

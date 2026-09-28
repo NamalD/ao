@@ -2,7 +2,7 @@ import { EditorSelection } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import hydraFunctions from "hydra-synth/src/glsl/glsl-functions.js";
 import { describe, expect, it, vi } from "vitest";
-import { createEditorState, helpCommand, insertBlock, publicAoMembers, type Receiver, sourceMembers } from "../src/renderer/editor";
+import { aoChainMethods, createEditorState, helpCommand, insertBlock, publicAoMembers, type Receiver, sourceMembers } from "../src/renderer/editor";
 import { extensionApi, extensionDocs } from "../src/renderer/extension-api";
 import { CATALOG } from "../src/renderer/extensions";
 import { aoExamples, extensionExamples, globalEntries, hydraExamples, sourceExamples } from "../src/renderer/explorer/content";
@@ -13,10 +13,18 @@ const entries = buildEntries();
 const names = (list: { name: string }[]) => list.map((e) => e.name);
 
 describe("explorer content", () => {
-  it("has an example for every Hydra function, ao member and source method, and no strays", () => {
-    expect(Object.keys(hydraExamples).sort()).toEqual(hydraFunctions().map((fn) => fn.name).sort());
+  it("has an example for every Hydra function, Ao chain method, ao member and source method, and no strays", () => {
+    expect(Object.keys(hydraExamples).sort()).toEqual([...hydraFunctions().map((fn) => fn.name), ...aoChainMethods].sort());
     expect(Object.keys(aoExamples).sort()).toEqual(publicAoMembers().map((m) => m.name).sort());
     expect(Object.keys(sourceExamples).sort()).toEqual([...sourceMembers].sort());
+  });
+
+  it("lists Ao's chain methods under Colour, with their docs", () => {
+    for (const name of aoChainMethods) {
+      const entry = entries.find((e) => e.id === `hydra:${name}`);
+      expect(entry?.section, name).toBe("color");
+      expect(entry?.signature, name).toMatch(new RegExp(`^${name}\\(`));
+    }
   });
 
   it("has an example for every name each extension adds, plus its intro, and no strays", () => {
