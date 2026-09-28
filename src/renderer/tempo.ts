@@ -38,15 +38,15 @@ export function pulse(div = 1): number {
 
 // --- Hydra -------------------------------------------------------------------
 
-/** Detection must reach this confidence once before Ao drives Hydra's bpm. */
-const DRIVE_CONFIDENCE = 0.3;
+/** Detection must reach this confidence before autopilot trusts the bar. */
+const TRUST_CONFIDENCE = 0.3;
 type HydraGlobals = { bpm?: number };
 const globals = () => window as unknown as HydraGlobals;
 let driver: BpmDriver | null = null;
-let confident = false;
 
 /**
- * Keeps Hydra's global `bpm` on the tempo once there is one, and makes array
+ * Keeps Hydra's global `bpm` on `ao.bpm`, as if every sketch began with
+ * `bpm = ao.bpm` but kept following it, and makes array
  * sequences step on Ao's beats: Hydra indexes `[a, b, c].fast(s)` by
  * `time * s * bpm / 60`, so while Ao drives `bpm` it hands arrays the time at
  * which that product equals Ao's beat count. `[1, 2, 3, 4]` then changes
@@ -63,17 +63,16 @@ export function installHydraTempo(): void {
   };
 }
 
-/** Called each frame before Hydra ticks. */
 /** Time until the next bar, so autopilot's fades start on the one; 0 until the tempo is trusted. */
 export function msToNextBar(): number {
-  const trusted = clock.source === "tap" || clock.confidence >= DRIVE_CONFIDENCE;
+  const trusted = clock.source === "tap" || clock.confidence >= TRUST_CONFIDENCE;
   return msUntilNextBar(barNow(), phaseNow(), clock.bpm, trusted);
 }
 
+/** Called each frame before Hydra ticks. */
 export function syncHydraBpm(): void {
   if (!driver) return;
-  if (clock.source === "tap" || clock.confidence >= DRIVE_CONFIDENCE) confident = true;
-  const value = driver.frame(globals().bpm ?? 30, confident ? Math.round(clock.bpm * 100) / 100 : null);
+  const value = driver.frame(globals().bpm ?? 30, Math.round(clock.bpm * 100) / 100);
   if (value !== undefined) globals().bpm = value;
 }
 

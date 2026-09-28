@@ -340,13 +340,15 @@ host.onAudio((features) => autopilot.feed(features));
 autopilot.alignSwitch = (reason) => reason === "skip" ? 0 : msToNextBar();
 
 // The code explorer: F2, or K on a word. Its examples play on the current
-// deck, cut in as a sketch switch would be, which also resets speed and bpm.
+// deck, cut in as a sketch switch would be, which also resets speed and hands
+// bpm back to Ao.
 // Browsing counts as editing, so autopilot doesn't switch away meanwhile.
 const explorer = new CodeExplorer({
   play: (code) => {
     autopilot.setEditorVisible(true);
     autopilot.edited();
     mixer.cut();
+    releaseHydraBpm();
     void run(code);
   },
   restore: () => { mixer.cut(); void run(editor.state.doc.toString()); },

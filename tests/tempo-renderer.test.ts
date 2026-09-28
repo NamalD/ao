@@ -17,6 +17,14 @@ afterAll(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const at = (seconds: number) => { now = seconds; };
 
 describe("tempo in the renderer", () => {
+  it("drives Hydra's bpm from the start, before any tempo is detected", () => {
+    at(1);
+    expect(ao.tempoConfidence).toBe(0);
+    syncHydraBpm();
+    expect(hydraGlobals.bpm).toBe(ao.bpm);
+    expect(hydraGlobals.bpm).toBe(120);
+  });
+
   it("exposes the beat clock through ao", () => {
     // Tap 120 bpm starting on the one at t = 10.
     for (const t of [10, 10.5, 11]) { at(t); clock.tap(t); }
@@ -41,8 +49,6 @@ describe("tempo in the renderer", () => {
   it("drives Hydra's bpm and steps array sequences on Ao's beats", () => {
     const steps = [1, 2, 3, 4];
     at(11.1);
-    // Hydra's own clock before Ao drives bpm: index = time * bpm / 60.
-    expect(arrayUtils.getValue(steps)({ time: 2, bpm: 30 })).toBe(2);
     syncHydraBpm();
     expect(hydraGlobals.bpm).toBe(120);
     // Beat 2.2 of the bar, whatever Hydra's time says.

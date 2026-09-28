@@ -1,7 +1,5 @@
 await use("softpattern", "fractals")
 
-bpm = ao.bpm
-
 shape(3, 0.3, ao.map("bass", 0.4, 0.3))
   .scrollY(ao.map("bass", 0.05, 0.1))
   .scale(1.8)
