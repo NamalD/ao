@@ -6,6 +6,7 @@ import { saveChallenge } from "./challenge-log";
 import { isAppNavigation } from "./navigation";
 import { setupRecording } from "./recording";
 import { generateThumbnails, registerSketchLibraryIpc } from "./sketch-library";
+import { syncSketches } from "./sketch-sync";
 import { Store } from "./store";
 import { mergeSettings, normalizeSettings, Settings } from "../shared/settings";
 import { normalizeAutopilot } from "../shared/autopilot";
@@ -183,3 +184,11 @@ void app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => app.quit());
+
+// Closing Ao commits changed sketches and pushes them in the background.
+app.on("will-quit", () => {
+  if (headless) return;
+  const { committed, error } = syncSketches(app.getAppPath(), store.logPath);
+  if (error) store.log(`sketch sync failed: ${error}`);
+  else if (committed.length) store.log(`committed sketches: ${committed.join(", ")}; pushing`);
+});

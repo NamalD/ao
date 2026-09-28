@@ -71,6 +71,11 @@ anything. Saving the file from another editor does re-run it, unless the
 overlay has unsaved edits, in which case the status bar says so and Ctrl+S
 keeps your version.
 
+Closing Ao commits every changed, new or deleted sketch in `sketches/` as
+"Update sketches: <names>", leaving any other changes alone, and pushes in
+the background. Failures, including the push, land in `state/ao.log`.
+Screenshots and thumbnail runs never commit.
+
 **Formatting.** Ctrl+Enter and Ctrl+Shift+Enter format the code they run
 with [Prettier](https://prettier.io/): double quotes, no semicolons, lines up
 to 100 columns. The code runs first, so formatting never delays it. The
