@@ -139,7 +139,7 @@ const editor = createEditor(editorRoot, {
   },
   rename: (name, overwrite) => void rename(name, overwrite),
   status: showStatus,
-  help: (line, column) => { editor.contentDOM.blur(); explorer.lookUp(line, column); },
+  help: (line, column, receiver) => { editor.contentDOM.blur(); explorer.lookUp(line, column, receiver); },
 });
 
 const dirty = () => editor.state.doc.toString() !== saved;

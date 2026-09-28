@@ -4,10 +4,10 @@
  * panel itself is in explorer.ts.
  */
 import hydraFunctions from "hydra-synth/src/glsl/glsl-functions.js";
-import { functionDoc, publicAoMembers, sourceMembers } from "../editor";
+import { functionDoc, publicAoMembers, type Receiver, sourceMembers } from "../editor";
 import { extensionApi, extensionDocs, extensionGroups } from "../extension-api";
 import { CATALOG } from "../extensions";
-import { aoExamples, type Example, extensionExamples, globalEntries, hydraExamples, recipes, sourceExamples } from "./content";
+import { aoExamples, type Example, extensionExamples, globalEntries, hydraExamples, recipes, sourceExamples, synonyms } from "./content";
 
 /** Built-in sections, and one or more per vendored extension (`ext:noise`, `ext:arithmetics-maths`, …). */
 export type SectionId = "ao" | "src" | "coord" | "color" | "combine" | "combineCoord" | "globals" | "sources" | "recipes" | `ext:${string}`;
@@ -139,16 +139,44 @@ export function wordAt(line: string, column: number): { name: string; owner?: st
   return owner ? { name, owner } : { name };
 }
 
-/** The entry for a word in the code, if there is one. */
-export function findEntry(entries: Entry[], word: { name: string; owner?: string }): Entry | undefined {
+/** A word in the code: its name, the object it's a member of, and what that object holds, from the editor's syntax tree. */
+export interface Word { name: string; owner?: string; receiver?: Receiver }
+
+/** Where a word is written, from its receiver or failing that its owner's name; undefined on its own or when unknown. */
+function contextOf({ owner, receiver }: Word): Receiver | undefined {
+  if (receiver) return receiver;
+  if (owner === "ao") return "ao";
+  if (owner && /^s[0-3]$/.test(owner)) return "source";
+  if (owner && /^(o[0-3]|oS)$/.test(owner)) return "output";
+  return undefined;
+}
+
+/** Entry ids that `word` is a synonym for, written in `context`, best first; any context's when `context` is "any". */
+function synonymTargets(word: string, context: Receiver | undefined | "any"): string[] {
+  const w = word.toLowerCase();
+  return [...new Set(synonyms
+    .filter((s) => (context === "any" || s.on === context) && s.words.includes(w))
+    .flatMap((s) => s.to))];
+}
+
+/**
+ * The entry for a word in the code, if there is one. A word that isn't a
+ * name falls back to a synonym written in the same place, so `ao.smooth`
+ * finds glide but `[0, 1].smooth` finds arrays.
+ */
+export function findEntry(entries: Entry[], word: Word): Entry | undefined {
   const { name, owner } = word;
+  const synonym = () => {
+    const [first] = synonymTargets(name, contextOf(word));
+    return first ? entries.find((e) => e.id === first) : undefined;
+  };
   const byId = (id: string) => entries.find((e) => e.id === id);
-  if (owner === "ao") return byId(`ao:${name}`);
-  if (owner && /^s[0-3]$/.test(owner)) return byId(`source:${name}`);
-  if (owner && /^(o[0-3]|oS)$/.test(owner)) return byId(`ext:outputs:${name}`);
+  if (owner === "ao") return byId(`ao:${name}`) ?? synonym();
+  if (owner && /^s[0-3]$/.test(owner)) return byId(`source:${name}`) ?? synonym();
+  if (owner && /^(o[0-3]|oS)$/.test(owner)) return byId(`ext:outputs:${name}`) ?? synonym();
   if (name === "ao") return byId("ao:map");
   return byId(`hydra:${name}`) ?? byId(`global:${name}`)
-    ?? entries.find((e) => e.id.startsWith("ext:") && e.name === name) ?? entries.find((e) => e.aliases.includes(name));
+    ?? entries.find((e) => e.id.startsWith("ext:") && e.name === name) ?? synonym() ?? entries.find((e) => e.aliases.includes(name));
 }
 
 /** True if the letters of `query` appear in `text` in order. */
@@ -158,16 +186,33 @@ function subsequence(query: string, text: string): boolean {
   return i === query.length;
 }
 
+/** A search's context from its prefix: `ao.smooth` is written after ao, `.move` on a Hydra chain. */
+function queryContext(query: string): { q: string; context?: Receiver } {
+  const prefix = query.match(/^(ao|s[0-3]|o[0-3]|oS)?\./);
+  const q = query.slice(prefix?.[0].length ?? 0).toLowerCase();
+  if (!prefix) return { q };
+  return { q, context: prefix[1] ? contextOf({ name: q, owner: prefix[1] }) : "hydra" };
+}
+
 /**
  * Entries matching `query`, in section order, and the best match to select.
  * Names and aliases match by substring, or failing that by letters in order;
- * descriptions by substring.
+ * descriptions by substring; synonyms by the whole word. A synonym leads
+ * only where it's written: after a prefix such as `ao.` or `.`, or in
+ * `context`, it outranks every name; with neither, any context's counts,
+ * below an exact name but above the rest.
  */
-export function filterEntries(entries: Entry[], query: string): { matches: Entry[]; best?: Entry } {
-  const q = query.trim().toLowerCase();
+export function filterEntries(entries: Entry[], query: string, context?: Receiver): { matches: Entry[]; best?: Entry } {
+  const parsed = queryContext(query.trim());
+  const { q } = parsed;
+  const where = parsed.context ?? context;
   if (!q) return { matches: entries, best: entries[0] };
+  const targets = synonymTargets(q, where ?? "any");
   const score = (entry: Entry): number => {
     const names = [entry.name, ...entry.aliases].map((n) => n.toLowerCase().replace(/^(ao|s0|o0)\./, ""));
+    // Earlier targets score a little higher, so the first is the best match.
+    const target = targets.indexOf(entry.id);
+    if (target >= 0) return (where ? 6 : 4.5) - target / 100;
     if (names.some((n) => n === q)) return 5;
     if (names.some((n) => n.startsWith(q))) return 4;
     if (names.some((n) => n.includes(q))) return 3;

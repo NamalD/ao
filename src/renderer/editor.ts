@@ -30,8 +30,11 @@ export interface EditorActions {
   rename?(name: string, overwrite: boolean): void;
   /** Show a message in the status bar. */
   status?(message: string, error?: boolean): void;
-  /** K in normal mode: look up the word at `column` of `line` in the code explorer. */
-  help?(line: string, column: number): void;
+  /**
+   * K in normal mode: look up the word at `column` of `line` in the code
+   * explorer; `receiver` is what the object it's a member of holds, if known.
+   */
+  help?(line: string, column: number, receiver?: Receiver): void;
   /** Whether running code also formats it; formats when absent. */
   autoFormat?(): boolean;
 }
@@ -710,9 +713,20 @@ Vim.defineEx("run", "r", (cm, params) => runCommand(cm.cm6 as EditorView, params
 
 /** K: open the code explorer on the word under the cursor, like vim's keyword lookup. */
 export function helpCommand(view: EditorView): void {
-  const head = view.state.selection.main.head;
-  const line = view.state.doc.lineAt(head);
-  view.state.facet(editorActions)?.help?.(line.text, head - line.from);
+  const { state } = view;
+  const head = state.selection.main.head;
+  const line = state.doc.lineAt(head);
+  state.facet(editorActions)?.help?.(line.text, head - line.from, memberReceiverAt(state, head));
+}
+
+/** What holds the member named at `pos`, such as "hydra" for the move in `osc().move`; undefined for other words. */
+function memberReceiverAt(state: EditorState, pos: number): Receiver | undefined {
+  // Either side, so the cursor just past the name, as at the end of a line, counts.
+  for (const side of [1, -1] as const) {
+    const node = syntaxTree(state).resolveInner(pos, side);
+    if (node.name === "PropertyName" && node.parent?.name === "MemberExpression") return receiverOf(state, node.parent.firstChild);
+  }
+  return undefined;
 }
 Vim.defineAction("aoHelp", (cm) => helpCommand(cm.cm6 as EditorView));
 Vim.mapCommand("K", "action", "aoHelp", {}, { context: "normal" });
