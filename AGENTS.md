@@ -12,6 +12,11 @@ without waiting for approval. Do not commit `node_modules/`, `dist/`, or
 anything in `state/`. Run `make test` before each commit. Keep sketches in
 `sketches/` small, readable examples of what Ao can do.
 
+The backlog lives in `tracker` (in `~/code/tracker`), not in a file. Run
+`tracker item list` from this repo to see open work, and `tracker --help` for
+the rest (`tracker item add --section P1 "..."`, `tracker item done <id>`, …).
+Refer to items by ID (`#42`) in commits and conversation.
+
 Check visual changes with `make screenshot SKETCH=<name>`, which renders
 offscreen with synthetic audio, rather than assuming a shader looks right.
 
