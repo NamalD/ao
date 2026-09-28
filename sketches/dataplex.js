@@ -47,6 +47,8 @@ osc(() => ao.bpm / 2, -0.1, 0.8)
   .pixelate(200, () => 50 * ao.bass)
   .out(o0)
 
-src(o0).mask(src(s1).thresh(0.02, 0.01)).out(o1)
+src(o0)
+  .mask(src(s1).thresh(0.02, 0.01))
+  .out(o1)
 
 render(o1)

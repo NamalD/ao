@@ -16,4 +16,6 @@ sphere(1)
   .color(red, 0.01, blue)
   .out(s0, { glow: () => 0.6 + 1.5 * ao.impulse })
 
-src(s0).blend(o0, 0.35).out()
+src(s0)
+  .blend(o0, 0.35)
+  .out()

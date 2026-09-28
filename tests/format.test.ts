@@ -21,6 +21,14 @@ describe("formatCode", () => {
     expect(result?.code).toBe(`osc(20, 0.1).out(o0)\nsetFunction({ name: "x" })`);
   });
 
+  it("chops a chain standing on its own one call per line, even when it would fit", async () => {
+    const result = await formatCode("const x = noise(3).color(1, 0, 0).out(o1)\nosc(4).blend(src(o0).scale(1.01).rotate(1), 0.5).out()");
+    expect(result?.code).toBe([
+      "const x = noise(3)", "  .color(1, 0, 0)", "  .out(o1)",
+      "osc(4)", "  .blend(src(o0).scale(1.01).rotate(1), 0.5)", "  .out()",
+    ].join("\n"));
+  });
+
   it("carries the cursor to the same code", async () => {
     const code = "osc(20,0.1).out( o0 )";
     const result = await formatCode(code, code.indexOf("o0"));
