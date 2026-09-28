@@ -36,3 +36,12 @@ interface HydraSource {
   initScene(code: string, options?: import("./scenes").SceneOptions): void;
   clearScene(): void;
 }
+
+declare module "hydra-synth/src/generator-factory.js" {
+  export default class GeneratorFactory {
+    constructor(options: { defaultOutput?: unknown; defaultUniforms?: Record<string, unknown> });
+    generators: Record<string, (...args: unknown[]) => any>;
+    glslTransforms: Record<string, { type: string }>;
+    sourceClass: { prototype: object };
+  }
+}

@@ -4,7 +4,7 @@
  * panel itself is in explorer.ts.
  */
 import hydraFunctions from "hydra-synth/src/glsl/glsl-functions.js";
-import { functionDoc, publicAoMembers, type Receiver, sourceMembers } from "../editor";
+import { aoChainMethods, functionDoc, publicAoMembers, type Receiver, sourceMembers } from "../editor";
 import { extensionApi, extensionDocs, extensionGroups } from "../extension-api";
 import { CATALOG } from "../extensions";
 import { aoExamples, type Example, extensionExamples, globalEntries, hydraExamples, recipes, sourceExamples } from "./content";
@@ -73,6 +73,7 @@ export function buildEntries(): Entry[] {
     list.push(fromDoc(`hydra:${fn.name}`, fn.type as SectionId, fn.name, functionDoc(fn.name), hydraExamples[fn.name]));
     byType.set(fn.type, list);
   }
+  for (const name of aoChainMethods) byType.get("color")?.push(fromDoc(`hydra:${name}`, "color", name, functionDoc(name), hydraExamples[name]));
   for (const type of ["src", "coord", "color", "combine", "combineCoord"]) entries.push(...(byType.get(type) ?? []));
   for (const g of globalEntries) {
     entries.push({

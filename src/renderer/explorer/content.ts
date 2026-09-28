@@ -97,6 +97,16 @@ osc(10, 0.1, 1)
   colorama: `osc(10, 0.1, 1)
   .colorama(() => 0.1 * ao.impulse)
   .out()`,
+  glow: `shape(4, 0.2, 0.01)
+  .repeat(4, 3)
+  .color(1, 0.4, 0.8)
+  .glow(() => 0.5 + 2 * ao.bass, 0.04)
+  .out()`,
+  diffuse: `voronoi(8, 0.3)
+  .thresh(0.7)
+  .color(0.3, 0.8, 1)
+  .diffuse(0.9, () => 0.02 * ao.bass)
+  .out()`,
   sum: `// sum() returns a float, so osc().sum() won't compile as a chain.
 // For one channel as greyscale, use r(), g(), b() or a() instead:
 osc(10, 0.1, 1).g().out()`,

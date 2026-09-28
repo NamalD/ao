@@ -1,6 +1,7 @@
 import Hydra from "hydra-synth";
 import type { AudioFeatures } from "../shared/features";
 import { ExtensionLoader, sharedPrototypes } from "./extensions";
+import { installChainExtras } from "./glow";
 import { describeError } from "./runtime-errors";
 import { Scene, SceneOptions } from "./scenes";
 import { evaluateInScope, sketchScope } from "./scope";
@@ -50,6 +51,8 @@ export class Deck {
     });
     this.synth = this.hydra.synth as unknown as Synth;
     for (const source of this.hydra.s) this.patchSource(source);
+    // .glow() and .diffuse() on this deck's chains; the class is per instance.
+    installChainExtras(Object.getPrototypeOf((this.synth.osc as () => object)()) as object, () => this.hydra);
     this.timers = this.makeTimers();
     // Solids render into this deck's s0 when `.out()` is given no source.
     const extras: Record<string, unknown> = { ...this.timers, ...makeSolidShapes(() => this.hydra.s[0]) };
