@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Runs make test on exactly what is being committed: the staged files, in a
+# scratch checkout, so unstaged edits neither hide nor cause a failure.
+# Commits that only touch sketches/ (such as Ao's own sketch commits) skip it.
+set -euo pipefail
+
+changed=$(git diff --cached --name-only)
+if [[ -z $changed ]] || ! grep -qv '^sketches/' <<<"$changed"; then
+  exit 0
+fi
+
+root=$(git rev-parse --show-toplevel)
+if [[ ! -d $root/node_modules ]]; then
+  echo "pre-commit: run make in $root first so node_modules exists." >&2
+  exit 1
+fi
+
+snapshot=$(mktemp -d)
+trap 'rm -rf "$snapshot"' EXIT
+git checkout-index --all --prefix="$snapshot/"
+ln -s "$root/node_modules" "$snapshot/node_modules"
+# Git sets GIT_INDEX_FILE and the like for hooks; tests that make scratch
+# repositories must not inherit them and write to this one.
+unset $(git rev-parse --local-env-vars)
+
+echo "pre-commit: running make test on the staged changes..." >&2
+# -o node_modules: use the linked install as it is rather than reinstalling.
+if ! make -C "$snapshot" -o node_modules test >"$snapshot.log" 2>&1; then
+  tail -n 40 "$snapshot.log" >&2
+  echo "pre-commit: make test failed (full log: $snapshot.log)." >&2
+  exit 1
+fi
+rm -f "$snapshot.log"

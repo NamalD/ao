@@ -157,7 +157,8 @@ async function runSketch(code: string): Promise<string[]> {
 }
 
 describe("bundled sketches", () => {
-  it.each(sketches)("%s runs on a deck without undefined names", async (file) => {
+  // Sketches are live-coded and committed as they are, so only `make check-sketches` holds them to this.
+  it.runIf(process.env.AO_CHECK_SKETCHES).each(sketches)("%s runs on a deck without undefined names", async (file) => {
     const errors = await runSketch(readFileSync(`sketches/${file}`, "utf8"));
     expect(errors, file).toEqual([]);
   });

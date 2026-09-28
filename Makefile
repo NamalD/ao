@@ -1,4 +1,4 @@
-.PHONY: all run dev test screenshot thumbnails clean worktree worktree-create worktree-list worktree-remove worktree-prune
+.PHONY: all run dev test check-sketches install-hooks screenshot thumbnails clean worktree worktree-create worktree-list worktree-remove worktree-prune
 
 all: node_modules
 	npm run build
@@ -6,6 +6,7 @@ all: node_modules
 # Worktrees do not share node_modules; the first build in one installs them.
 node_modules: package.json package-lock.json
 	npm install
+	@git config core.hooksPath .githooks
 	@touch node_modules
 
 run: node_modules
@@ -20,6 +21,15 @@ test: node_modules
 	npm run typecheck
 	npm test
 	npm run build
+
+# Also hold every sketch in sketches/ to running cleanly and being formatted.
+# Kept out of make test so a sketch in progress never blocks a commit.
+check-sketches: node_modules
+	AO_CHECK_SKETCHES=1 npx vitest run tests/sketches.test.ts tests/format.test.ts
+
+# Run make test on what is staged before each commit and merge commit.
+install-hooks:
+	git config core.hooksPath .githooks
 
 # Render a sketch offscreen with synthetic audio: make screenshot SKETCH=dunes
 screenshot: all
