@@ -44,7 +44,8 @@ describe("formatCode", () => {
     expect((await formatCode(code))?.code).toContain("void mainImage(out vec4 c,in vec2 p){c=vec4(1);}");
   });
 
-  it("leaves the bundled sketches as they are, so running one doesn't rewrite it", async () => {
+  // Sketches are live-coded and committed as they are, so only `make check-sketches` holds them to this.
+  it.runIf(process.env.AO_CHECK_SKETCHES)("leaves the bundled sketches as they are, so running one doesn't rewrite it", async () => {
     for (const file of readdirSync("sketches")) {
       const code = readFileSync(`sketches/${file}`, "utf8").replace(/\n+$/, "");
       expect((await formatCode(code))?.code, file).toBe(code);

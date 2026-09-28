@@ -9,8 +9,15 @@ the preload bridge in `src/preload/` narrow, and keep audio analysis in
 Commit completed, coherent work without asking for permission. At the end of
 the task, merge the completed branch into `master` from the primary checkout
 without waiting for approval. Do not commit `node_modules/`, `dist/`, or
-anything in `state/`. Run `make test` before each commit. Keep sketches in
-`sketches/` small, readable examples of what Ao can do.
+anything in `state/`. Run `make test` before each commit; the pre-commit
+hook in `.githooks/` (enabled by `make install-hooks`) also runs it on the
+staged changes, and skips commits that only touch `sketches/`. Keep sketches
+in `sketches/` small, readable examples of what Ao can do.
+
+Sketches are live-coded and committed as they are, so `make test` doesn't
+check their contents. When you change a sketch, the formatter, or what a
+deck's scope provides, also run `make check-sketches`, and fix what it reports
+in sketches you touched.
 
 The backlog lives in `tracker` (in `~/code/tracker`), not in a file. Run
 `tracker item list` from this repo to see open work, and `tracker --help` for
