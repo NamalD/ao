@@ -231,6 +231,10 @@ gradient()
   .rotate(ao.map("mid", 0, 3))
   .scale(ao.map("bass", 1, 1.5))
   .out()`,
+  fit: `// Faster tempos spin it further: 80..160 bpm onto 0..0.5.
+osc(20, 0.05, 1)
+  .rotate(ao.fit("bpm", 80, 160, 0, 0.5))
+  .out()`,
   glide: `// Stripes packed by the tempo, easing over two seconds when it changes.
 const bpm = ao.glide("bpm", 2)
 

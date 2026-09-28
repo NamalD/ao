@@ -23,7 +23,7 @@ export const synonyms: Synonym[] = [
   { on: "ao", words: ["treble", "highs", "hats"], to: ["ao:high"] },
   { on: "ao", words: ["onset", "hit", "trigger", "transient"], to: ["ao:impulse", "ao:beat"] },
   { on: "ao", words: ["tempo"], to: ["ao:bpm"] },
-  { on: "ao", words: ["range", "scale", "remap"], to: ["ao:map"] },
+  { on: "ao", words: ["range", "scale", "remap"], to: ["ao:map", "ao:fit"] },
   { on: "ao", words: ["spectrum", "bands"], to: ["ao:fft"] },
   { on: "ao", words: ["freq", "frequency", "band"], to: ["ao:hz", "ao:fftAt"] },
   { on: "ao", words: ["waveform", "samples", "scope"], to: ["ao:wave"] },

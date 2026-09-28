@@ -125,7 +125,8 @@ For finer control over the spectrum, `ao.hz(lo, hi)` averages any frequency
 range in Hz, `ao.fftAt(x)` samples it at a position 0..1 like GLSL `aoFFT`,
 and `ao.peak` and `ao.centroid` give the loudest band's position and the
 overall brightness on that same 0..1 axis, handy for colour. `ao.map` takes a
-level name or any function, and `ao.glide("bpm", 2)` fades a value in over a
+level name or any function, `ao.fit("bpm", 80, 160, 0, 0.5)` does the same for
+a value with its own range, clamped at the ends, and `ao.glide("bpm", 2)` fades a value in over a
 couple of seconds instead of letting it jump:
 
 ```js
