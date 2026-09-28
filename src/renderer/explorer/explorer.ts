@@ -8,7 +8,7 @@
 import { javascriptLanguage } from "@codemirror/lang-javascript";
 import { highlightCode } from "@lezer/highlight";
 import { ao } from "../audio";
-import { highlight } from "../editor";
+import { highlight, type Receiver } from "../editor";
 import { buildEntries, type Entry, filterEntries, findEntry, sections, wordAt } from "./entries";
 
 export interface ExplorerHost {
@@ -96,11 +96,11 @@ export class CodeExplorer {
 
   get open(): boolean { return !this.panel.hidden; }
 
-  /** Opens on the last entry shown, or with a search. */
-  show(query?: string): void {
+  /** Opens on the last entry shown, or with a search, whose synonyms apply in `context` if given. */
+  show(query?: string, context?: Receiver): void {
     if (query !== undefined) {
       this.search.value = query;
-      this.filter(query);
+      this.filter(query, context);
     }
     if (this.open) return;
     this.panel.hidden = false;
@@ -110,10 +110,10 @@ export class CodeExplorer {
     this.frame = requestAnimationFrame(tick);
   }
 
-  /** K on a word: opens its entry, or searches for it. */
-  lookUp(line: string, column: number): void {
+  /** K on a word: opens its entry, or searches for it; `receiver` is what the word is a member of, if known. */
+  lookUp(line: string, column: number, receiver?: Receiver): void {
     const word = wordAt(line, column);
-    const entry = word && findEntry(this.entries, word);
+    const entry = word && findEntry(this.entries, { ...word, receiver });
     if (entry) {
       this.search.value = "";
       this.filter("");
@@ -121,7 +121,7 @@ export class CodeExplorer {
       if (this.open) this.select(entry);
       else this.show();
     } else {
-      this.show(word?.name ?? "");
+      this.show(word?.name ?? "", receiver);
     }
   }
 
@@ -173,8 +173,8 @@ export class CodeExplorer {
     return true;
   }
 
-  private filter(query: string): void {
-    const { matches, best } = filterEntries(this.entries, query);
+  private filter(query: string, context?: Receiver): void {
+    const { matches, best } = filterEntries(this.entries, query, context);
     this.matches = matches;
     this.renderList();
     if (best && (!matches.includes(this.selected) || query.trim())) this.select(best);

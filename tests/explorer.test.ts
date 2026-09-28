@@ -2,10 +2,10 @@ import { EditorSelection } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import hydraFunctions from "hydra-synth/src/glsl/glsl-functions.js";
 import { describe, expect, it, vi } from "vitest";
-import { createEditorState, helpCommand, insertBlock, publicAoMembers, sourceMembers } from "../src/renderer/editor";
+import { createEditorState, helpCommand, insertBlock, publicAoMembers, type Receiver, sourceMembers } from "../src/renderer/editor";
 import { extensionApi, extensionDocs } from "../src/renderer/extension-api";
 import { CATALOG } from "../src/renderer/extensions";
-import { aoExamples, extensionExamples, globalEntries, hydraExamples, sourceExamples } from "../src/renderer/explorer/content";
+import { aoExamples, extensionExamples, globalEntries, hydraExamples, sourceExamples, synonyms } from "../src/renderer/explorer/content";
 import { buildEntries, filterEntries, findEntry, sections, wordAt } from "../src/renderer/explorer/entries";
 
 const entries = buildEntries();
@@ -156,6 +156,37 @@ describe("findEntry", () => {
     expect(id("level")).toBeUndefined();
     expect(id("osc", "ao")).toBeUndefined();
   });
+
+  it("follows a synonym only where it's written", () => {
+    const at = (name: string, receiver?: Receiver, owner?: string) => findEntry(entries, { name, owner, receiver })?.id;
+    expect(id("smooth", "ao")).toBe("ao:glide");
+    expect(at("move", "hydra")).toBe("hydra:scroll");
+    expect(at("colour", "hydra")).toBe("hydra:color");
+    expect(id("camera", "s1")).toBe("source:initCam");
+    // A solid's move is its own; arrays have their own smooth and offset.
+    expect(at("move", "solid")).toBeUndefined();
+    expect(id("smooth")).toBe("global:arrays");
+    expect(at("pan", "hydra")).toBe("hydra:scroll");
+    expect(id("pan", "ao")).toBe("ao:balance");
+    // A real name always wins over a synonym.
+    expect(id("clear", "s0")).toBe("source:clear");
+    expect(id("key", "ao")).toBe("ao:key");
+  });
+});
+
+describe("synonyms", () => {
+  it("lead to entries that exist, and never shadow a name in the same place", () => {
+    const ids = new Set(entries.map((e) => e.id));
+    for (const synonym of synonyms) {
+      for (const target of synonym.to) expect(ids.has(target), target).toBe(true);
+      for (const word of synonym.words) {
+        expect(word, word).toBe(word.toLowerCase());
+        const real = { ao: [`ao:${word}`], source: [`source:${word}`], output: [`ext:outputs:${word}`] }[synonym.on as string]
+          ?? [`hydra:${word}`, `global:${word}`, ...entries.filter((e) => e.id.startsWith("ext:") && e.name === word).map((e) => e.id)];
+        expect(real.filter((id) => ids.has(id)), `${synonym.on ?? "top level"}: ${word}`).toEqual([]);
+      }
+    }
+  });
 });
 
 describe("filterEntries", () => {
@@ -175,6 +206,18 @@ describe("filterEntries", () => {
   it("searches descriptions and falls back to letters in order", () => {
     expect(names(filterEntries(entries, "kaleidoscope").matches)).toContain("kaleid");
     expect(filterEntries(entries, "mdsc").best?.name).toBe("modulateScale");
+  });
+
+  it("ranks synonyms below exact names, and above everything with a context", () => {
+    expect(names(filterEntries(entries, "move").matches)).toEqual(expect.arrayContaining(["scroll", "scrollX", "scrollY"]));
+    expect(filterEntries(entries, "translate").best?.id).toBe("hydra:scroll");
+    expect(names(filterEntries(entries, "smooth").matches)).toContain("ao.glide");
+    expect(filterEntries(entries, "smooth").best?.id).toBe("global:arrays");
+    expect(filterEntries(entries, "ao.smooth").best?.id).toBe("ao:glide");
+    expect(filterEntries(entries, ".move").best?.id).toBe("hydra:scroll");
+    expect(filterEntries(entries, "o0.setLinear").best?.id).toBe("ext:outputs:setLinear");
+    expect(filterEntries(entries, "smooth", "ao").best?.id).toBe("ao:glide");
+    expect(names(filterEntries(entries, "move", "solid").matches)).not.toContain("scroll");
   });
 
   it("returns everything for an empty query and nothing for nonsense", () => {
@@ -206,11 +249,25 @@ describe("insertBlock", () => {
 });
 
 describe("K", () => {
-  it("hands the cursor's line and column to the explorer", () => {
+  const k = (doc: string, cursor: number) => {
     const help = vi.fn();
-    const state = createEditorState("osc(10)\n  .kaleid(4)", { run: vi.fn(), save: vi.fn(), changed: vi.fn(), help });
-    const view = { state: state.update({ selection: EditorSelection.cursor(12) }).state } as unknown as EditorView;
-    helpCommand(view);
-    expect(help).toHaveBeenCalledWith("  .kaleid(4)", 4);
+    const state = createEditorState(doc, { run: vi.fn(), save: vi.fn(), changed: vi.fn(), help });
+    helpCommand({ state: state.update({ selection: EditorSelection.cursor(cursor) }).state } as unknown as EditorView);
+    return help.mock.calls[0];
+  };
+
+  it("hands the cursor's line and column to the explorer, with what the word is a member of", () => {
+    expect(k("osc(10)\n  .kaleid(4)", 12)).toEqual(["  .kaleid(4)", 4, "hydra"]);
+  });
+
+  it("tells a Hydra chain from a solid, ao and a plain word", () => {
+    const doc = "sphere(1).move(1)\nconst a = osc()\na.move(1)\nao.smooth\nmove";
+    const at = (text: string, offset = 1) => k(doc, doc.indexOf(text) + offset)[2];
+    expect(at("move(1)\n")).toBe("solid");
+    expect(at("move(1)\nao")).toBe("hydra");
+    expect(at("smooth")).toBe("ao");
+    // Just past the name, at the end of the line.
+    expect(at("smooth", 6)).toBe("ao");
+    expect(k(doc, doc.length)[2]).toBeUndefined();
   });
 });
