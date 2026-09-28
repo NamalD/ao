@@ -1,4 +1,4 @@
-import { CompletionContext } from "@codemirror/autocomplete";
+import { type Completion, CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
 import { javascript } from "@codemirror/lang-javascript";
 import { EditorState } from "@codemirror/state";
 import hydraFunctions from "hydra-synth/src/glsl/glsl-functions.js";
@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { ao, aoDocs } from "../src/renderer/audio";
 import {
   aoMemberDocs, chainMethods, functionDoc, generators, hydraCompletions, hydraDocs, memberCompletions,
-  publicAoMembers, solidMethods, solidShapeNames, topLevelCompletions,
+  publicAoMembers, solidMethods, solidShapeNames, synonymCompletions, topLevelCompletions,
 } from "../src/renderer/editor";
 
 const labels = (options: readonly { label: string }[]) => options.map((option) => option.label);
@@ -141,5 +141,54 @@ describe("member completion follows what is before the dot", () => {
     expect(functionDoc("rotate")?.description).toBe(hydraDocs.rotate.description);
     expect(functionDoc("sphere")?.signature).toBe("sphere(radius = 1)");
     expect(functionDoc("add", undefined, true)?.signature).toBe("add(solid, smooth = 0)");
+  });
+});
+
+describe("completing by synonym", () => {
+  function resultAt(source: string): CompletionResult | null {
+    const pos = source.indexOf("|");
+    const doc = source.slice(0, pos) + source.slice(pos + 1);
+    const state = EditorState.create({ doc, selection: { anchor: pos }, extensions: [javascript()] });
+    return hydraCompletions(new CompletionContext(state, pos, false));
+  }
+  /** "synonym → name" for each synonym option offered at `|`. */
+  const offered = (source: string) => (resultAt(source)?.options ?? [])
+    .filter((option) => option.displayLabel)
+    .map((option) => `${option.label} → ${option.apply}`);
+
+  it("offers the real name for a synonym written in the same place", () => {
+    expect(offered("ao.smoo|")).toEqual(["smooth → glide"]);
+    expect(offered("osc(10)\n  .mov|")).toEqual(["move → scroll", "move → scrollX", "move → scrollY"]);
+    expect(offered("const a = osc()\na.colou|")).toEqual(["colour → color"]);
+    expect(offered("circ|")).toEqual(["circle → shape"]);
+    expect(offered("s0.cam|")).toEqual(["camera → initCam"]);
+  });
+
+  it("shows the real name, below the real names", () => {
+    const glide = resultAt("ao.smoo|")!.options.find((option) => option.label === "smooth")!;
+    expect(glide).toMatchObject({ displayLabel: "glide", detail: "for smooth", type: "method" });
+    expect(glide.boost).toBeLessThan(0);
+  });
+
+  it("offers nothing on a solid, after a letter or two, or for a name already matched", () => {
+    expect(offered("sphere(1).mov|")).toEqual([]);
+    expect(offered("ao.sm|")).toEqual([]);
+    // highs leads to high, which "hig" already finds.
+    expect(offered("ao.hig|")).toEqual([]);
+  });
+
+  it("asks again as each letter changes which synonyms match", () => {
+    const short = resultAt("ao.sm|")!.validFor as (text: string) => boolean;
+    expect(short("s")).toBe(true);
+    expect(short("smo")).toBe(false);
+    expect((resultAt("ao.smoo|")!.validFor as (text: string) => boolean)("smoot")).toBe(false);
+  });
+
+  it("hands an option's own apply the real name", () => {
+    const applied: string[] = [];
+    const option: Completion = { label: "scroll", apply: (_view, completion) => { applied.push(completion.label); } };
+    const [synonym] = synonymCompletions([option], "hydra", "move");
+    (synonym.apply as (...args: unknown[]) => void)(null, synonym, 0, 0);
+    expect(applied).toEqual(["scroll"]);
   });
 });
