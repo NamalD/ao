@@ -24,7 +24,7 @@ html, body {
 }
 
 /* The editor floats over the visuals; each line gets its own dark backing,
-   as in Hydra, so the scene stays visible between lines. */
+   as in Hydra, so the visuals stay visible between lines. */
 #editor {
   position: fixed;
   inset: 0 0 28px 0;

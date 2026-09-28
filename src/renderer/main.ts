@@ -14,7 +14,7 @@ import { NightFade } from "./night";
 import { defaultAutopilot } from "../shared/autopilot";
 import { describeNight } from "../shared/night";
 import { Recorder } from "./recorder";
-import { sceneResolution } from "./resolution";
+import { shaderResolution } from "./resolution";
 import { describeError, ErrorReporter, installRuntimeErrorReporting } from "./runtime-errors";
 import { SketchWriter } from "./sketch-writer";
 import { solidShapes } from "./solids";
@@ -81,10 +81,10 @@ function frame(now: number) {
   }
   frames++;
   if (now - fpsWindow > 500) {
-    // Automatic scenes, such as solids, may be drawing below full size.
-    const scale = sceneResolution.active(now) ? sceneResolution.scaleAt(now) : 1;
-    fpsLabel.dataset.sceneMs = sceneResolution.measuredMs().toFixed(2);
-    fpsLabel.textContent = `${Math.round((frames * 1000) / (now - fpsWindow))} fps${scale < 1 ? ` · scenes at ${Math.round(scale * 100)}%` : ""}`;
+    // Solids may be drawing below full size.
+    const scale = shaderResolution.active(now) ? shaderResolution.scaleAt(now) : 1;
+    fpsLabel.dataset.shaderMs = shaderResolution.measuredMs().toFixed(2);
+    fpsLabel.textContent = `${Math.round((frames * 1000) / (now - fpsWindow))} fps${scale < 1 ? ` · solids at ${Math.round(scale * 100)}%` : ""}`;
     frames = 0;
     fpsWindow = now;
   }
@@ -106,7 +106,7 @@ async function run(code: string): Promise<boolean> {
   if (code === editor.state.doc.toString()) releaseHydraBpm();
   try {
     // Each evaluation gets its own scope so re-running `const` blocks works.
-    // Hydra's functions and scene sources come from the deck (see deck.ts);
+    // Hydra's functions, audio sources and solids come from the deck (see deck.ts);
     // `ao` and everything else are globals.
     await mixer.current.evaluate(code);
     showStatus("");

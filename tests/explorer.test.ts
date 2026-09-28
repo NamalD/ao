@@ -2,6 +2,7 @@ import { EditorSelection } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import hydraFunctions from "hydra-synth/src/glsl/glsl-functions.js";
 import { describe, expect, it, vi } from "vitest";
+import { aoHydraFunctions } from "../src/renderer/audio-sources";
 import { createEditorState, helpCommand, insertBlock, publicAoMembers, type Receiver, sourceMembers } from "../src/renderer/editor";
 import { extensionApi, extensionDocs } from "../src/renderer/extension-api";
 import { CATALOG } from "../src/renderer/extensions";
@@ -9,11 +10,13 @@ import { aoExamples, extensionExamples, globalEntries, hydraExamples, sourceExam
 import { buildEntries, filterEntries, findEntry, sections, wordAt } from "../src/renderer/explorer/entries";
 
 const entries = buildEntries();
+/** Hydra's functions and Ao's additions to them, such as spectrum and polar. */
+const allHydraFunctions = [...hydraFunctions(), ...aoHydraFunctions];
 const names = (list: { name: string }[]) => list.map((e) => e.name);
 
 describe("explorer content", () => {
   it("has an example for every Hydra function, ao member and source method, and no strays", () => {
-    expect(Object.keys(hydraExamples).sort()).toEqual(hydraFunctions().map((fn) => fn.name).sort());
+    expect(Object.keys(hydraExamples).sort()).toEqual(allHydraFunctions.map((fn) => fn.name).sort());
     expect(Object.keys(aoExamples).sort()).toEqual(publicAoMembers().map((m) => m.name).sort());
     expect(Object.keys(sourceExamples).sort()).toEqual([...sourceMembers].sort());
   });
@@ -75,7 +78,7 @@ describe("explorer content", () => {
   });
 
   it("uses each Hydra function and ao member in its own example", () => {
-    for (const fn of hydraFunctions()) {
+    for (const fn of allHydraFunctions) {
       if (fn.name === "sum") continue; // sum can't chain; its example says so and shows g().
       expect(hydraExamples[fn.name], fn.name).toMatch(new RegExp(`\\b${fn.name}\\(`));
     }
@@ -113,7 +116,7 @@ describe("wordAt", () => {
   it("finds the identifier under or just before the cursor, with its owner", () => {
     expect(wordAt("  .rotate(ao.hz(40, 100))", 4)).toEqual({ name: "rotate" });
     expect(wordAt("  .rotate(ao.hz(40, 100))", 13)).toEqual({ name: "hz", owner: "ao" });
-    expect(wordAt("s0.initScene(`", 5)).toEqual({ name: "initScene", owner: "s0" });
+    expect(wordAt("s0.initImage(`", 5)).toEqual({ name: "initImage", owner: "s0" });
     expect(wordAt("osc", 3)).toEqual({ name: "osc" });
     expect(wordAt("osc(10, 0.1)", 3)).toEqual({ name: "osc" });
     expect(wordAt("  ", 1)).toBeNull();
@@ -127,7 +130,9 @@ describe("findEntry", () => {
     expect(id("osc")).toBe("hydra:osc");
     expect(id("modulateKaleid")).toBe("hydra:modulateKaleid");
     expect(id("hz", "ao")).toBe("ao:hz");
-    expect(id("initScene", "s2")).toBe("source:initScene");
+    expect(id("initImage", "s2")).toBe("source:initImage");
+    expect(id("spectrum")).toBe("hydra:spectrum");
+    expect(id("polar")).toBe("hydra:polar");
     expect(id("render")).toBe("global:render");
     expect(id("setFunction")).toBe("global:setFunction");
     expect(id("out")).toBe("global:out");

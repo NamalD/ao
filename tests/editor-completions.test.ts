@@ -2,6 +2,7 @@ import { CompletionContext } from "@codemirror/autocomplete";
 import { javascript } from "@codemirror/lang-javascript";
 import { EditorState } from "@codemirror/state";
 import hydraFunctions from "hydra-synth/src/glsl/glsl-functions.js";
+import { aoHydraFunctions } from "../src/renderer/audio-sources";
 import { describe, expect, it } from "vitest";
 import { ao, aoDocs } from "../src/renderer/audio";
 import {
@@ -21,8 +22,8 @@ function completionsAt(source: string, explicit = false): string[] | null {
 }
 
 describe("Hydra documentation", () => {
-  it("describes every built-in GLSL function and each of its inputs", () => {
-    for (const fn of hydraFunctions()) {
+  it("describes every built-in GLSL function and Ao addition, and each of its inputs", () => {
+    for (const fn of [...hydraFunctions(), ...aoHydraFunctions]) {
       expect(hydraDocs[fn.name]?.description, fn.name).toBeTruthy();
       for (const input of fn.inputs) {
         expect(hydraDocs[fn.name].params?.[input.name], `${fn.name}(${input.name})`).toBeTruthy();
@@ -31,7 +32,7 @@ describe("Hydra documentation", () => {
   });
 
   it("has no entries for functions Hydra doesn't have", () => {
-    const names = new Set(hydraFunctions().map((fn) => fn.name));
+    const names = new Set([...hydraFunctions(), ...aoHydraFunctions].map((fn) => fn.name));
     expect(Object.keys(hydraDocs).filter((name) => !names.has(name))).toEqual([]);
   });
 });
@@ -45,9 +46,16 @@ describe("completion lists", () => {
     expect(labels(memberCompletions("hydra"))).toContain("modulateHue");
   });
 
-  it("offers every HydraSource method plus initScene and clearScene after s0.", () => {
+  it("offers Ao's audio sources as generators and polar as a chain method", () => {
+    expect(generators).toEqual(expect.arrayContaining(["spectrum", "history", "waveform"]));
+    expect(chainMethods).toContain("polar");
+    expect(labels(memberCompletions("hydra"))).toContain("polar");
+  });
+
+  it("offers every HydraSource method, and no scene methods, after s0.", () => {
     const options = labels(memberCompletions("source"));
-    expect(options).toEqual(expect.arrayContaining(["init", "initImage", "initVideo", "initCam", "initScreen", "clear", "initScene", "clearScene"]));
+    expect(options).toEqual(expect.arrayContaining(["init", "initImage", "initVideo", "initCam", "initScreen", "clear"]));
+    expect(options).not.toContain("initScene");
     expect(options).not.toContain("tick");
     expect(options).not.toContain("constructor");
     for (const name of options) expect(functionDoc(name, "s0")?.description, name).toBeTruthy();

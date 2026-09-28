@@ -1,5 +1,5 @@
 /**
- * Runtime errors from sketches: Hydra argument functions, `update`, scene
+ * Runtime errors from sketches: Hydra argument functions, `update`, solid
  * uniforms, timers and promises. Hydra catches its own errors and reports
  * them with console calls every frame, so they reach neither the user nor the
  * log in a useful form. This module turns them into one status message each.

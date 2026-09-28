@@ -1,8 +1,9 @@
 import Hydra from "hydra-synth";
 import type { AudioFeatures } from "../shared/features";
+import { installAudioSources } from "./audio-sources";
 import { ExtensionLoader, sharedPrototypes } from "./extensions";
 import { describeError } from "./runtime-errors";
-import { Scene, SceneOptions } from "./scenes";
+import { DRAW_SHADER, type DrawShader, ShaderCanvas } from "./shader-canvas";
 import { evaluateInScope, sketchScope } from "./scope";
 import { makeSolidShapes } from "./solids";
 
@@ -17,7 +18,7 @@ type Synth = Record<string, unknown> & { time: number; speed: number; hush(): vo
 type Texture = { destroy?: () => void };
 
 /**
- * One Hydra instance on its own canvas, with its own scenes, running one
+ * One Hydra instance on its own canvas, with its own solids, running one
  * sketch. Ao has two, so an outgoing and an incoming sketch can both animate
  * during a crossfade (see crossfade.ts).
  *
@@ -30,7 +31,9 @@ export class Deck {
   readonly canvas = document.createElement("canvas");
   readonly hydra: Hydra;
   readonly synth: Synth;
-  private readonly scenes = new Map<HydraSource, Scene>();
+  /** The canvases solids draw through, by the source showing them. */
+  private readonly shaders = new Map<HydraSource, ShaderCanvas>();
+  private readonly updateAudioSources: (features: AudioFeatures) => void;
   private readonly scope: object;
   private readonly timeouts = new Set<number>();
   private readonly intervals = new Set<number>();
@@ -49,6 +52,7 @@ export class Deck {
       enableStreamCapture: false, precision: "highp",
     });
     this.synth = this.hydra.synth as unknown as Synth;
+    this.updateAudioSources = installAudioSources(this.hydra.regl as Parameters<typeof installAudioSources>[0], this.synth);
     for (const source of this.hydra.s) this.patchSource(source);
     this.timers = this.makeTimers();
     // Solids render into this deck's s0 when `.out()` is given no source.
@@ -68,16 +72,17 @@ export class Deck {
     return evaluateInScope(code, this.scope);
   }
 
-  /** Renders one frame: scenes first, then Hydra, which samples them. */
+  /** Renders one frame: audio textures and solids first, then Hydra, which samples them. */
   render(dt: number, features: AudioFeatures): void {
     const hydra = this.hydra;
     const time = this.synth.time + dt * 0.001 * this.synth.speed;
-    for (const [source, scene] of this.scenes) {
-      if (source.src !== scene.canvas) continue;
+    this.updateAudioSources(features);
+    for (const [source, shader] of this.shaders) {
+      if (source.src !== shader.canvas) continue;
       try {
-        scene.render(hydra.width, hydra.height, time, dt / 1000, features);
+        shader.render(hydra.width, hydra.height, time, dt / 1000, features);
       } catch (e) {
-        this.onError(`scene: ${describeError(e)}`);
+        this.onError(`solid: ${describeError(e)}`);
       }
     }
     try {
@@ -96,7 +101,7 @@ export class Deck {
   /**
    * Stops everything the sketch left running, ready for the next one:
    * Hydra's outputs, sources and `update`, the sketch's timers, and its
-   * scenes' buffers. `speed` and friends go back to Hydra's defaults, and
+   * solids' trails. `speed` and friends go back to Hydra's defaults, and
    * so do settings extensions keep per sketch, such as `o0.setLinear()`;
    * functions extensions added stay.
    */
@@ -115,10 +120,10 @@ export class Deck {
     }
     this.synth.hush();
     Object.assign(this.synth, { speed: 1, bpm: 30, fps: undefined });
-    // Scenes stay, so their WebGL contexts are reused rather than churned, but
-    // give up their drawing and state buffers; hush has detached them from
-    // the sources, and the next sketch starts its simulations afresh.
-    for (const scene of this.scenes.values()) scene.release();
+    // Shader canvases stay, so their WebGL contexts are reused rather than
+    // churned, but give up their drawing and trail buffers; hush has
+    // detached them from the sources.
+    for (const shader of this.shaders.values()) shader.release();
   }
 
   /** Resets and shrinks an idle deck, so it holds almost no GPU memory. */
@@ -131,17 +136,15 @@ export class Deck {
     return this.hydra.width === PARKED && this.hydra.height === PARKED;
   }
 
-  /** Each Hydra source can also host a GLSL scene: `s0.initScene(glsl)`, emptied by `s0.clearScene()`. */
+  /** Each Hydra source can show a solid, drawn by a shader canvas of its own. */
   private patchSource(source: HydraSource): void {
-    source.initScene = (code: string, options?: SceneOptions) => {
-      let scene = this.scenes.get(source);
-      if (!scene) this.scenes.set(source, (scene = new Scene((message) => this.onError(message))));
-      scene.load(code, options);
-      if (source.src !== scene.canvas) source.init({ src: scene.canvas });
+    (source as unknown as Record<symbol, DrawShader>)[DRAW_SHADER] = (code, options) => {
+      let shader = this.shaders.get(source);
+      if (!shader) this.shaders.set(source, (shader = new ShaderCanvas((message) => this.onError(message))));
+      shader.load(code, options, "solid");
+      if (source.src !== shader.canvas) source.init({ src: shader.canvas });
       source.dynamic = true;
     };
-    // Empties a scene's buffers and restarts its iFrame, which edits don't.
-    source.clearScene = () => this.scenes.get(source)?.clear();
     // hydra-synth makes a new texture on every init and clear without freeing
     // the old one; free it, so switching sketches for hours doesn't leak.
     const holder = source as unknown as { tex: Texture };

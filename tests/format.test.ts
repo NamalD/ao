@@ -39,9 +39,9 @@ describe("formatCode", () => {
     expect((await formatCode("await  fetch('x')"))?.code).toBe(`await fetch("x")`);
   });
 
-  it("leaves scene strings alone", async () => {
-    const code = "s0.initScene(`\nvoid mainImage(out vec4 c,in vec2 p){c=vec4(1);}`)";
-    expect((await formatCode(code))?.code).toContain("void mainImage(out vec4 c,in vec2 p){c=vec4(1);}");
+  it("leaves GLSL strings alone", async () => {
+    const code = "setFunction({ glsl: `\nfloat x=1.;return vec4(x);` })";
+    expect((await formatCode(code))?.code).toContain("float x=1.;return vec4(x);");
   });
 
   // Sketches are live-coded and committed as they are, so only `make check-sketches` holds them to this.

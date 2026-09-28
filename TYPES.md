@@ -27,13 +27,13 @@ normalized to `0..1` and update as audio is captured.
 | `ao.bar` | `number` | Beat within the 4-beat bar: `0`, `1`, `2` or `3`. Bar `0` is the tapped one, or arbitrary until you tap. |
 | `ao.tempoConfidence` | `number` | `0..1`: how sure the detected tempo is; fades while held through silence, `1` while tapped. |
 
-Spectrum positions (`ao.fftAt`, `ao.peak`, `ao.centroid`, GLSL `aoFFT`) share
+Spectrum positions (`ao.fftAt`, `ao.peak`, `ao.centroid`, and x in `spectrum()` and `history()`) share
 one log-frequency axis: `0` is about 30 Hz, `0.5` about 700 Hz, `1` about
 16 kHz, and each octave spans about 0.11.
 
 | Method | Returns | Meaning |
 | --- | --- | --- |
-| `ao.fftAt(x)` | `number` | Spectrum level at position `x` (`0..1`), linearly interpolated like GLSL `aoFFT(x)`. |
+| `ao.fftAt(x)` | `number` | Spectrum level at position `x` (`0..1`), linearly interpolated, as `spectrum()` shows it at `x`. |
 | `ao.hz(lo, hi?)` | `number` | Average level of the bands between `lo` and `hi` Hz. With one argument, or a range narrower than a band, the interpolated level at that frequency. |
 | `ao.map(level, lo = 0, hi = 1)` | `() => number` | A function mapping a level onto `lo..hi`, for Hydra arguments. |
 | `ao.glide(level, seconds = 1)` | `() => number` | A function following a level, `"bpm"`, or any function, easing each change in so it is within 2% after `seconds`. |
@@ -89,7 +89,7 @@ These come with every feature frame, about 50 times a second.
 | Member | Type | Meaning |
 | --- | --- | --- |
 | `ao.wave` | `Float32Array` | The newest ~21 ms of mono waveform (1024 samples at 48 kHz, averaged in pairs): 512 values, `-1..1`. Each frame starts on a rising zero crossing, like an oscilloscope trigger, so a steady tone holds still. |
-| `ao.waveAt(x)` | `number` | The waveform at position `x` (`0..1` across `ao.wave`), linearly interpolated like GLSL `aoWaveAt(x)`. |
+| `ao.waveAt(x)` | `number` | The waveform at position `x` (`0..1` across `ao.wave`), linearly interpolated, as `waveform()` draws it at `x`. |
 | `ao.balance` | `number` | Stereo balance, `-1` (left) .. `0` (centre) .. `1` (right), from the channels' RMS levels, smoothed over ~0.1 s. |
 | `ao.width` | `number` | Stereo width, `0` for mono up to `1` for uncorrelated, out-of-phase or hard-panned sound: the side (L−R) level relative to the mid (L+R). |
 | `ao.chroma` | `number[]` | 12 pitch-class levels, `0..1`, for C, C#, D, … B, folded across octaves from spectral peaks between 110 Hz and 5 kHz. Normalized so the strongest is near 1 and smoothed; all zero in silence. |
@@ -136,108 +136,36 @@ await use("gradientmap", "noise")
 turb(4, 0.1, 3).lookupX(createGradient([0, 0, 0.1], "teal", "gold")).out()
 ```
 
-## GLSL scene interface
+## Audio sources
 
-`s0.initScene(source, options)` attaches a Shadertoy-style GLSL ES 3.0
-fragment shader to a Hydra source. The shader defines
-`void mainImage(out vec4 fragColor, in vec2 fragCoord)` and receives these
-uniforms from Ao:
+Hydra generators whose pixels are the sound, plus a chain method that bends
+any chain into a ring. Every argument is a number or a function returning
+one, as in Hydra. Hydra's `y` runs down the screen: `0` at the top, `1` at
+the bottom.
 
-| Uniform | GLSL type | Meaning |
-| --- | --- | --- |
-| `iResolution` | `vec3` | Render width, height, and depth (`1`). |
-| `iTime` | `float` | Elapsed scene time in seconds. |
-| `iTimeDelta` | `float` | Time since the previous frame in seconds. |
-| `iFrame` | `int` | Scene frame counter, starting at zero; it keeps counting across edits and restarts when the buffers clear. |
-| `aoLoudness`, `aoImpulse`, `aoBeat` | `float` | Overall level and transient envelopes. |
-| `aoBass`, `aoMid`, `aoHigh` | `float` | Average frequency band levels. |
-| `aoBpm` | `float` | Tempo in beats per minute, as `ao.bpm`. |
-| `aoPhase` | `float` | `0..1` through the current beat, as `ao.phase`. |
-| `aoBar` | `float` | Beat within the bar, `0.0` to `3.0`, as `ao.bar`. |
-| `aoSpectrum` | `sampler2D` | 64 spectrum levels in a one-row texture. |
+| Function | Meaning |
+| --- | --- |
+| `spectrum(gain = 1)` | The spectrum as an image: `x` is the spectrum position (`0..1`, low to high), each column as bright as its level × `gain`, the same all the way down. |
+| `history(gain = 1)` | The last 256 spectrum frames, one every 20 ms: `x` as in `spectrum`, now at the bottom (`y = 1`) and 5.12 s ago at the top, each as bright as its level × `gain`. |
+| `waveform(thickness = 0.01, gain = 1)` | `ao.wave` drawn as a line across the screen: `thickness` as a fraction of the screen height, `gain` 1 letting a full-scale sample reach the top or bottom. Positive samples go up. |
+| `.polar(mirror = 0)` | Bends the chain into a ring. `x` runs around the centre, clockwise from the top, and `y` outwards, `0` at the centre and `1` at the top and bottom edges, corrected for the screen's aspect. `mirror` 1 runs `x` from the bottom up both sides to the top, with no seam. |
 
-The helper `float aoFFT(float x)` samples `aoSpectrum` at normalized position
-`x` (`0..1`), from low to high frequency.
+Levels reach the GPU as bytes, so `spectrum` and `history` step in 1/255ths;
+the waveform keeps 16 bits. The spectrogram is kept in the renderer from the
+spectra that already arrive: rows fall due at 50 a second by the capture
+clock, however the chunks arrive, so `history` spans a steady 5.12 s. A frame
+that lands between rows refreshes the newest one, and a late frame fills the
+gap by interpolation.
 
-The optional `options` object has this shape:
-
-```ts
-interface SceneOptions {
-  scale?: number; // Render size relative to the output; defaults to 1.
-  uniforms?: Record<string, number | number[] | (() => number | number[])>;
-  buffers?: string[]; // Up to four GLSL state passes; see below.
-}
-```
-
-Custom uniforms must also be declared in the shader with matching GLSL names
-and types. A value can be a number, an array for a vector, or a function that
-returns either so it can change each frame.
+Each call passes its texture to Hydra the way `src(o0)` does, using one of
+the GPU's texture units, so one chain can hold about a dozen audio sources.
 
 ```js
-s0.initScene(`
-void mainImage(out vec4 fragColor, in vec2 fragCoord) {
-  vec2 uv = fragCoord / iResolution.xy;
-  fragColor = vec4(uv, aoFFT(uv.x), 1.0);
-}`, { scale: 0.75, uniforms: { swirl: () => ao.mid } })
-```
-
-The `swirl` example must declare `uniform float swirl;` in the shader if it is
-used there.
-
-### Buffers and the previous frame
-
-Each string in `buffers` is a GLSL pass with its own `mainImage`. Every
-frame the buffers run in order, then the scene; each draws into a
-half-float RGBA texture (`RGBA16F`) at the scene's render size that keeps
-its output. Custom `uniforms` reach every pass, and a function uniform is
-read once a frame however many passes use it.
-
-| Uniform | GLSL type | Meaning |
-| --- | --- | --- |
-| `aoBuffer0` .. `aoBuffer3` | `sampler2D` | The buffers: this frame's output for buffers earlier in the list, the previous frame's for the pass itself and later ones. Buffers a scene doesn't have read as transparent black. |
-| `iChannel0` .. `iChannel3` | `sampler2D` | Aliases for `aoBuffer0` .. `aoBuffer3`, as in Shadertoy. |
-| `aoPrevious` | `sampler2D` | This pass's own output from the previous frame. The scene itself may read it too. |
-
-Textures filter linearly and clamp at the edges. Buffer passes keep alpha
-and may write values outside `0..1`, up to half float's ±65504; a
-component that comes out NaN is stored as `0`. The scene's own output is
-still shown opaque.
-
-State lasts until the number of buffers changes, `s0.clearScene()` is
-called, or the deck switches sketches. Re-running `initScene` with edited
-code keeps it and `iFrame` keeps counting, so seed state with
-`iFrame == 0` or from an empty buffer. When the output or `scale` resizes
-the scene, the state is stretched to the new size.
-
-### Waveform, spectrogram, stereo and chroma in scenes
-
-| Uniform or helper | GLSL type | Meaning |
-| --- | --- | --- |
-| `aoWave` | `sampler2D` | `ao.wave` as a 512 × 1 texture, values `-1..1`. |
-| `aoWaveAt(x)` | `float` | The waveform at `x` (`0..1`), `-1..1`. |
-| `aoSpectrogram` | `sampler2D` | The last 256 spectrum frames as a 64 × 256 ring, one row every 20 ms. |
-| `aoSpectrogramRow` | `float` | The row holding the newest frame. |
-| `aoHistory(x, age)` | `float` | Band level at spectrum position `x` (`0..1`, like `aoFFT`) as it was `age` ago: `0` newest, `1` oldest. Hides the ring's wrap. |
-| `aoBalance`, `aoWidth` | `float` | `ao.balance` and `ao.width`. |
-| `aoChroma[12]` | `float[12]` | `ao.chroma`, indexed C = 0 .. B = 11. |
-| `aoKey` | `float` | `ao.key`, `0..11`; `aoKey / 12.` is `ao.hue`. |
-
-The spectrogram is kept in the renderer from the spectra that already
-arrive: rows fall due at 50 a second by the capture clock, however the
-chunks arrive, so `aoHistory`'s `age` spans a steady 5.12 s (`age` 0.1 is
-about half a second ago). A frame that lands between rows refreshes the
-newest one, and a late frame fills the gap by interpolation.
-
-```js
-s0.initScene(`
-void mainImage(out vec4 fragColor, in vec2 fragCoord) {
-  vec2 uv = fragCoord / iResolution.xy;
-  float level = aoHistory(uv.x, uv.y);  // waterfall: newest at the bottom
-  float trace = smoothstep(0.01, 0., abs(uv.y - 0.5 - 0.4 * aoWaveAt(uv.x)));
-  vec3 tint = 0.5 + 0.5 * cos(6.2832 * (aoKey / 12. + vec3(0., .33, .67)));
-  fragColor = vec4(tint * level + trace, 1.);
-}`)
-src(s0).out()
+history(0.8)
+  .color(1, 0.5, 0.2)
+  .add(waveform(0.005).color(0.4, 1, 0.8))
+  .polar()                         // the waterfall wrapped round, now at the rim
+  .out()
 ```
 
 ## Solids
@@ -276,8 +204,8 @@ vertically at the centre, with `+y` up and `+z` towards the camera.
 | `.intersect(solid, smooth = 0)` | Keeps only the overlap. |
 | `.out(source = s0, options?)` | Raymarches the solid into a Hydra source; with none, the `s0` of the deck the sketch runs on. |
 
-`out` compiles the chain into a GLSL scene, as `initScene` would load one.
-Its options:
+`out` compiles the chain into a shader Ao draws for that source; sketches
+never see its GLSL. Its options:
 
 ```ts
 interface SolidOutOptions {

@@ -4,6 +4,7 @@
  * panel itself is in explorer.ts.
  */
 import hydraFunctions from "hydra-synth/src/glsl/glsl-functions.js";
+import { aoHydraFunctions } from "../audio-sources";
 import { functionDoc, publicAoMembers, type Receiver, sourceMembers } from "../editor";
 import { extensionApi, extensionDocs, extensionGroups } from "../extension-api";
 import { CATALOG } from "../extensions";
@@ -28,7 +29,7 @@ export const sections: { id: SectionId; title: string }[] = [
 export interface EntryParam { name: string; default?: number | string | null; description?: string }
 
 export interface Entry {
-  /** Unique: "ao:bass", "hydra:osc", "source:initScene", "global:render", "ext:noise" (an extension's intro), "ext:noise:warp", "recipe:chains". */
+  /** Unique: "ao:bass", "hydra:osc", "source:initImage", "global:render", "ext:noise" (an extension's intro), "ext:noise:warp", "recipe:chains". */
   id: string;
   section: SectionId;
   name: string;
@@ -67,7 +68,7 @@ export function buildEntries(): Entry[] {
     entries.push(entry);
   }
   const byType = new Map<string, Entry[]>();
-  for (const fn of hydraFunctions()) {
+  for (const fn of [...hydraFunctions(), ...aoHydraFunctions]) {
     const list = byType.get(fn.type) ?? [];
     list.push(fromDoc(`hydra:${fn.name}`, fn.type as SectionId, fn.name, functionDoc(fn.name), hydraExamples[fn.name]));
     byType.set(fn.type, list);
@@ -92,7 +93,7 @@ export function buildEntries(): Entry[] {
 /**
  * The vendored extensions' entries: for each, an intro (`use("noise")`)
  * opening its first section, then everything it adds, section by section.
- * Output methods read `o0.setLinear`, as source methods read `s0.initScene`.
+ * Output methods read `o0.setLinear`, as source methods read `s0.initImage`.
  * Names broken upstream say so and don't auto-play.
  */
 function extensionEntries(): Entry[] {

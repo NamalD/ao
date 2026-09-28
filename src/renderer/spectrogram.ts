@@ -1,6 +1,7 @@
 /**
- * Spectrum history for scenes' `aoSpectrogram` texture: a ring of the last
- * HISTORY_ROWS spectrum frames at a fixed HISTORY_RATE rows a second. It
+ * Spectrum history for `history()` and solids' `aoSpectrogram` texture: a
+ * ring of the last HISTORY_ROWS spectrum frames at a fixed HISTORY_RATE rows
+ * a second. It
  * lives in the renderer, fed by the features that already arrive, so it adds
  * nothing to IPC. No DOM or WebGL here, so it can be tested.
  */
@@ -13,7 +14,7 @@ export const HISTORY_RATE = 50;
 export class SpectrumHistory {
   /** `rows × bands` levels, row-major; row `(written - 1) % rows` is the newest. */
   data: Float32Array;
-  /** Total rows written. Scenes compare it with what they uploaded. */
+  /** Total rows written. Shader canvases compare it with what they uploaded. */
   written = 0;
   /** Bumped on every change, including rewrites of the newest row. */
   version = 0;
@@ -68,5 +69,5 @@ export class SpectrumHistory {
   }
 }
 
-/** The history every scene samples, fed by `updateAudio`. */
+/** The history every audio source and solid samples, fed by `updateAudio`. */
 export const spectrogram = new SpectrumHistory();

@@ -26,6 +26,21 @@ shape(4, () => 0.1 + 0.3 * ao.impulse)
   .add(src(o0).scale(1.02).rotate(0.01), 0.9)
   .out()`,
   solid: `solid(() => ao.bass, 0.1, () => ao.high).out()`,
+  spectrum: `// Bars: lit wherever the band's level is above the height.
+spectrum(1.5)
+  .pixelate(48, 1)
+  .sub(gradient().g())
+  .thresh(0, 0.01)
+  .color(0.4, 0.8, 1)
+  .out()`,
+  history: `// A waterfall: the newest sound at the bottom, scrolling up.
+history(1.5)
+  .color(1, 0.5, 0.2)
+  .out()`,
+  waveform: `waveform(0.01, 0.8)
+  .color(0.3, 1, 0.5)
+  .add(src(o0).scale(1.01), 0.8)
+  .out()`,
   prev: `shape(3, 0.3)
   .rotate(() => time)
   .blend(prev(), 0.9)
@@ -51,6 +66,11 @@ shape(4, () => 0.1 + 0.3 * ao.impulse)
   .out()`,
   kaleid: `osc(20, 0.05, 1)
   .kaleid(() => 3 + Math.round(6 * ao.mid))
+  .out()`,
+  polar: `// Stripes become spokes, each lit by its band of the spectrum.
+osc(40, 0.1, 1)
+  .mult(spectrum(2))
+  .polar(1)
   .out()`,
   scroll: `shape(3, 0.2)
   .repeat(3, 3)
@@ -285,29 +305,6 @@ voronoi(6, 0.2)
 
 /** One example per s0–s3 method. */
 export const sourceExamples: Record<string, Example> = {
-  initScene: `s0.initScene(\`
-void mainImage(out vec4 fragColor, in vec2 fragCoord) {
-  vec2 uv = fragCoord / iResolution.xy;
-  float bar = step(uv.y, aoFFT(uv.x));
-  fragColor = vec4(vec3(bar) * vec3(uv.x, 0.5, 1.0 - uv.x), 1.0);
-}\`, { scale: 0.5 })
-
-src(s0).out()`,
-  clearScene: `// A pen that paints into a buffer; the painting wipes every 8 seconds.
-s0.initScene(\`
-void mainImage(out vec4 fragColor, in vec2 fragCoord) {
-  fragColor = texture(aoBuffer0, fragCoord / iResolution.xy);
-}\`, { buffers: [\`
-void mainImage(out vec4 fragColor, in vec2 fragCoord) {
-  vec2 uv = fragCoord / iResolution.xy;
-  vec2 pen = 0.5 + 0.35 * vec2(cos(iTime), sin(1.7 * iTime));
-  float ink = smoothstep(0.02 + 0.03 * aoBass, 0.0, distance(uv, pen));
-  fragColor = max(texture(aoPrevious, uv), ink * vec4(uv, 1.0, 1.0));
-}\`] })
-
-src(s0).out()
-
-setInterval(() => s0.clearScene(), 8000)`,
   initCanvas: `const ctx = s0.initCanvas(512, 512)
 ctx.fillStyle = "white"
 ctx.font = "200px monospace"
@@ -343,7 +340,7 @@ src(s0).out()` },
   initStream: { manual: true, code: `// Needs Hydra's peer-to-peer server, which Ao doesn't run.
 s0.initStream("friend")
 src(s0).out()` },
-  clear: { manual: true, code: `// Stop the camera, video or scene in s0 and free it.
+  clear: { manual: true, code: `// Stop the camera, video or image in s0 and free it.
 s0.clear()` },
 };
 
@@ -384,7 +381,7 @@ render()`,
   },
   {
     name: "s0–s3", signature: "s0, s1, s2, s3",
-    description: "Four sources: external textures such as GLSL scenes, images, video, a canvas or a camera. Load one with an init method, then sample it with src(s0).",
+    description: "Four sources: external textures such as solids, images, video, a canvas or a camera. Load one with an init method, then sample it with src(s0).",
     aliases: ["s0", "s1", "s2", "s3"],
     example: `const ctx = s1.initCanvas(256, 256)
 ctx.fillStyle = "white"
@@ -401,7 +398,7 @@ src(s1)
   },
   {
     name: "speed", signature: "speed = 1",
-    description: "Multiplier for Hydra's clock, and so for every animated argument and scene time. The explorer resets it to 1 as you move on.",
+    description: "Multiplier for Hydra's clock, and so for every animated argument and solid. The explorer resets it to 1 as you move on.",
     example: `speed = 0.25
 osc(20, 0.1, 1)
   .rotate(0, 0.5)
@@ -454,7 +451,7 @@ shape(4, () => 0.2 + level)
   },
   {
     name: "setFunction", signature: "setFunction({ name, type, inputs, glsl })",
-    description: "Registers a custom GLSL function that then chains like a built-in. type is 'src', 'coord', 'color', 'combine' or 'combineCoord'; a src function reads _st and returns a vec4. See sketches/aurora.js.",
+    description: "Registers a custom GLSL function that then chains like a built-in. type is 'src', 'coord', 'color', 'combine' or 'combineCoord'; a src function reads _st and returns a vec4.",
     example: `setFunction({
   name: "rings",
   type: "src",
@@ -527,7 +524,11 @@ export const synonyms: Synonym[] = [
   { on: "source", words: ["camera", "webcam"], to: ["source:initCam"] },
   { on: "source", words: ["image", "picture", "load"], to: ["source:initImage"] },
   { on: "source", words: ["video", "movie"], to: ["source:initVideo"] },
-  { on: "source", words: ["glsl", "shader"], to: ["source:initScene"] },
+  { words: ["glsl", "shader"], to: ["global:setFunction"] },
+  { words: ["fft", "bars", "equaliser", "equalizer"], to: ["hydra:spectrum"] },
+  { words: ["spectrogram", "waterfall"], to: ["hydra:history"] },
+  { words: ["oscilloscope", "scope", "wave"], to: ["hydra:waveform"] },
+  { on: "hydra", words: ["ring", "radial", "circular"], to: ["hydra:polar"] },
 ];
 
 export interface Recipe { name: string; description: string; example: Example }

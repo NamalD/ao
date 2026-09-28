@@ -30,7 +30,7 @@ describe("finding ao expressions", () => {
 
   it("skips strings and comments, but searches template interpolations", () => {
     expect(find(`// ao.bass\n/* ao.mid */ x = "ao.high" + 'ao.beat'`)).toEqual([]);
-    expect(find("s0.initScene(`float k = aoBass; // ao.bass`)")).toEqual([]);
+    expect(find("setFunction({ glsl: `float k = 1.; // ao.bass` })")).toEqual([]);
     expect(find("x = `level ${ao.loudness}`")).toEqual(["ao.loudness"]);
   });
 
