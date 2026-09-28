@@ -152,6 +152,39 @@ describe("member completion follows what is before the dot", () => {
   });
 });
 
+describe("completing an options object's keys", () => {
+  const keys = ["scale", "camera", "background", "glow", "step", "trails"];
+
+  it("offers a solid's out options where a key goes", () => {
+    for (const source of ["sphere().out(s0, {|", "sphere().out(s0, { ca|", "sphere().out(s0, { ca| })", "torus()\n  .out(s1, {\n    |\n  })"]) {
+      expect(completionsAt(source, true), source).toEqual(keys);
+    }
+    expect(completionsAt("sphere().out(s0, { glow: 1, |})")).toEqual(keys.filter((key) => key !== "glow"));
+    expect(completionsAt("sphere().out(s0, { glow: 1, st| })")).toEqual(keys.filter((key) => key !== "glow"));
+  });
+
+  it("offers ordinary completion for a key's value", () => {
+    expect(completionsAt("sphere().out(s0, { glow: ao.b|")).toContain("bass");
+    expect(completionsAt("sphere().out(s0, { glow: |", true)).not.toContain("camera");
+  });
+
+  it("offers no keys to an object that isn't a documented options argument", () => {
+    expect(completionsAt("osc().out(o0, { ca|")).not.toContain("camera");
+    expect(completionsAt("sphere().out({ ca|")).not.toContain("camera");
+    expect(completionsAt("const o = { ca|")).not.toContain("camera");
+  });
+
+  it("adds the colon unless the key already has one", () => {
+    const apply = (source: string) => {
+      const pos = source.indexOf("|");
+      const state = EditorState.create({ doc: source.replace("|", ""), extensions: [javascript()] });
+      return hydraCompletions(new CompletionContext(state, pos, true))?.options.find((o) => o.label === "camera")?.apply;
+    };
+    expect(apply("sphere().out(s0, { ca|")).toBe("camera: ");
+    expect(apply("sphere().out(s0, { ca|: 2 })")).toBe("camera");
+  });
+});
+
 describe("completing by synonym", () => {
   function resultAt(source: string): CompletionResult | null {
     const pos = source.indexOf("|");
