@@ -22,7 +22,7 @@ import { formatCode, minimalChange } from "./format";
 import { chainExtraDocs } from "./glow";
 import { remix, remixRunRange } from "./remix";
 import { joinsScrub, scrubbing } from "./scrub";
-import { solidFunctions, solidOutParams } from "./solids";
+import { solidFunctions, solidOutOptions, solidOutParams } from "./solids";
 import { synonyms } from "./synonyms";
 
 export interface EditorActions {
@@ -47,7 +47,11 @@ export interface EditorActions {
 /** One entry of `aoDocs` in audio.ts. */
 export interface AoDoc { signature: string; description: string }
 
-interface ParameterDoc { name: string; description?: string; type?: string; default?: number | string | null }
+interface ParameterDoc {
+  name: string; description?: string; type?: string; default?: number | string | null;
+  /** The keys of an options object, offered while writing one. */
+  keys?: ParameterDoc[];
+}
 export interface FunctionDoc { signature: string; params: ParameterDoc[]; description: string; info: string }
 
 interface HydraDoc { description: string; params?: Record<string, string> }
@@ -210,7 +214,8 @@ const solidDocs = new Map<string, FunctionDoc>(solidFunctions.map((fn) => {
   ];
   return [fn.name, makeDoc(fn.name, params, `${fn.description} (Ao solid)`)] as const;
 }));
-solidDocs.set("out", makeDoc("out", solidOutParams.map((p) => ({ ...p, default: p.name === "source" ? p.default : null })),
+const solidOutKeys = Object.entries(solidOutOptions).map(([name, option]) => ({ name, ...option }));
+solidDocs.set("out", makeDoc("out", solidOutParams.map((p) => p.name === "source" ? p : { ...p, default: null, keys: solidOutKeys }),
   "Raymarches this solid into a source; show it with src(s0).out().", "out(source = s0, options?)"));
 solidDocs.set("pipe", makeDoc("pipe", [
   { name: "fn", description: "A function taking the solid and returning a solid, such as (s, n) => s.spikes(n).spin()." },
@@ -523,17 +528,71 @@ export function callParameterContext(state: EditorState, pos: number): { name: s
   let args: SyntaxNode | null = syntaxTree(state).resolveInner(pos, -1);
   while (args && args.name !== "ArgList") args = args.parent;
   if (!args || pos < args.from || pos > args.to || (pos === args.to && state.sliceDoc(pos - 1, pos) === ")")) return null;
+  const call = calleeOf(state, args);
+  return call && { ...call, activeParameter: argumentIndex(args, pos) };
+}
+
+/** The function an argument list is passed to, the object it's called on, and whether that is a solid. */
+function calleeOf(state: EditorState, args: SyntaxNode): { name: string; owner?: string; solid: boolean } | null {
   const call = args.parent;
   if (!call || call.name !== "CallExpression") return null;
   // ArgList.from points at the opening parenthesis; strip it before reading the callee.
   const callee = state.sliceDoc(call.from, args.from).trim().replace(/\($/, "").trim().match(/(?:([\w$]+)\s*\.\s*)?([\w$]+)$/);
   if (!callee) return null;
-  let activeParameter = 0;
-  for (let child = args.firstChild; child; child = child.nextSibling) {
-    if (child.name === "," && child.from < pos) activeParameter++;
-  }
   const member = call.firstChild?.name === "MemberExpression" ? call.firstChild.firstChild : null;
-  return { name: callee[2], owner: callee[1], solid: receiverOf(state, member) === "solid", activeParameter };
+  return { name: callee[2], owner: callee[1], solid: receiverOf(state, member) === "solid" };
+}
+
+/** Which argument of `args` is at `pos`, counting from 0. */
+function argumentIndex(args: SyntaxNode, pos: number): number {
+  let index = 0;
+  for (let child = args.firstChild; child; child = child.nextSibling) {
+    if (child.name === "," && child.from < pos) index++;
+  }
+  return index;
+}
+
+/**
+ * The keys of an options object passed straight to a documented call, such
+ * as a solid's `.out(s0, { … })`, where a key goes: after `{` or a `,`, or
+ * while typing one. Keys the object already has aren't offered again.
+ */
+export function optionKeyCompletions(context: CompletionContext): CompletionResult | null {
+  const { state, pos } = context;
+  const word = context.matchBefore(/[\w$]*/);
+  const from = word?.from ?? pos;
+  let node = syntaxTree(state).resolveInner(pos, -1);
+  if ((node.name === "{" || node.name === ",") && node.parent) node = node.parent;
+  // A finished object parses as an ObjectExpression; one still open, such as
+  // `{ ca`, may parse as an ObjectPattern while the parser recovers.
+  const isObject = (n: SyntaxNode | null) => n?.name === "ObjectExpression" || n?.name === "ObjectPattern";
+  let object: SyntaxNode | null = null;
+  if (from < pos && ["PropertyDefinition", "PropertyName"].includes(node.name) && !node.prevSibling) object = node.parent?.parent ?? null;
+  else if (from === pos && isObject(node) && /[{,]\s*$/.test(state.sliceDoc(node.from, pos))) object = node;
+  if (!object || !isObject(object)) return null;
+  const argument = object.parent?.name === "AssignmentExpression" && object.parent.from === object.from ? object.parent : object;
+  const args = argument.parent;
+  if (args?.name !== "ArgList") return null;
+  const call = calleeOf(state, args);
+  const keys = call && functionDoc(call.name, call.owner, call.solid)?.params[argumentIndex(args, argument.from)]?.keys;
+  if (!keys) return null;
+  const written = new Set<string>();
+  for (let property = object.firstChild; property; property = property.nextSibling) {
+    const key = property.firstChild;
+    if (key && key.from !== from) written.add(text(state, key));
+  }
+  const hasColon = /^\s*:/.test(state.sliceDoc(pos, pos + 20));
+  return {
+    from,
+    options: keys.filter((key) => !written.has(key.name)).map((key) => ({
+      label: key.name,
+      type: "property",
+      detail: key.default == null ? undefined : `= ${key.default}`,
+      info: key.description,
+      apply: hasColon ? key.name : `${key.name}: `,
+    })),
+    validFor: /^[\w$]*$/,
+  };
 }
 
 function signatureTooltip(state: EditorState, pos: number): Tooltip | null {
@@ -581,7 +640,7 @@ const signatureHelp = StateField.define<Tooltip | null>({
 });
 
 export function hydraCompletions(context: CompletionContext): CompletionResult | null {
-  const inUse = useCompletions(context);
+  const inUse = useCompletions(context) ?? optionKeyCompletions(context);
   if (inUse) return inUse;
   const node = syntaxTree(context.state).resolveInner(context.pos, -1);
   for (let current: SyntaxNode | null = node; current; current = current.parent) {

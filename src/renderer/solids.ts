@@ -194,6 +194,16 @@ export interface SolidOutOptions {
   trails?: SolidArg;
 }
 
+/** Each key of `.out`'s options, with its default, for the editor's help. */
+export const solidOutOptions: Record<keyof SolidOutOptions, { default: string; description: string }> = {
+  scale: { default: '"auto"', description: "Fraction of the output resolution to render at; lower is faster. \"auto\" stays as sharp as the GPU keeps up with." },
+  camera: { default: "4", description: "Camera distance from the centre." },
+  background: { default: "[0.02, 0.02, 0.04]", description: "Background and fog colour: one number for grey, or [r, g, b]." },
+  glow: { default: "0.6", description: "Strength of the rim light around edges." },
+  step: { default: "0.9", description: "Fraction of the distance each ray step takes; lower fixes torn spikes and twists, at a cost." },
+  trails: { default: "0", description: "How much of each frame lingers into the next, 0..1: light trails behind moving solids." },
+};
+
 export const solidOutParams: SolidParam[] = [
   param("source", "s0", "Source to render into, s0–s3; show it with src(s0).out()."),
   param("options", "{}", "{ scale, camera, background, glow, step, trails }: resolution fraction (\"auto\" by default: as sharp as the GPU keeps up with), camera distance (4), background colour ([0.02, 0.02, 0.04]), rim light (0.6), ray step (0.9), and how much of each frame lingers (none)."),
