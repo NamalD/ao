@@ -9,16 +9,17 @@ box(
   () => ao.bass,
   () => ao.bass,
 )
+  .scale(() => ao.loudness * 2)
   .spin(0.3, 0.2)
   .wobble(
     () => 0.04 * ao.bass,
     () => ao.bpm / 10,
   )
-  .twist(() => ao.loudness)
+  .twist(() => ao.loudness * 2)
   .noise(() => 0.15 * ao.bass)
   .spikes(
     () => 0.2 * ao.bass,
-    () => 6 * ao.bass,
+    () => 8 * ao.bass,
     6,
     () => 0.8 * ao.bass,
   )
@@ -33,18 +34,21 @@ box(
       .wobble(() => 0.1 * ao.bass)
       .spikes(() => 0.1 * ao.bass),
   )
+  .add(
+    // high
+    sphere(() => ao.high * 2)
+      .spin(0.3, 0.2)
+      .wobble(() => ao.high)
+      .twist(() => ao.high)
+      .elongate(0, () => ao.high * 1.5)
+      .scale(0.6),
+  )
+  .add(sphere(() => ao.centroid).wobble(ao.map("impulse", 0, 0.8)))
   .out(s1, { background: 0 })
 
-// high
-sphere(() => ao.high * 2)
-  .spin(0.3, 0.2)
-  .wobble(() => ao.high)
-  .twist(() => ao.high)
-  .out(s0)
-
 osc(() => ao.bpm / 2, -0.1, 0.8)
-  .modulateRotate(noise(() => ao.bass * 10))
-  .pixelate(200, () => 50 * ao.bass)
+  .modulateRotate(noise(() => ao.bass * 10 + ao.loudness))
+  .pixelate(200, () => 50 * ao.bass + ao.loudness)
   .out(o0)
 
 src(o0)
