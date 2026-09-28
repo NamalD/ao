@@ -31,4 +31,7 @@ sphere()
   .scale(() => loudness())
   .out(s0)
 
-grad().mask(src(s0)).scrollY(-0.2).out()
+grad()
+  .mask(src(s0))
+  .scrollY(-0.2)
+  .out()

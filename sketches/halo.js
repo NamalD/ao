@@ -26,4 +26,6 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   { uniforms: { brightness: () => 2.0 * ao.centroid } },
 )
 
-src(s0).add(src(o0).scale(1.015), 0.7).out()
+src(s0)
+  .add(src(o0).scale(1.015), 0.7)
+  .out()
