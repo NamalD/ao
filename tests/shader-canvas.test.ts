@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { evaluateUniform, formatShaderLog, MAX_BUFFERS, PRELUDE_LINES, sceneSources } from "../src/renderer/scenes";
+import { checkScale, evaluateUniform, formatShaderLog, PRELUDE_LINES } from "../src/renderer/shader-canvas";
 
 describe("formatShaderLog", () => {
-  it("reports errors at the scene's own line numbers", () => {
+  it("reports errors at the shader's own line numbers", () => {
     const log = `ERROR: 0:${PRELUDE_LINES + 3}: 'foo' : undeclared identifier\nERROR: 0:${PRELUDE_LINES + 7}: syntax error`;
     expect(formatShaderLog(log)).toBe("ERROR: 0:3: 'foo' : undeclared identifier\nERROR: 0:7: syntax error");
   });
@@ -36,26 +36,11 @@ describe("evaluateUniform", () => {
   });
 });
 
-describe("sceneSources", () => {
-  it("runs the buffers in order before the image", () => {
-    expect(sceneSources("image", { buffers: ["velocity", "dye"] })).toEqual(["velocity", "dye", "image"]);
-    expect(sceneSources("image")).toEqual(["image"]);
-  });
-
-  it("rejects buffers it can't run when the line runs", () => {
-    expect(() => sceneSources("image", { buffers: "velocity" as unknown as string[] }))
-      .toThrow("initScene buffers: expected an array of GLSL strings, such as [velocity, dye]");
-    expect(() => sceneSources("image", { buffers: new Array<string>(MAX_BUFFERS + 1).fill("b") }))
-      .toThrow(`initScene buffers: at most ${MAX_BUFFERS}, got ${MAX_BUFFERS + 1}`);
-    expect(() => sceneSources("image", { buffers: ["a", undefined as unknown as string] }))
-      .toThrow("initScene buffers[1]: expected GLSL source, got undefined");
-  });
-
-  it("accepts a positive scale or \"auto\", and rejects any other when the line runs", () => {
-    for (const scale of [0.5, 1, 2, "auto" as const, undefined]) expect(() => sceneSources("image", { scale })).not.toThrow();
-    expect(() => sceneSources("image", { scale: "half" as "auto" }))
-      .toThrow('initScene scale: expected a number above 0 or "auto", got "half"');
-    expect(() => sceneSources("image", { scale: 0 })).toThrow('initScene scale: expected a number above 0 or "auto", got 0');
-    expect(() => sceneSources("image", { scale: NaN })).toThrow("got NaN");
+describe("checkScale", () => {
+  it("accepts positive numbers and auto, and names what it got otherwise", () => {
+    for (const scale of [0.5, 1, 2, "auto" as const, undefined]) expect(() => checkScale(scale, "out")).not.toThrow();
+    expect(() => checkScale("half" as "auto", "out")).toThrow('out scale: expected a number above 0 or "auto", got "half"');
+    expect(() => checkScale(0, "out")).toThrow('out scale: expected a number above 0 or "auto", got 0');
+    expect(() => checkScale(NaN, "out")).toThrow("got NaN");
   });
 });

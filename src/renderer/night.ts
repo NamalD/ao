@@ -6,7 +6,7 @@ const TICK_MS = 30_000;
 /**
  * Night fade: a black layer over the stage, under the editor, whose opacity
  * follows the nightly schedule. It updates on a slow timer, not per frame.
- * `timeScale` is the optional night slowdown for Hydra and scene time.
+ * `timeScale` is the optional night slowdown for Hydra and solids.
  * `indicator`, the moon in the status bar, shows while the fade is dimming.
  */
 export class NightFade {

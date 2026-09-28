@@ -43,7 +43,7 @@ const options = {
 /**
  * `code` formatted, with `cursor` (an offset into `code`) carried to the same
  * place in the result. Null when the code doesn't parse, such as a block cut
- * out of the middle of a scene string: it is left as written.
+ * out of the middle of a multi-line string: it is left as written.
  */
 export async function formatCode(code: string, cursor = 0): Promise<{ code: string; cursor: number } | null> {
   try {

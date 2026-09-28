@@ -8,13 +8,13 @@ import { buildEntries } from "../src/renderer/explorer/entries";
  * Runs every bundled sketch the way Ao does: evaluated by a real Deck, in
  * its scope, against a stand-in Hydra with the real function names. Then it
  * calls what the sketch left to run later (update, Hydra argument functions,
- * scene uniforms), since a name the sketch can't reach, such as `sphere`
+ * solid uniforms), since a name the sketch can't reach, such as `sphere`
  * missing from the deck's scope, may only fail there.
  */
 
 /** Functions a sketch handed over to be called later; each deck's run adds to it. */
 const later = vi.hoisted(() => [] as { what: string; run: () => unknown }[]);
-/** Scenes loaded by `initScene`, by the source they were loaded into. */
+/** Shaders solids drew, by the canvas they were drawn on. */
 const loaded = vi.hoisted(() => [] as { source: unknown; code: string }[]);
 
 vi.mock("hydra-synth", async () => {
@@ -91,8 +91,9 @@ vi.mock("hydra-synth", async () => {
   };
 });
 
-vi.mock("../src/renderer/scenes", () => ({
-  Scene: class {
+vi.mock("../src/renderer/shader-canvas", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  ShaderCanvas: class {
     canvas = {};
     load(code: string, options?: { uniforms?: Record<string, unknown> }) {
       loaded.push({ source: this, code });

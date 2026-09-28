@@ -109,25 +109,14 @@ function propertyKey(state: EditorState, node: SyntaxNode | null): string | null
 }
 
 /**
- * Whether a string node holds GLSL: the first argument of `initScene`, an
- * element of its `buffers: [...]` option, or a `glsl:` property as passed to
+ * Whether a string node holds GLSL: a `glsl:` property as passed to
  * `setFunction`. Other strings are left alone, so URLs, labels and plain
  * template strings never change.
  */
 export function isShaderString(state: EditorState, node: SyntaxNode): boolean {
   if (node.name !== "TemplateString" && node.name !== "String") return false;
   const parent = node.parent;
-  if (parent?.name === "Property") return propertyKey(state, parent) === "glsl";
-  if (parent?.name === "ArrayExpression") return propertyKey(state, parent.parent) === "buffers";
-  if (parent?.name === "ArgList" && parent.parent?.name === "CallExpression") {
-    // Only the first argument: the options object after it is JavaScript.
-    let first = parent.firstChild?.nextSibling;
-    while (first && (first.name === "LineComment" || first.name === "BlockComment")) first = first.nextSibling;
-    if (!first || first.from !== node.from) return false;
-    const callee = parent.parent.firstChild;
-    return !!callee && /(^|\.)\s*initScene$/.test(state.sliceDoc(callee.from, callee.to));
-  }
-  return false;
+  return parent?.name === "Property" && propertyKey(state, parent) === "glsl";
 }
 
 // Plain decimals not touching identifier characters or dots: skips `vec3`,
@@ -209,7 +198,7 @@ export function literalAt(state: EditorState, pos: number): NumberSpan | null {
  * The code to run for a change at `pos`: the block around it, widened to whole
  * top-level statements. A shader with blank lines inside it is one statement
  * spanning several blocks, so scrubbing a number in it re-runs the whole
- * `initScene` call rather than a fragment that can't parse.
+ * `setFunction` call rather than a fragment that can't parse.
  */
 export function runRangeAt(state: EditorState, pos: number): { from: number; to: number } | null {
   const text = state.doc.toString();

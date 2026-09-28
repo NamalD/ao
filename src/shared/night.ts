@@ -16,7 +16,7 @@ export interface NightSettings {
   brightness: number;
   /** Minutes to ease down after `start`, and back up before `end`. */
   fadeMinutes: number;
-  /** Hydra/scene time multiplier at full night, 0.1..1; 1 leaves speed alone. */
+  /** Hydra and solid time multiplier at full night, 0.1..1; 1 leaves speed alone. */
   speed: number;
 }
 
@@ -85,7 +85,7 @@ export function nightBrightness(night: NightSettings, date: Date): number {
   return 1 - nightLevel(night, date) * (1 - night.brightness);
 }
 
-/** Time multiplier for Hydra and scenes at `date`: 1 by day, `night.speed` at full night. */
+/** Time multiplier for Hydra and solids at `date`: 1 by day, `night.speed` at full night. */
 export function nightSpeed(night: NightSettings, date: Date): number {
   return 1 - nightLevel(night, date) * (1 - night.speed);
 }

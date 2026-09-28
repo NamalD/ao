@@ -1,6 +1,6 @@
 /**
  * A short, trigger-aligned waveform for oscilloscope visuals, like the
- * waveform row of Shadertoy's audio texture. Pure, so it can be tested.
+ * waveform row of a music visualiser's audio texture. Pure, so it can be tested.
  */
 
 import { WAVE_SIZE } from "./features";

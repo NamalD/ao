@@ -4,7 +4,7 @@ import type { TempoState } from "../shared/tempo";
 
 /**
  * The renderer's tempo: a beat clock following the detector or taps, the
- * values `ao` and GLSL scenes read, and Hydra's `bpm` kept in step.
+ * values `ao` and solids read, and Hydra's `bpm` kept in step.
  */
 export const clock = new TempoClock();
 const seconds = () => performance.now() / 1000;

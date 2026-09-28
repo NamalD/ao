@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { compileSolid, makeSolidShapes, Solid, solidFunctions, solidShapes } from "../src/renderer/solids";
+import { DRAW_SHADER } from "../src/renderer/shader-canvas";
 
 // Methods are installed from the solidFunctions table, so the type has no names for them.
 type Chain = any;
@@ -176,13 +177,18 @@ describe("solid mistakes fail when the line runs", () => {
     expect(compileSolid(sphere(), { trails: () => 0.5 }).code).toBe(a.code);
   });
 
+  /** A stand-in source that a deck has set up to show solids. */
+  const target = (draw: (...args: unknown[]) => unknown) => ({ [DRAW_SHADER]: draw });
+
   it("asks for a source to render into", () => {
     expect(() => sphere().out({})).toThrow("out: expected a source such as s0, got [object Object]");
+    // Regression: the old scene method no longer makes something a source.
+    expect(() => sphere().out({ initScene() {} })).toThrow("out: expected a source such as s0");
   });
 
   it("renders into the given source with the scale option", () => {
     const calls: unknown[][] = [];
-    sphere().out({ initScene: (...args: unknown[]) => calls.push(args) }, { scale: 0.5 });
+    sphere().out(target((...args) => calls.push(args)), { scale: 0.5 });
     expect(calls).toHaveLength(1);
     expect(calls[0][0]).toContain("void mainImage");
     expect(calls[0][1]).toMatchObject({ scale: 0.5, uniforms: { sphere_radius: 1 } });
@@ -190,7 +196,7 @@ describe("solid mistakes fail when the line runs", () => {
 
   it("renders at an automatic scale unless given one", () => {
     const calls: unknown[][] = [];
-    sphere().out({ initScene: (...args: unknown[]) => calls.push(args) });
+    sphere().out(target((...args) => calls.push(args)));
     expect(calls[0][1]).toMatchObject({ scale: "auto" });
   });
 
@@ -198,7 +204,7 @@ describe("solid mistakes fail when the line runs", () => {
   // must reach that deck's s0 and not whichever deck the window points at.
   it("renders a bare out() into the home source of the shapes that started the chain", () => {
     const hits: string[] = [];
-    const deck = (name: string) => makeSolidShapes(() => ({ initScene: () => hits.push(name) }));
+    const deck = (name: string) => makeSolidShapes(() => target(() => hits.push(name)));
     const a = deck("a"), b = deck("b");
     (a.sphere() as Chain).spikes().add(b.box()).out();
     (b.torus() as Chain).move(1).out();

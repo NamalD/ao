@@ -3,6 +3,7 @@ declare module "hydra-synth" {
   export default class Hydra {
     constructor(options: Record<string, unknown>);
     s: HydraSource[];
+    regl: unknown;
     width: number;
     height: number;
     synth: { time: number; speed: number; hush(): void };
@@ -33,8 +34,6 @@ interface HydraSource {
   src: unknown;
   dynamic: boolean;
   init(options: { src: unknown; dynamic?: boolean }): void;
-  initScene(code: string, options?: import("./scenes").SceneOptions): void;
-  clearScene(): void;
 }
 
 declare module "hydra-synth/src/generator-factory.js" {

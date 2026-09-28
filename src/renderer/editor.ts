@@ -13,6 +13,7 @@ import hydraFunctions from "hydra-synth/src/glsl/glsl-functions.js";
 // hydra-synth's exports map omits this module; vite.config.ts and vitest.config.ts alias it.
 import HydraSourceClass from "hydra-synth/src/hydra-source.js";
 import { ao, aoDocs } from "./audio";
+import { aoHydraFunctions } from "./audio-sources";
 import { blockAt } from "./blocks";
 import { addUse, extensionApi, extensionDocs, type ExtensionFunction, usedExtensions } from "./extension-api";
 import { CATALOG } from "./extensions";
@@ -59,8 +60,8 @@ const combineAmount = (verb: string) => `Strength of the ${verb}: 1 is full, 0 l
 
 /**
  * Hand-written help for every Hydra GLSL function; hydra-synth ships none.
- * The function list itself comes from hydraFunctions(), and a test checks
- * that every function has an entry here.
+ * The function list itself comes from hydraFunctions() and Ao's additions
+ * (audio-sources.ts), and a test checks that every function has an entry here.
  */
 export const hydraDocs: Record<string, HydraDoc> = {
   // Sources
@@ -69,7 +70,11 @@ export const hydraDocs: Record<string, HydraDoc> = {
   osc: { description: "Scrolling sine-wave stripes; offset splits red, green and blue apart.", params: { frequency: "Stripe density: about frequency / 6.28 stripes across the screen.", sync: "Scroll speed.", offset: "Phase shift between colour channels; 0 gives greyscale stripes." } },
   shape: { description: "A filled regular polygon centred on the screen.", params: { sides: "Number of sides; large values approach a circle.", radius: "Size, from the centre to the edges.", smoothing: "Edge softness." } },
   gradient: { description: "Colour gradient: x drives red, y drives green, and blue pulses over time.", params: { speed: "How fast the blue channel pulses." } },
-  src: { description: "Samples a texture: an output (o0–o3) or a source (s0–s3).", params: { tex: "Output or source to sample, e.g. o0 for feedback or s0 for a scene." } },
+  src: { description: "Samples a texture: an output (o0–o3) or a source (s0–s3).", params: { tex: "Output or source to sample, e.g. o0 for feedback or s0 for a solid." } },
+  // Ao's audio sources
+  spectrum: { description: "The spectrum as an image: lows on the left, highs on the right, each band as bright as it is loud. Shape it into bars with pixelate, or push other chains around with modulate (Ao).", params: { gain: "Multiplies every level." } },
+  history: { description: "The last 5 seconds of spectrum: lows on the left, highs on the right, now at the bottom, older rows further up, each as bright as it was loud (Ao).", params: { gain: "Multiplies every level." } },
+  waveform: { description: "The waveform drawn as an oscilloscope line across the screen, held still on each cycle (Ao).", params: { thickness: "Line thickness, as a fraction of the screen height.", gain: "Vertical size: 1 lets the loudest peaks touch the top and bottom." } },
   solid: { description: "Fills the screen with a single colour.", params: { r: "Red, 0..1.", g: "Green, 0..1.", b: "Blue, 0..1.", a: "Alpha, 0..1." } },
   prev: { description: "The previous frame of the output being rendered, for feedback." },
   // Geometry
@@ -80,6 +85,7 @@ export const hydraDocs: Record<string, HydraDoc> = {
   repeatX: { description: "Tiles the image horizontally.", params: { reps: "Number of tiles across.", offset: "Vertical shift of every other tile." } },
   repeatY: { description: "Tiles the image vertically.", params: { reps: "Number of tiles down.", offset: "Horizontal shift of every other tile." } },
   kaleid: { description: "Kaleidoscope: mirrors a wedge of the image around the centre.", params: { nSides: "Number of mirrored segments." } },
+  polar: { description: "Bends the chain into a ring: x runs around the centre, clockwise from the top, and y runs outwards, 0 at the centre and 1 at the top and bottom edges. A horizontal band becomes a circle (Ao).", params: { mirror: "1 mirrors the ring: x runs from the bottom up both sides to meet at the top, with no seam." } },
   scroll: { description: "Shifts the image, wrapping around the edges.", params: { scrollX: "Horizontal shift, 0..1 of the screen width.", scrollY: "Vertical shift, 0..1 of the screen height.", speedX: "Horizontal scroll speed, screens per second.", speedY: "Vertical scroll speed, screens per second." } },
   scrollX: { description: "Shifts the image horizontally, wrapping around the edges.", params: { scrollX: "Horizontal shift, 0..1 of the screen width.", speed: "Scroll speed, screens per second." } },
   scrollY: { description: "Shifts the image vertically, wrapping around the edges.", params: { scrollY: "Vertical shift, 0..1 of the screen height.", speed: "Scroll speed, screens per second." } },
@@ -141,7 +147,7 @@ function makeDoc(name: string, params: ParameterDoc[], description: string, sign
   return { signature, params, description, info: formatInfo(signature, description, params) };
 }
 
-const functions = hydraFunctions() as HydraFunction[];
+const functions = [...hydraFunctions(), ...aoHydraFunctions] as HydraFunction[];
 
 /** Hydra's generators: functions that start a chain. */
 export const generators = functions.filter((fn) => fn.type === "src").map((fn) => fn.name);
@@ -189,18 +195,11 @@ const sourceDocs: Record<string, FunctionDoc> = {
   initCanvas: makeDoc("initCanvas", [{ name: "width", description: "Canvas width in pixels." }, { name: "height", description: "Canvas height in pixels." }],
     "Creates a 2D canvas as this source and returns its context to draw on.", "initCanvas(width = 1000, height = 1000)"),
   clear: makeDoc("clear", [], "Stops any camera, screen or stream and empties this source.", "clear()"),
-  initScene: makeDoc("initScene", [
-    { name: "source", description: "GLSL ES 3.0 fragment shader defining mainImage(out vec4, in vec2)." },
-    { name: "options", description: "{ scale, uniforms, buffers }: render resolution as a fraction of the output or \"auto\", extra uniforms, and up to four GLSL state passes read as aoBuffer0..3." },
-  ], "Loads a Shadertoy-style shader into this source (Ao).", "initScene(source, options?)"),
-  clearScene: makeDoc("clearScene", [], "Empties this source's scene buffers and restarts iFrame; editing the scene keeps them (Ao).", "clearScene()"),
 };
 const internalSourceMethods = new Set(["constructor", "tick", "getTexture", "resize"]);
 /** Methods offered after `s0.` to `s3.`. */
 export const sourceMembers = [
   ...Object.getOwnPropertyNames((HydraSourceClass as { prototype: object }).prototype).filter((name) => !internalSourceMethods.has(name)),
-  "initScene",
-  "clearScene",
 ];
 
 /** Help for solids, the 3D shapes that chain like Hydra (Ao). */
@@ -314,7 +313,7 @@ const globalDocs: Record<string, { type: string; doc: FunctionDoc }> = {
   }])),
   ...Object.fromEntries([0, 1, 2, 3].map((i) => [`s${i}`, {
     type: "variable",
-    doc: makeDoc(`s${i}`, [], `Source ${i}: holds a GLSL scene, image, video or canvas. Sample it with src(s${i}).`, `s${i}`),
+    doc: makeDoc(`s${i}`, [], `Source ${i}: holds a solid, image, video or canvas. Sample it with src(s${i}).`, `s${i}`),
   }])),
   render: { type: "function", doc: makeDoc("render", [{ name: "output", description: "Output to show; with no argument, all four in a grid." }], "Chooses which output is shown on screen.", "render(output?)") },
   hush: { type: "function", doc: makeDoc("hush", [], "Clears all outputs, blanking the screen.", "hush()") },

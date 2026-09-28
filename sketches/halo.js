@@ -1,31 +1,28 @@
-// Halo: the spectrum bent into a ring by a GLSL scene. Lows sit at the
-// bottom and highs meet at the top, each bar read with aoFFT(x). The ring
-// breathes with the bass, flashes on hits, and its colour follows how
-// bright the sound is (ao.centroid, passed in as a uniform).
+// Halo: the spectrum bent into a ring. spectrum() lays the bands out left
+// to right, pixelate cuts them into bars, and polar(1) wraps them round,
+// lows at the bottom and highs meeting at the top. Before bending, y is the
+// distance from the centre, so bars and rings are drawn as horizontal
+// bands. The ring breathes with the bass, flashes on hits, and its colour
+// follows how bright the sound is (ao.centroid).
 
-s0.initScene(
-  `
-uniform float brightness;
+inner = () => 0.42 + 0.06 * ao.bass
+// Lit above height y, which polar turns into outside a circle of that radius.
+above = (y) => gradient().g().thresh(y, 0.004)
 
-void mainImage(out vec4 fragColor, in vec2 fragCoord) {
-  vec2 p = (2.0 * fragCoord - iResolution.xy) / iResolution.y;
-  float r = length(p);
-  float x = abs(atan(p.x, -p.y)) / 3.14159;  // 0 at the bottom, 1 at the top
+bars = spectrum(0.4)
+  .pixelate(40, 1)
+  .add(solid(1, 1, 1), inner)
+  .sub(gradient().g())
+  .thresh(0, 0.004) // lit below inner + level
+  .mult(above(inner))
+  .mult(osc(251.3, 0, 0).scrollX(-0.00625).thresh(0.3, 0)) // gaps between bars
 
-  const float BARS = 40.0;
-  float cell = (floor(x * BARS) + 0.5) / BARS;
-  float inner = 0.42 + 0.06 * aoBass;
-  float outer = inner + 0.03 + 0.4 * aoFFT(cell);
-  float bar = smoothstep(inner - 0.01, inner, r) * (1.0 - smoothstep(outer - 0.01, outer, r))
-            * (1.0 - smoothstep(0.3, 0.4, abs(fract(x * BARS) - 0.5)));
+ring = above(() => inner() - 0.035).sub(above(() => inner() - 0.025))
 
-  vec3 colour = 0.55 + 0.45 * cos(6.2832 * (brightness + 0.4 * cell + vec3(0.0, 0.33, 0.67)));
-  float ring = 0.004 / abs(r - inner + 0.03) * (0.4 + 1.5 * aoImpulse);
-  fragColor = vec4(colour * (bar + ring), 1.0);
-}`,
-  { uniforms: { brightness: () => 2.0 * ao.centroid } },
-)
-
-src(s0)
+bars
+  .mult(osc(4, 0, 2).saturate(1.5))
+  .add(ring, () => 0.4 + 1.5 * ao.impulse)
+  .hue(() => ao.centroid)
+  .polar(1)
   .add(src(o0).scale(1.015), 0.7)
   .out()

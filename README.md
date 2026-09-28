@@ -2,8 +2,9 @@
 
 Ao is a personal Linux/Wayland ambient audio visualizer you live-code. It
 captures whatever PipeWire is playing and drives sketches written in
-[Hydra](https://hydra.ojack.xyz/)'s pattern language, raw GLSL scenes, or
-both composed together, with the code floating over the visuals.
+[Hydra](https://hydra.ojack.xyz/)'s pattern language, with 3D solids and
+the sound itself as sources, and the code floating over the visuals. Every
+sketch is chained JavaScript; none is shader code.
 
 ## Run
 
@@ -81,7 +82,7 @@ with [Prettier](https://prettier.io/): double quotes, no semicolons, lines up
 to 100 columns. The code runs first, so formatting never delays it. The
 cursor stays on the same code, the formatting is its own undo step, and
 autosave saves it. Code that doesn't parse is left as you wrote it, and so is
-the inside of scene and `glsl:` strings. Scrubbing and remix don't format. Set `"format": false` in
+the inside of `glsl:` strings. Scrubbing and remix don't format. Set `"format": false` in
 [`settings.json`](#settings) to turn this off.
 
 **Scrubbing and remix.** Hold Alt and scroll over a number, or Alt+drag it
@@ -90,15 +91,15 @@ number's last decimal place, so `0.05` moves by `0.01` and `10` by `1`; write
 `0.050` for finer steps, or hold Shift for steps ten times coarser. Numbers
 can cross zero. Alt+R remixes the block under the cursor instead: each number
 moves 10–40% up or down, keeping its sign and decimal places, and integers
-stay integers. Both work on GLSL floats inside `initScene` and `glsl:` strings
-too, re-running the whole scene; remix leaves GLSL integers (loop counts,
+stay integers. Both work on GLSL floats inside `setFunction`'s `glsl:`
+strings too, re-running the whole call; remix leaves GLSL integers (loop counts,
 indices) alone, and neither touches other strings or comments. A whole scrub
 gesture, or a whole remix, is one undo step: `u` or Ctrl+Z brings the exact
 text back, and autosave then saves that too.
 
 If a run fails, the previous visuals keep going and the error shows in the
 status bar. Errors while the sketch runs, such as a Hydra argument function,
-`update`, or a scene uniform that throws, a timer callback, or a rejected
+`update`, or a solid's argument that throws, a timer callback, or a rejected
 promise, show there too, once each until the next run; the failing value
 falls back to its default and the visuals keep going. Capture problems from
 the main process, like missing `parec`, stay on the right of the status bar.
@@ -118,11 +119,10 @@ jumps on hits and decays within a fraction of a second, `ao.beat` a short
 onset pulse, `ao.bass`/`ao.mid`/`ao.high` band averages, and `ao.fft` 64
 log-spaced band levels. `ao.energy` follows how hard the music is going
 (loudness and bass together), falling in breakdowns, and `ao.drop` jumps to 1
-when the energy slams back after one, fading over a second or so. All run 0..1. `setFunction` registers custom GLSL
-functions that then chain like built-ins (see `sketches/aurora.js`).
+when the energy slams back after one, fading over a second or so. All run 0..1.
 
 For finer control over the spectrum, `ao.hz(lo, hi)` averages any frequency
-range in Hz, `ao.fftAt(x)` samples it at a position 0..1 like GLSL `aoFFT`,
+range in Hz, `ao.fftAt(x)` samples it at a position 0..1 like `spectrum()`,
 and `ao.peak` and `ao.centroid` give the loudest band's position and the
 overall brightness on that same 0..1 axis, handy for colour. `ao.map` takes a
 level name or any function, and `ao.glide("bpm", 2)` fades a value in over a
@@ -138,62 +138,31 @@ shape(4, ao.map(() => ao.hz(40, 100), 0.2, 0.6))  // kick
 See `TYPES.md` for the full `ao` interface, and `sketches/prism.js` and
 `sketches/halo.js` for examples.
 
-**Scenes** are Shadertoy-style GLSL ES 3.0 fragment shaders loaded into a
-Hydra source, so they can be shown directly or remixed with patterns:
+**Audio sources** start a chain with the sound itself. `spectrum()` is the
+spectrum as an image, lows on the left and highs on the right, each band as
+bright as it is loud; `history()` adds the last 5 seconds of it, now at the
+bottom and older rows further up, for waterfalls and terrain; and
+`waveform(thickness, gain)` draws the waveform as an oscilloscope line. Shape
+them like any source: `pixelate` cuts the spectrum into bands, `thresh`
+against a height makes bars, and `modulate` pushes other chains around by
+the sound. `.polar()` bends any chain into a ring, x running around the
+centre and y outwards, so a horizontal band becomes a circle:
 
 ```js
-s0.initScene(`
-void mainImage(out vec4 fragColor, in vec2 fragCoord) {
-  vec2 uv = fragCoord / iResolution.xy;
-  fragColor = vec4(uv, 0.5 + 0.5 * sin(iTime + 6.0 * aoFFT(uv.x)), 1.0);
-}`, { scale: 0.75, uniforms: { swirl: () => ao.mid } })
-
-src(s0).modulate(osc(8), 0.02).out()
+spectrum(0.4)
+  .pixelate(40, 1)                    // 40 bands
+  .sub(gradient().g())                // lit where the level is above y
+  .thresh(0, 0.004)
+  .polar(1)                           // mirrored: lows at the bottom, highs meet at the top
+  .color(0.4, 0.8, 1)
+  .out()
 ```
 
-Scenes get `iResolution`, `iTime`, `iTimeDelta`, `iFrame`, the audio levels as
-`aoLoudness`, `aoImpulse`, `aoBeat`, `aoBass`, `aoMid`, `aoHigh`,
-`aoEnergy`, and `aoDrop`, the
-tempo as `aoBpm`, `aoPhase` and `aoBar` (see [Tempo](#tempo)), and
-`aoFFT(x)` to sample the spectrum. `scale` renders at a fraction of the output
-resolution for heavy raymarchers, and `scale: "auto"` picks the fraction from
-how long the GPU takes, keeping all automatic scenes within about 10 ms a
-frame; `uniforms` feeds extra values, declared in
-the shader as `uniform float name;`. Shader errors report line numbers within
-the scene string. `sketches/dunes.js` is a full raymarched landscape.
-
-**Buffers** give a scene memory, for simulations that need the previous
-frame: fluids, reaction-diffusion, particles in a texture. Each string in
-`buffers` is another `mainImage` pass, run in order before the scene every
-frame into a half-float RGBA texture that keeps its output. Every pass reads
-them as `aoBuffer0`..`aoBuffer3` (also `iChannel0`..`iChannel3`, so most
-Shadertoy multipass shaders paste in), getting this frame's output from
-buffers that already ran and the previous frame's from the rest, and
-`aoPrevious` is always the pass's own previous frame. Values may be negative
-or above 1, and alpha is kept.
-
-```js
-s0.initScene(`
-void mainImage(out vec4 fragColor, in vec2 fragCoord) {
-  fragColor = texture(aoBuffer0, fragCoord / iResolution.xy);
-}`, { buffers: [`
-void mainImage(out vec4 fragColor, in vec2 fragCoord) {
-  vec2 uv = fragCoord / iResolution.xy;
-  vec4 last = texture(aoPrevious, (uv - 0.5) * 0.99 + 0.5);  // zoom in
-  float hit = smoothstep(0.1, 0., length(uv - 0.5)) * aoImpulse;
-  fragColor = last * 0.95 + hit * vec4(1., 0.4, 0.7, 1.);
-}`] })
-src(s0).out()
-```
-
-State survives editing: re-running the scene recompiles it but keeps the
-buffers and `iFrame` counting, so tweaking a simulation doesn't restart it,
-and scrubbing numbers inside buffer strings works as in the scene.
-`s0.clearScene()` empties them and restarts `iFrame` at `0`; so does changing
-the number of buffers or switching sketches. Resizing stretches the state to
-the new size. Buffers render at the scene's `scale`, and a pixel that comes
-out NaN is stored as `0` so it can't spread. `sketches/fluid.js` is ink
-stirred through water by the music.
+Hydra's y runs down the screen, so `gradient().g()` is 0 at the top.
+`sketches/halo.js` bends the spectrum into a ring, `sketches/scope.js` is an
+oscilloscope, and `sketches/ridges.js` stacks the spectrum into ridgelines
+with feedback. Each call of an audio source uses one of the GPU's texture
+units, like `src(o0)` does, so a single chain can hold about a dozen.
 
 **Solids** are 3D shapes written like Hydra chains, with no GLSL. A shape
 starts the chain, methods move, warp and colour it, and `.out(s0)` raymarches
@@ -224,7 +193,8 @@ background, glow, step, trails }`. Solids render at `scale: "auto"` unless
 given a number, so a heavy chain gets softer rather than slower; the fps
 readout (`i`) shows the scale when it drops below 100%. Lower `step` if very long spikes or strong
 twists, bends or tapers tear, and `trails` (`0..1`) leaves light trails behind moving solids. Completion and signature help know solid chains apart from Hydra ones.
-`sketches/urchin.js` is a ball that turns spiky when the song gets intense.
+`sketches/urchin.js` is a ball that turns spiky when the song gets intense,
+and `sketches/dunes.js` flies over a desert made from a `plane`.
 
 Each evaluation runs in its own function scope, so re-running a block that
 declares `const` works; share values between blocks through globals.
@@ -247,30 +217,26 @@ window away from Ao or open new windows.
 
 ### Waveform, spectrogram and harmony
 
-Beyond levels and the spectrum, Ao hands sketches and scenes the shape of
-the sound. `ao.wave` is the newest ~21 ms of waveform, 512 values `-1..1`,
-trigger-aligned like an oscilloscope so a steady tone holds still, and
-scenes read it as `aoWaveAt(x)`. Scenes also get `aoHistory(x, age)`, the
-spectrum over the last 5.12 s (age `0` now, `1` oldest) for waterfalls and
-terrain. `ao.balance` (`-1` left .. `1` right) and `ao.width` (`0` mono ..
-`1` wide) describe the stereo image. `ao.chroma` holds 12 pitch-class
-levels, C to B, and `ao.key` the strongest (`0..11`), so colour can follow
-the harmony: `ao.hue` is `ao.key / 12`.
+Beyond levels and the spectrum, Ao hands sketches the shape of the sound.
+`ao.wave` is the newest ~21 ms of waveform, 512 values `-1..1`,
+trigger-aligned like an oscilloscope so a steady tone holds still; it is what
+`waveform()` draws. `history()` shows the spectrum over the last 5.12 s.
+`ao.balance` (`-1` left .. `1` right) and `ao.width` (`0` mono .. `1` wide)
+describe the stereo image. `ao.chroma` holds 12 pitch-class levels, C to B,
+and `ao.key` the strongest (`0..11`), so colour can follow the harmony:
+`ao.hue` is `ao.key / 12`.
 
 ```js
-s0.initScene(`
-void mainImage(out vec4 fragColor, in vec2 fragCoord) {
-  vec2 uv = fragCoord / iResolution.xy;
-  vec3 tint = 0.5 + 0.5 * cos(6.2832 * (aoKey / 12. + vec3(0., .33, .67)));
-  float scope = smoothstep(0.01, 0., abs(uv.y - 0.5 - 0.4 * aoWaveAt(uv.x)));
-  fragColor = vec4(tint * (aoHistory(uv.x, uv.y) + scope), 1.);
-}`)
-src(s0).out()
+waveform(0.006, 0.8)
+  .color(1, 0.35, 0.35)
+  .hue(() => ao.hue)              // the key picks the colour
+  .add(history(0.5).color(0.3, 0.3, 0.5))
+  .rotate(() => -0.1 * ao.balance) // lean towards the louder side
+  .out()
 ```
 
-Scenes see these as `aoWave`, `aoSpectrogram`, `aoBalance`, `aoWidth`,
-`aoChroma[12]` and `aoKey`; `TYPES.md` has the details, and
-`sketches/scope.js` and `sketches/ridges.js` show them off.
+`TYPES.md` has the details, and `sketches/scope.js` and `sketches/ridges.js`
+show them off.
 
 ## Hydra extensions
 
@@ -482,7 +448,7 @@ Ao draws the same blend into it every frame. Hydra's names stay available on
 ## Code explorer
 
 F2 opens a reference panel on the left, and `K` in the editor's normal mode
-opens it on the word under the cursor (`osc`, `ao.hz`, `s0.initScene`, `o1`,
+opens it on the word under the cursor (`osc`, `ao.hz`, `s0.initImage`, `o1`,
 …), or searches for a word it doesn't know. It covers every `ao` member, each
 with a live reading of its value, every Hydra function by kind (sources,
 geometry, colour, blend, modulate), Hydra's globals (`out`, outputs,
@@ -567,7 +533,6 @@ shape(4, 0.2)
   .out()
 ```
 
-GLSL scenes get the same clock as `aoBpm`, `aoPhase` and `aoBar`.
 `sketches/tempo.js` puts it together.
 
 **Detection** runs in the main process on the captured audio. It measures
@@ -661,7 +626,7 @@ the defaults:
 - `night.brightness`: brightness at full night, `0..1`.
 - `night.fadeMinutes`: how long the fade takes at each end of the window,
   inside it; a window shorter than two fades never reaches full night.
-- `night.speed`: optionally slow Hydra and scene time at night, `0.1..1`, eased
+- `night.speed`: optionally slow Hydra and solids' time at night, `0.1..1`, eased
   in with the fade; `1` (the default) leaves speed alone. Audio levels are
   unaffected.
 - `autopilot`: see [Autopilot](#autopilot).
@@ -672,7 +637,7 @@ Ctrl+Shift+C (or `c` with the editor hidden) draws a challenge to practise
 Hydra: one prompt from one of four buckets, **recreate** ("a lava lamp"),
 **constraint** ("at most 3 lines of code"), **audio-reactive** ("the kick
 feels like a heartbeat"), and **technique** (one-idea drills such as masks,
-`setFunction` or a first raymarched scene). Half the time it adds a prompt
+`.polar()` or a first solid). Half the time it adds a prompt
 from another bucket, a quarter of those times a third, and an eighth of
 those a fourth. The card shows the prompts; `H` reveals hints naming useful
 functions, `1`/`2`/`3` pick a 5, 10 or 20 minute time box (10 by default),
@@ -749,7 +714,8 @@ Live values keep their default (on) whenever the editor shows.
 - `src/main`: Electron main process, audio capture, state and sketch files.
 - `src/shared`: audio analysis (FFT, loudness, impulse, beat, tempo), kept pure.
 - `src/preload`: the narrow bridge the renderer may call.
-- `src/renderer`: Hydra host, GLSL scene runner, solids compiler, overlay editor.
+- `src/renderer`: Hydra host, audio sources, solids compiler and the shader
+  canvas it draws through, overlay editor.
 - `sketches`: the visualizers.
 
 ## Parallel development

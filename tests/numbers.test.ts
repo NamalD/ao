@@ -96,22 +96,22 @@ describe("finding literals", () => {
     expect(texts(`osc(20, 0.05) // 3 comments\n/* 4 */ src("o1.5", '2').out(6)`)).toEqual(["20", "0.05", "6"]);
   });
 
-  it("reads GLSL in initScene and glsl: strings, skipping comments, # lines and identifiers", () => {
+  it("reads GLSL in glsl: strings, skipping comments, # lines and identifiers", () => {
     const doc = [
-      "s0.initScene(`#version 300 es",
+      "setFunction({ name: 'a', inputs: [{ default: 0.75 }], glsl: `#define K 4.0",
       "vec3 c = vec3(1.0, .5, 2); // 9.0",
       "/* 8.0",
-      "   7.0 */ float e = 1e-3 + c.x2;`, { scale: 0.75 })",
-      "setFunction({ name: 'a', glsl: `return vec4(0.25);` })",
+      "   7.0 */ float e = 1e-3 + c.x2; return vec4(0.25);` })",
     ].join("\n");
     const spans = numbersIn(state(doc), 0, doc.length);
-    expect(spans.map((s) => `${s.text}${s.glsl ? "g" : ""}`)).toEqual(["1.0g", ".5g", "2g", "3g", "0.75", "0.25g"]);
+    expect(spans.map((s) => `${s.text}${s.glsl ? "g" : ""}`)).toEqual(["0.75", "1.0g", ".5g", "2g", "3g", "0.25g"]);
   });
 
-  it("reads GLSL in initScene buffers but not in other arrays", () => {
-    const doc = "s0.initScene(`float a = 1.0;`, { buffers: [`float b = 2.0;`, `float c = 3.0;`], scale: 0.5 })\nlog([`4.0`])";
+  // Regression: scenes are gone, so their old call no longer marks a string as GLSL.
+  it("reads no GLSL in other strings, such as an old initScene call's", () => {
+    const doc = "s0.initScene(`float a = 1.0;`, { buffers: [`float b = 2.0;`], scale: 0.5 })";
     const spans = numbersIn(state(doc), 0, doc.length);
-    expect(spans.map((s) => `${s.text}${s.glsl ? "g" : ""}`)).toEqual(["1.0g", "2.0g", "3.0g", "0.5"]);
+    expect(spans.map((s) => `${s.text}${s.glsl ? "g" : ""}`)).toEqual(["0.5"]);
   });
 
   it("leaves other template strings alone but reads their interpolations", () => {
@@ -129,7 +129,7 @@ describe("finding literals", () => {
   });
 
   it("finds a unary minus in GLSL by its context", () => {
-    const doc = "s0.initScene(`float a = -1.5, b = c -2.0;`)";
+    const doc = "setFunction({ glsl: `float a = -1.5, b = c -2.0;` })";
     const s = state(doc);
     expect(literalAt(s, doc.indexOf("1.5"))?.text).toBe("-1.5");
     expect(literalAt(s, doc.indexOf("2.0"))?.text).toBe("2.0");
@@ -144,15 +144,15 @@ describe("run range", () => {
   });
 
   it("widens to the whole statement when a shader has blank lines", () => {
-    const doc = "a = 1\n\ns0.initScene(`\nfloat x = 1.0;\n\nfloat y = 2.0;\n`)\nsrc(s0).out()\n\nb = 2";
+    const doc = "a = 1\n\nsetFunction({ glsl: `\nfloat x = 1.0;\n\nfloat y = 2.0;\n` })\nosc().out()\n\nb = 2";
     const range = runRangeAt(state(doc), doc.indexOf("2.0"))!;
-    expect(doc.slice(range.from, range.to)).toBe("s0.initScene(`\nfloat x = 1.0;\n\nfloat y = 2.0;\n`)\nsrc(s0).out()");
+    expect(doc.slice(range.from, range.to)).toBe("setFunction({ glsl: `\nfloat x = 1.0;\n\nfloat y = 2.0;\n` })\nosc().out()");
   });
 });
 
 describe("remix changes", () => {
   it("changes JS numbers and GLSL floats, not GLSL integers", () => {
-    const doc = "s0.initScene(`for (int i = 0; i < 64; i++) x += 0.5;`, { scale: 0.75 })\nosc(20)";
+    const doc = "setFunction({ glsl: `for (int i = 0; i < 64; i++) x += 0.5;`, inputs: [0.75] })\nosc(20)";
     const changes = remixChanges(state(doc), 0, doc.length, sequence(0.5, 0.9));
     expect(changes.map((c) => doc.slice(c.from, c.to))).toEqual(["0.5", "0.75", "20"]);
     expect(changes.map((c) => c.insert)).toEqual(["0.6", "0.94", "25"]);

@@ -1,7 +1,7 @@
-import type { SceneOptions, UniformValue } from "./scenes";
+import { DRAW_SHADER, type DrawShader, type UniformValue } from "./shader-canvas";
 
 /**
- * Solids: 3D shapes written like Hydra chains and raymarched as a GLSL scene.
+ * Solids: 3D shapes written like Hydra chains and raymarched in a generated shader.
  *
  *   sphere(1).spikes(() => heat).spin(0, 0.3).color(1, 0.3, 0.6).out(s0)
  *
@@ -292,11 +292,11 @@ export class Solid {
 
   /** Renders this solid into a Hydra source, `s0` unless given. */
   out(source?: unknown, options: SolidOutOptions = {}): void {
-    const target = (source ?? this.home()) as { initScene?: (code: string, options?: SceneOptions) => void } | undefined;
-    if (typeof target?.initScene !== "function") throw new Error(`out: expected a source such as s0, got ${show(source)}`);
+    const draw = ((source ?? this.home()) as Record<symbol, DrawShader | undefined> | undefined)?.[DRAW_SHADER];
+    if (typeof draw !== "function") throw new Error(`out: expected a source such as s0, got ${show(source)}`);
     const { code, uniforms } = compileSolid(this, options);
     // Raymarching costs every pixel dozens of steps; let the GPU's pace pick the resolution.
-    target.initScene(code, { scale: options.scale ?? "auto", uniforms });
+    draw(code, { scale: options.scale ?? "auto", uniforms });
   }
 }
 
@@ -373,7 +373,7 @@ for (const fn of solidFunctions) {
   }
 }
 
-/** Helpers every solid scene shares; the GLSL compiler drops the ones a chain doesn't use. */
+/** Helpers every solid's shader shares; the GLSL compiler drops the ones a chain doesn't use. */
 const LIBRARY = `
 vec3 aoDirection(vec3 p) { return p / max(length(p), 1e-4); }
 mat2 aoTurn(float a) { float c = cos(a), s = sin(a); return mat2(c, s, -s, c); }
@@ -550,7 +550,7 @@ vec4 aoFinish(vec3 colour, vec2 fragCoord) {
   return vec4(max(colour, last * clamp(aoTrails, 0.0, 1.0)), 1.0);
 }`;
 
-/** Compiles a solid into a scene shader and the uniforms that drive it. */
+/** Compiles a solid into a shader and the uniforms that drive it. */
 export function compileSolid(solid: Solid, options: SolidOutOptions = {}): { code: string; uniforms: Record<string, UniformValue> } {
   const compiler = new Compiler(true);
   const setting = (name: string, value: UniformValue | undefined, fallback: UniformValue) => {

@@ -52,7 +52,7 @@ describe("SpectrumHistory", () => {
     expect(history.at(0, 1)).toBe(1);
   });
 
-  it("bumps its version on every change so scenes know to upload", () => {
+  it("bumps its version on every change so textures know to upload", () => {
     const history = new SpectrumHistory(1, 4, 50);
     const before = history.version;
     history.push([0], 0);

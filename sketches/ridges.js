@@ -1,41 +1,61 @@
-// Ridges: the last five seconds of spectrum as stacked ridgelines, newest at
-// the front, like a certain album cover. aoHistory reads the spectrogram;
-// bass rises in the middle, highs at the edges. The lines take their colour
-// from the harmony (aoKey), and the beat brightens the front row.
+// Ridges: the recent spectrum as stacked ridgelines, newest at the front,
+// like a certain album cover. Every tenth of a second the ridges so far
+// step up a line and fade a little, and the spectrum right now is drawn in
+// front, lows on the left and highs on the right, with black under it to
+// hide the older lines behind. The lines take their colour from the
+// harmony (ao.hue).
 
-s0.initScene(`
-const int LINES = 44;
-
-vec3 hsv(float h, float s, float v) {
-  vec3 k = clamp(abs(fract(h + vec3(0., 2., 1.) / 3.) * 6. - 3.) - 1., 0., 1.);
-  return v * mix(vec3(1.), k, s);
+STEP = 16 // pixels between lines
+globalThis.shift ??= 0
+let wait = 0
+update = (dt) => {
+  wait += dt
+  shift = wait > 110 ? 1 : 0
+  if (shift) wait = 0
 }
 
-void mainImage(out vec4 fragColor, in vec2 fragCoord) {
-  vec2 uv = fragCoord / iResolution.xy;
-  float u = (uv.x - 0.5) / 0.36;               // -1..1 across the ridges
-  vec3 col = vec3(0.02, 0.02, 0.03);
-  if (abs(u) < 1.) {
-    float x = 0.12 + 0.68 * abs(u);            // spectrum position, bass in the middle
-    float taper = smoothstep(1., 0.55, abs(u));
-    // Ridges whose peaks can't reach this height are skipped.
-    int first = max(0, int(ceil((uv.y - 0.12 - 0.13) / 0.72 * float(LINES - 1))));
-    for (int i = first; i < LINES; i++) {
-      float age = float(i) / float(LINES - 1);
-      float base = 0.12 + 0.72 * age;
-      // Three taps soften the 64 bands into smooth hills.
-      float level = (aoHistory(x - 0.012, age) + 2. * aoHistory(x, age) + aoHistory(x + 0.012, age)) / 4.;
-      float h = base + 0.13 * taper * level * level;
-      if (uv.y < h) {                          // hidden behind this ridge
-        float edge = smoothstep(2.5 / iResolution.y, 0.0, h - uv.y);
-        vec3 tint = hsv(aoKey / 12. + 0.05 * age, 0.5, 1.);
-        float bright = (1. - 0.6 * age) * (1. + (i == 0 ? aoBeat : 0.));
-        col = mix(col, tint * bright, edge);
-        break;
-      }
-    }
-  }
-  fragColor = vec4(col, 1.);
-}`)
+// How far pixel y sits under the newest ridge (Hydra's y runs down).
+under = () =>
+  spectrum(0.13)
+    .scale(1, 0.72, 1, 0, 0)
+    .scrollX(-0.14)
+    .add(gradient().g())
+    .add(solid(1, 1, 1), -0.88)
 
-src(s0).out()
+// A bright edge over solid black, added only on the frames that step.
+// luma(-1) makes it opaque again, since sub subtracts alpha too.
+ridge = under()
+  .thresh(0, 0)
+  .sub(under().thresh(0.004, 0))
+  .luma(-1, 0)
+  .mask(under().thresh(0, 0))
+  .mask(
+    solid(
+      () => shift,
+      () => shift,
+      () => shift,
+    ),
+  )
+
+src(o1)
+  .scrollY(() => (shift * STEP) / height)
+  .color(
+    () => 1 - 0.03 * shift,
+    () => 1 - 0.03 * shift,
+    () => 1 - 0.03 * shift,
+  )
+  .layer(ridge)
+  .out(o1)
+
+// Keeps only the ridge field, x from 0.14 to 0.86.
+field = gradient()
+  .r()
+  .thresh(0.14, 0)
+  .sub(gradient().r().thresh(0.86, 0))
+
+src(o1)
+  .mult(field)
+  .color(0.75, 0.55, 1)
+  .hue(() => ao.hue)
+  .add(solid(0.02, 0.02, 0.03))
+  .out()

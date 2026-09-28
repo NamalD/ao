@@ -62,5 +62,9 @@ export const synonyms: Synonym[] = [
   { on: "source", words: ["camera", "webcam"], to: ["source:initCam"] },
   { on: "source", words: ["image", "picture", "load"], to: ["source:initImage"] },
   { on: "source", words: ["video", "movie"], to: ["source:initVideo"] },
-  { on: "source", words: ["glsl", "shader"], to: ["source:initScene"] },
+  { words: ["glsl", "shader"], to: ["global:setFunction"] },
+  { words: ["fft", "bars", "equaliser", "equalizer"], to: ["hydra:spectrum"] },
+  { words: ["spectrogram", "waterfall"], to: ["hydra:history"] },
+  { words: ["oscilloscope", "scope", "wave"], to: ["hydra:waveform"] },
+  { on: "hydra", words: ["ring", "radial", "circular"], to: ["hydra:polar"] },
 ];

@@ -2,7 +2,9 @@
 
 Ao is a personal Linux/Wayland ambient audio visualizer you live-code. It is
 an Electron app in TypeScript: the main process captures and analyses audio,
-the renderer hosts Hydra, the GLSL scene runner, and the overlay editor. Keep
+the renderer hosts Hydra with Ao's audio sources, the solids compiler, and the
+overlay editor. Sketches are chained JavaScript only: Ao offers no way to
+write GLSL in a sketch beyond Hydra's own `setFunction`. Keep
 the preload bridge in `src/preload/` narrow, and keep audio analysis in
 `src/shared/` pure so it stays unit-testable.
 
