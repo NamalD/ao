@@ -76,4 +76,27 @@ describe("fake capture", () => {
       now.mockRestore();
     }
   });
+
+  it("sends section energy and the drop pulse with the features", async () => {
+    const { vi } = await import("vitest");
+    const { startFakeCapture } = await import("../src/main/capture");
+    let clock = 0;
+    const now = vi.spyOn(performance, "now").mockImplementation(() => clock);
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const energies: number[] = [], drops: number[] = [];
+      const capture = startFakeCapture((f) => { energies.push(f.energy!); drops.push(f.drop!); });
+      for (let tick = 0; tick < 100; tick++) {
+        clock += 20;
+        vi.advanceTimersByTime(20);
+      }
+      capture.stop();
+      // The steady synthetic loop has energy but no breakdown, so no drop.
+      expect(energies.at(-1)).toBeGreaterThan(0.05);
+      expect(drops.every((d) => d === 0)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      now.mockRestore();
+    }
+  });
 });

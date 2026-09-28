@@ -124,6 +124,11 @@ export class SectionDetector {
     this.o = { ...defaultSectionOptions, ...options };
   }
 
+  /** The fast energy follower, 0..1: loudness and bass together, smoothed over ~0.25 s. */
+  get energy(): number {
+    return this.fast;
+  }
+
   /** The energy the detector follows: loudness and bass together. */
   static energy(f: AudioFeatures): number {
     return 0.4 * f.loudness + 0.6 * f.bass;
@@ -279,5 +284,31 @@ export class SectionDetector {
     this.noveltySince = null;
     const strength = clamp01((this.novelty - o.noveltyOn) / (2 * o.noveltyOn) + 0.3);
     return { kind: "change", time: now, strength, detail: `timbre changed (${this.novelty.toFixed(2)})` };
+  }
+}
+
+/** How quickly `drop` fades after a drop: its time constant, seconds. */
+export const DROP_FADE = 0.5;
+
+/**
+ * The `energy` and `drop` features sketches read. `energy` is the detector's
+ * fast energy follower; `drop` is set to 1 when a drop fires and fades over
+ * about a second and a half, like a slow `beat`.
+ */
+export class EnergyTracker {
+  private readonly detector: SectionDetector;
+  private drop = 0;
+  private last: number | null = null;
+
+  constructor(options: Partial<SectionOptions> = {}) {
+    this.detector = new SectionDetector(options);
+  }
+
+  push(f: AudioFeatures): { energy: number; drop: number } {
+    const dt = this.last === null ? 0 : Math.max(0, f.time - this.last);
+    this.last = f.time;
+    const event = this.detector.push(f);
+    this.drop = event?.kind === "drop" ? 1 : this.drop * Math.exp(-dt / DROP_FADE);
+    return { energy: clamp01(this.detector.energy), drop: this.drop };
   }
 }

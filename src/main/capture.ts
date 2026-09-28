@@ -1,6 +1,7 @@
 import { ChildProcess, execFileSync, spawn } from "node:child_process";
 import { Analyser } from "../shared/analysis";
 import { findExecutable } from "../shared/executable";
+import { EnergyTracker } from "../shared/sections";
 import { TempoTracker } from "../shared/tempo";
 import { AudioFeatures } from "../shared/features";
 
@@ -27,6 +28,17 @@ function defaultMonitor(pactl: string): string | null {
 
 export interface Capture { stop(): void }
 
+/** One capture's analysis: the features, section energy and tempo of each chunk. */
+function analysis(): (samples: Float32Array, now: number) => AudioFeatures {
+  const analyser = new Analyser(SAMPLE_RATE);
+  const tempo = new TempoTracker(SAMPLE_RATE);
+  const energy = new EnergyTracker();
+  return (samples, now) => {
+    const features = analyser.push(samples, now);
+    return { ...features, ...energy.push(features), tempo: tempo.push(samples) };
+  };
+}
+
 /** Captures the current output device and reports features for every chunk. */
 export function startCapture(onFeatures: (f: AudioFeatures) => void,
                              report: (message: string) => void,
@@ -42,8 +54,7 @@ export function startCapture(onFeatures: (f: AudioFeatures) => void,
     report("could not determine the default PipeWire monitor; audio is disabled");
     return { stop() {} };
   }
-  const analyser = new Analyser(SAMPLE_RATE);
-  const tempo = new TempoTracker(SAMPLE_RATE);
+  const analyse = analysis();
   const started = performance.now();
   let pending: Buffer = Buffer.alloc(0);
   const [command, args] = parecCommand(target, parec);
@@ -55,7 +66,7 @@ export function startCapture(onFeatures: (f: AudioFeatures) => void,
     // Copy so the float view is aligned regardless of the chunk's offset.
     const samples = new Float32Array(new Uint8Array(pending.subarray(0, usable)).buffer);
     pending = pending.subarray(usable);
-    onFeatures({ ...analyser.push(samples, (performance.now() - started) / 1000), tempo: tempo.push(samples) });
+    onFeatures(analyse(samples, (performance.now() - started) / 1000));
     onPcm?.(samples);
   });
   child.stderr!.on("data", (d: Buffer) => report(`parec: ${d.toString().trim()}`));
@@ -70,8 +81,7 @@ export function startCapture(onFeatures: (f: AudioFeatures) => void,
 /** A synthetic kick, pad and panned hats signal for screenshots and silent development. */
 export function startFakeCapture(onFeatures: (f: AudioFeatures) => void,
                                  onPcm?: (samples: Float32Array) => void): Capture {
-  const analyser = new Analyser(SAMPLE_RATE);
-  const tempo = new TempoTracker(SAMPLE_RATE);
+  const analyse = analysis();
   const chunk = 960;
   const started = performance.now();
   let n = 0;
@@ -98,7 +108,7 @@ export function startFakeCapture(onFeatures: (f: AudioFeatures) => void,
       samples[i * 2] = centre + (1 - pan) * high + (right ? 0.2 : 1) * hat;
       samples[i * 2 + 1] = centre + (1 + pan) * high + (right ? 1 : 0.2) * hat;
     }
-    onFeatures({ ...analyser.push(samples, n / SAMPLE_RATE), tempo: tempo.push(samples) });
+    onFeatures(analyse(samples, n / SAMPLE_RATE));
     onPcm?.(samples);
   }, (chunk / SAMPLE_RATE) * 1000);
   return { stop: () => clearInterval(timer) };

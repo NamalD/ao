@@ -6,7 +6,7 @@ import { waveAt } from "../shared/waveform";
 import { spectrogram } from "./spectrogram";
 import { barNow, clock, followTempo, phaseNow, pulse, ramp } from "./tempo";
 
-type Level = "loudness" | "impulse" | "beat" | "bass" | "mid" | "high" | "peak" | "centroid";
+type Level = "loudness" | "impulse" | "beat" | "bass" | "mid" | "high" | "energy" | "drop" | "peak" | "centroid";
 
 /**
  * The live audio state sketches read, exposed globally as `ao`.
@@ -21,6 +21,10 @@ export const ao = {
   get bass() { return this.features.bass; },
   get mid() { return this.features.mid; },
   get high() { return this.features.high; },
+  /** Section energy, 0..1: loudness and bass together, smoothed over ~0.25 s. Low in breakdowns. */
+  get energy() { return this.features.energy ?? 0; },
+  /** 1 when the music drops after a breakdown, fading within ~1.5 s. */
+  get drop() { return this.features.drop ?? 0; },
   /** Band levels, 0..1, low to high frequency. */
   get fft() { return this.features.spectrum; },
   /** The spectrum at position x (0..1, low to high), interpolated like GLSL `aoFFT(x)`. */
@@ -89,6 +93,8 @@ export const aoDocs: Record<string, { signature: string; description: string }> 
   bass: { signature: "ao.bass", description: "Average level below 250 Hz, 0..1." },
   mid: { signature: "ao.mid", description: "Average level from 250 Hz to 2 kHz, 0..1." },
   high: { signature: "ao.high", description: "Average level above 2 kHz, 0..1." },
+  energy: { signature: "ao.energy", description: "Section energy, 0..1: loudness and bass together, smoothed over ~0.25 s. Falls in breakdowns and jumps back on the drop." },
+  drop: { signature: "ao.drop", description: "Drop pulse, 0..1. Set to 1 when the energy jumps back after a breakdown (about 0.3 s after the drop lands), fading within ~1.5 s." },
   fft: { signature: "ao.fft", description: "64 log-spaced band levels, 0..1, from ~30 Hz to ~16 kHz." },
   map: { signature: "ao.map(level, lo = 0, hi = 1)", description: "Maps a level name, or a function such as () => ao.hz(40, 100), onto lo..hi; returns a function Hydra re-reads every frame." },
   glide: { signature: "ao.glide(level, seconds = 1)", description: "Follows a level name, \"bpm\", or any function, fading each change in over about `seconds` instead of snapping: ao.glide(\"bpm\", 2). Returns a function Hydra re-reads every frame." },

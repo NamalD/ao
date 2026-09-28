@@ -28,6 +28,10 @@ export interface AudioFeatures {
   chroma: number[];
   /** The dominant pitch class, 0 (C) .. 11 (B). */
   key: number;
+  /** Section energy, 0..1: loudness and bass together, smoothed over ~0.25 s (sections.ts). */
+  energy?: number;
+  /** Drop pulse, 0..1: set to 1 when the music drops after a breakdown, fades within ~1.5 s. */
+  drop?: number;
   /** Detected tempo and beat count (tempo.ts); absent before capture starts. */
   tempo?: TempoState;
 }
