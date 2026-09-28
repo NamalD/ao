@@ -200,6 +200,15 @@ export const aoExamples: Record<string, Example> = {
   .kaleid(() => 2 + 8 * ao.mid)
   .out()`,
   high: `noise(() => 2 + 20 * ao.high).out()`,
+  energy: `osc(20, 0.1, 1)
+  .saturate(() => 2 * ao.energy)
+  .scale(() => 0.6 + ao.energy)
+  .out()`,
+  drop: `voronoi(8, 0.3)
+  .color(0.3, 0.2, 0.8)
+  .scale(() => 1 + 2 * ao.drop)
+  .add(solid(1, 1, 1), () => 0.6 * ao.drop)
+  .out()`,
   fft: `// ao.fft[i] is band i of 64, from low to high.
 shape(4, () => 0.5 * ao.fft[4]).scrollX(-0.3)
   .add(shape(4, () => 0.5 * ao.fft[24]))

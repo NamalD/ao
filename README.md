@@ -116,7 +116,9 @@ osc(20, 0.05, () => 1 + ao.bass)
 `ao.loudness` is the sustained level, `ao.impulse` a transient envelope that
 jumps on hits and decays within a fraction of a second, `ao.beat` a short
 onset pulse, `ao.bass`/`ao.mid`/`ao.high` band averages, and `ao.fft` 64
-log-spaced band levels. All run 0..1. `setFunction` registers custom GLSL
+log-spaced band levels. `ao.energy` follows how hard the music is going
+(loudness and bass together), falling in breakdowns, and `ao.drop` jumps to 1
+when the energy slams back after one, fading over a second or so. All run 0..1. `setFunction` registers custom GLSL
 functions that then chain like built-ins (see `sketches/aurora.js`).
 
 For finer control over the spectrum, `ao.hz(lo, hi)` averages any frequency
@@ -150,7 +152,8 @@ src(s0).modulate(osc(8), 0.02).out()
 ```
 
 Scenes get `iResolution`, `iTime`, `iTimeDelta`, `iFrame`, the audio levels as
-`aoLoudness`, `aoImpulse`, `aoBeat`, `aoBass`, `aoMid`, and `aoHigh`, the
+`aoLoudness`, `aoImpulse`, `aoBeat`, `aoBass`, `aoMid`, `aoHigh`,
+`aoEnergy`, and `aoDrop`, the
 tempo as `aoBpm`, `aoPhase` and `aoBar` (see [Tempo](#tempo)), and
 `aoFFT(x)` to sample the spectrum. `scale` renders at a fraction of the output
 resolution for heavy raymarchers, and `scale: "auto"` picks the fraction from
@@ -515,8 +518,8 @@ example.
 
 Ctrl+Shift+M (`m` with the editor hidden) shows a small meter in the top-right
 corner, so you can see what you're mapping instead of guessing: bars and
-values for `ao.loudness`, `ao.impulse`, `ao.beat`, `ao.bass`, `ao.mid` and
-`ao.high`, and the 64 bands of `ao.fft` with `ao.peak` (white) and
+values for `ao.loudness`, `ao.impulse`, `ao.beat`, `ao.bass`, `ao.mid`,
+`ao.high`, `ao.energy` and `ao.drop`, and the 64 bands of `ao.fft` with `ao.peak` (white) and
 `ao.centroid` (lilac) marked on the spectrum. It is an overlay on top of the
 window, not part of the visuals, and draws nothing while hidden. Ao remembers
 whether it was showing.

@@ -2,7 +2,7 @@ import type { AudioFeatures } from "../shared/features";
 import { peakPosition, centroidPosition } from "../shared/spectrum";
 import { ao } from "./audio";
 
-const LEVELS = ["loudness", "impulse", "beat", "bass", "mid", "high"] as const;
+const LEVELS = ["loudness", "impulse", "beat", "bass", "mid", "high", "energy", "drop"] as const;
 
 // Layout in CSS pixels.
 const WIDTH = 264, PAD = 10, ROW = 14, LABEL = 76, VALUE = 30;
@@ -70,7 +70,7 @@ export class Meter {
     const barX = PAD + LABEL, barW = WIDTH - PAD - VALUE - barX;
 
     LEVELS.forEach((name, i) => {
-      const y = PAD + i * ROW + ROW / 2, level = clamp01(f[name]);
+      const y = PAD + i * ROW + ROW / 2, level = clamp01(f[name] ?? 0);
       ctx.fillStyle = ink;
       ctx.globalAlpha = 0.75;
       ctx.fillText(`ao.${name}`, PAD, y);

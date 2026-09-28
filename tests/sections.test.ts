@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AudioFeatures, silentFeatures, SPECTRUM_BANDS } from "../src/shared/features";
-import { SectionDetector, SectionEvent } from "../src/shared/sections";
+import { DROP_FADE, EnergyTracker, SectionDetector, SectionEvent } from "../src/shared/sections";
 
 const RATE = 50; // feature frames a second, as the capture sends them
 
@@ -162,5 +162,46 @@ describe("SectionDetector", () => {
     const detector = new SectionDetector();
     const kinds = frames.map((f) => detector.push(f)?.kind).filter(Boolean);
     expect(kinds).toEqual(["breakdown", "drop"]);
+  });
+});
+
+describe("EnergyTracker", () => {
+  const song: Segment[] = [
+    steady(60),
+    { seconds: 16, loudness: [0.3, 0.3], bass: [0.1, 0.1], shape: noBass, beats: false },
+    steady(30),
+  ];
+
+  it("follows the energy: high in the music, low in the breakdown", () => {
+    const tracker = new EnergyTracker();
+    const energy = sequence(song).map((f) => ({ time: f.time, ...tracker.push(f) }));
+    const at = (t: number) => energy.find((e) => e.time >= t)!.energy;
+    expect(at(55)).toBeGreaterThan(0.5);
+    expect(at(70)).toBeLessThan(0.25);
+    // Back up within a second of the drop at 76 s.
+    expect(at(77)).toBeGreaterThan(0.5);
+    for (const e of energy) {
+      expect(e.energy).toBeGreaterThanOrEqual(0);
+      expect(e.energy).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("pulses drop to 1 on a drop, then fades it", () => {
+    const tracker = new EnergyTracker();
+    const values = sequence(song).map((f) => ({ time: f.time, ...tracker.push(f) }));
+    const fired = values.filter((v) => v.drop === 1);
+    expect(fired).toHaveLength(1);
+    expect(fired[0].time).toBeGreaterThan(76);
+    expect(fired[0].time).toBeLessThan(77);
+    // Nothing before the drop, not even at the breakdown.
+    expect(values.filter((v) => v.time < fired[0].time).every((v) => v.drop === 0)).toBe(true);
+    const later = (s: number) => values.find((v) => v.time >= fired[0].time + s)!.drop;
+    expect(later(DROP_FADE)).toBeCloseTo(Math.exp(-1), 1);
+    expect(later(3)).toBeLessThan(0.01);
+  });
+
+  it("never pulses through steady music", () => {
+    const tracker = new EnergyTracker();
+    expect(sequence([steady(120)]).every((f) => tracker.push(f).drop === 0)).toBe(true);
   });
 });

@@ -19,6 +19,8 @@ normalized to `0..1` and update as audio is captured.
 | `ao.bass` | `number` | Average energy below 250 Hz. |
 | `ao.mid` | `number` | Average energy from 250 Hz to 2 kHz. |
 | `ao.high` | `number` | Average energy above 2 kHz. |
+| `ao.energy` | `number` | Section energy: loudness and bass together, smoothed over about 0.25 seconds. Falls in breakdowns, jumps back on the drop. |
+| `ao.drop` | `number` | Pulse set to `1` when the energy jumps back after a breakdown (about 0.3 seconds after the drop lands), fading over about 1.5 seconds. `0` until a drop, which needs a breakdown first. |
 | `ao.fft` | `number[]` | 64 log-spaced band levels, from about 30 Hz to 16 kHz, low to high. |
 | `ao.peak` | `number` | Position of the loudest band, `0..1` from low to high; glides between bands. |
 | `ao.centroid` | `number` | Spectral centroid, `0..1`: the level-weighted mean position, a steady measure of brightness. |
@@ -62,7 +64,7 @@ osc(20, 0.05, () => 1 + ao.bass)
 ```
 
 The accepted level names are `"loudness"`, `"impulse"`, `"beat"`, `"bass"`,
-`"mid"`, `"high"`, `"peak"`, and `"centroid"`.
+`"mid"`, `"high"`, `"energy"`, `"drop"`, `"peak"`, and `"centroid"`.
 
 `ao.glide` fades a value that would otherwise jump, such as `ao.bpm` when the
 tempo is re-detected or tapped. It takes the same level names plus `"bpm"`, or
@@ -151,6 +153,7 @@ uniforms from Ao:
 | `iFrame` | `int` | Scene frame counter, starting at zero; it keeps counting across edits and restarts when the buffers clear. |
 | `aoLoudness`, `aoImpulse`, `aoBeat` | `float` | Overall level and transient envelopes. |
 | `aoBass`, `aoMid`, `aoHigh` | `float` | Average frequency band levels. |
+| `aoEnergy`, `aoDrop` | `float` | Section energy and drop pulse, as `ao.energy` and `ao.drop`. |
 | `aoBpm` | `float` | Tempo in beats per minute, as `ao.bpm`. |
 | `aoPhase` | `float` | `0..1` through the current beat, as `ao.phase`. |
 | `aoBar` | `float` | Beat within the bar, `0.0` to `3.0`, as `ao.bar`. |

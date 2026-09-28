@@ -101,6 +101,8 @@ uniform float aoBeat;
 uniform float aoBass;
 uniform float aoMid;
 uniform float aoHigh;
+uniform float aoEnergy;
+uniform float aoDrop;
 uniform float aoBpm;
 uniform float aoPhase;
 uniform float aoBar;
@@ -555,6 +557,8 @@ export class Scene {
     this.uniform("aoBass", audio.bass);
     this.uniform("aoMid", audio.mid);
     this.uniform("aoHigh", audio.high);
+    this.uniform("aoEnergy", audio.energy ?? 0);
+    this.uniform("aoDrop", audio.drop ?? 0);
     this.uniform("aoBpm", clock.bpm);
     this.uniform("aoPhase", phaseNow());
     this.uniform("aoBar", barNow());

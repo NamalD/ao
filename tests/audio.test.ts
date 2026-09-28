@@ -39,6 +39,15 @@ describe("ao", () => {
     expect(ao.glide(() => 3, 0)()).toBe(3);
   });
 
+  it("reads energy and drop, 0 before capture sends them", () => {
+    expect(ao.energy).toBe(0);
+    expect(ao.drop).toBe(0);
+    updateAudio({ ...silentFeatures(1), energy: 0.7, drop: 0.4 });
+    expect(ao.energy).toBe(0.7);
+    expect(ao.drop).toBe(0.4);
+    expect(ao.map("drop", 1, 3)()).toBeCloseTo(1.8, 12);
+  });
+
   it("documents every public member", () => {
     const members = Object.keys(Object.getOwnPropertyDescriptors(ao)).filter((key) => key !== "features");
     expect(Object.keys(aoDocs).sort()).toEqual(members.sort());
