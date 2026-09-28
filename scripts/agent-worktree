@@ -5,7 +5,8 @@ usage() {
   cat <<'EOF'
 Usage: scripts/agent-worktree {create|list|remove|prune} [name]
 
-Feature worktrees live in .worktrees/<name> on branch agent/<name>.
+Feature worktrees live in .worktrees/<name> on branch agent/<name>,
+branched from master's last commit.
 EOF
 }
 
@@ -26,17 +27,9 @@ require_name() {
   fi
 }
 
-require_primary_clean() {
-  if [[ -n $(git status --porcelain) ]]; then
-    echo "Primary checkout has uncommitted changes; commit or stash them before creating a worktree." >&2
-    exit 1
-  fi
-}
-
 case $command in
   create)
     require_name
-    require_primary_clean
     target="$worktree_root/$name"
     branch="agent/$name"
     if [[ -e $target ]]; then
@@ -48,7 +41,9 @@ case $command in
       exit 1
     fi
     mkdir -p "$worktree_root"
-    git worktree add -b "$branch" "$target" HEAD
+    # Branch from master's last commit: uncommitted edits in the primary
+    # checkout stay there, and other branches' work isn't carried along.
+    git worktree add -b "$branch" "$target" master
     ;;
   list)
     git worktree list
