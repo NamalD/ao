@@ -417,8 +417,8 @@ osc(20, 0.1, 1)
   .out()`,
   },
   {
-    name: "bpm", signature: "bpm = 30",
-    description: "Tempo at which array arguments step to their next value. The explorer resets it to 30 as you move on.",
+    name: "bpm", signature: "bpm = ao.bpm",
+    description: "Tempo at which array arguments step to their next value. Ao keeps it on ao.bpm, so arrays step on the beat; assign it to take over until the sketch runs again. Each example here starts back on ao.bpm.",
     example: `bpm = 120
 shape([3, 4, 5, 6], 0.4).out()`,
   },

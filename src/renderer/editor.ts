@@ -320,7 +320,7 @@ const globalDocs: Record<string, { type: string; doc: FunctionDoc }> = {
   hush: { type: "function", doc: makeDoc("hush", [], "Clears all outputs, blanking the screen.", "hush()") },
   setFunction: { type: "function", doc: makeDoc("setFunction", [{ name: "definition", description: "{ name, type, inputs, glsl }, with type 'src', 'coord', 'color', 'combine' or 'combineCoord'." }], "Registers a custom GLSL function that then chains like a built-in.", "setFunction(definition)") },
   speed: { type: "variable", doc: makeDoc("speed", [], "Multiplier for Hydra's clock; 1 is normal speed.", "speed") },
-  bpm: { type: "variable", doc: makeDoc("bpm", [], "Tempo at which array arguments step to their next value.", "bpm") },
+  bpm: { type: "variable", doc: makeDoc("bpm", [], "Tempo at which array arguments step to their next value. Follows ao.bpm unless the sketch assigns it.", "bpm") },
   time: { type: "variable", doc: makeDoc("time", [], "Hydra's clock in seconds, scaled by speed.", "time") },
   mouse: { type: "variable", doc: makeDoc("mouse", [], "Pointer position in pixels: mouse.x, mouse.y.", "mouse") },
   width: { type: "variable", doc: makeDoc("width", [], "Output width in pixels.", "width") },
