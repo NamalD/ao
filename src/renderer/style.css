@@ -98,10 +98,14 @@ html, body {
 #status { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; opacity: 0.8; }
 #status.error { color: var(--error); opacity: 1; }
 #fps { opacity: 0.6; }
+/* Moon and stars while the night fade is dimming the visuals. */
+#night-indicator { display: flex; color: #d7c7ff; opacity: 0.75; }
+#night-indicator[hidden] { display: none; }
+#night-indicator svg { fill: currentColor; }
 
 body.ambient #editor { display: none; }
 body.ambient #bar { background: none; }
-body.ambient #sketch, body.ambient #vim-mode, body.ambient #fps:not(.shown) { display: none; }
+body.ambient #sketch, body.ambient #vim-mode, body.ambient #night-indicator, body.ambient #fps:not(.shown) { display: none; }
 body.ambient #status:not(.error) { display: none; }
 
 #help {

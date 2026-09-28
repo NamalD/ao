@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  defaultNight, describeNight, nextNightMode, nightBrightness, nightLevel, nightSpeed,
+  defaultNight, describeNight, nextNightMode, nightBrightness, nightIndicator, nightLevel, nightSpeed,
   NightSettings, normalizeNight, parseClock,
 } from "../src/shared/night";
 
@@ -133,5 +133,19 @@ describe("normalizeNight", () => {
   it("uses the given fallback for fields it rejects", () => {
     const current = night({ mode: "on", brightness: 0.2 });
     expect(normalizeNight({ brightness: "x" }, current)).toEqual(current);
+  });
+});
+
+describe("nightIndicator", () => {
+  it("is absent by day, and whenever the fade is off", () => {
+    expect(nightIndicator(night(), at(12))).toBeUndefined();
+    expect(nightIndicator(night({ mode: "off" }), at(2))).toBeUndefined();
+  });
+  it("shows through a scheduled night, easing at the edges", () => {
+    expect(nightIndicator(night(), at(2))).toBe("night fade until 07:00: 40% brightness");
+    expect(nightIndicator(night(), at(22, 10))).toMatch(/^night fade until 07:00: \d+% brightness, easing$/);
+  });
+  it("shows at any hour when forced on", () => {
+    expect(nightIndicator(night({ mode: "on", brightness: 0.25 }), at(12))).toBe("night fade on: 25% brightness");
   });
 });

@@ -49,7 +49,7 @@ installRuntimeErrorReporting(runtimeErrors);
 // --- Rendering -------------------------------------------------------------
 
 const canvas = $("stage") as HTMLCanvasElement;
-const night = new NightFade(canvas);
+const night = new NightFade(canvas, $("night-indicator"));
 const meter = new Meter(document.body);
 // #stage's box is the visuals' area: the window, or right of the code explorer.
 const pixelSize = (): [number, number] => [Math.round((canvas.clientWidth || innerWidth) * devicePixelRatio), Math.round((canvas.clientHeight || innerHeight) * devicePixelRatio)];
