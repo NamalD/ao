@@ -1,6 +1,6 @@
 /**
- * Scrubbable numbers: Alt+scroll over a numeric literal nudges it, Alt+drag
- * scrubs it horizontally, and the surrounding code re-runs as it changes.
+ * Scrubbable numbers: Alt+scroll or Alt+drag over a numeric literal, or
+ * Alt+Up/Down at the cursor, nudges it and re-runs the surrounding code.
  * Shift makes each step ten times coarser. A whole gesture undoes as one step.
  */
 import { isolateHistory } from "@codemirror/commands";
@@ -106,6 +106,7 @@ export function scrubbing(run: (code: string) => void): ReturnType<typeof Prec.h
   let view: EditorView | null = null;
   let wheelTotal = 0;
   let wheelTimer: ReturnType<typeof setTimeout> | undefined;
+  let keyboardGesture = false;
 
   const rerun = throttle(() => {
     if (!view || !gesture) return;
@@ -124,6 +125,17 @@ export function scrubbing(run: (code: string) => void): ReturnType<typeof Prec.h
     return true;
   };
 
+  const beginAtCursor = (target: EditorView): boolean => {
+    finish();
+    const span = literalAt(target.state, target.state.selection.main.head);
+    if (!span) return false;
+    view = target;
+    gesture = new ScrubGesture(target.state, span);
+    keyboardGesture = true;
+    target.dom.classList.add("cm-scrubbing");
+    return true;
+  };
+
   const move = (steps: number) => {
     if (!view || !gesture) return;
     const spec = gesture.move(view.state, steps);
@@ -135,6 +147,7 @@ export function scrubbing(run: (code: string) => void): ReturnType<typeof Prec.h
 
   function finish() {
     clearTimeout(wheelTimer);
+    keyboardGesture = false;
     wheelTotal = 0;
     if (view && gesture) {
       const spec = gesture.end();
@@ -161,6 +174,21 @@ export function scrubbing(run: (code: string) => void): ReturnType<typeof Prec.h
   const drag = { remainder: 0 };
 
   return Prec.highest(EditorView.domEventHandlers({
+    keydown(e, target) {
+      const arrow = e.key === "ArrowUp" || e.key === "ArrowDown";
+      if (!arrow || !e.altKey || e.ctrlKey || e.metaKey) {
+        if (keyboardGesture) finish();
+        return false;
+      }
+      if (!keyboardGesture || !gesture?.current(target.state) || view !== target) {
+        if (!beginAtCursor(target)) return false;
+      }
+      e.preventDefault();
+      clearTimeout(wheelTimer);
+      wheelTimer = setTimeout(finish, WHEEL_IDLE);
+      move((e.key === "ArrowUp" ? 1 : -1) * stepMultiplier(e.shiftKey));
+      return true;
+    },
     wheel(e, target) {
       if (!e.altKey || e.ctrlKey || e.metaKey) return false;
       // Keep scrubbing the same literal while the wheel keeps turning.
@@ -182,6 +210,7 @@ export function scrubbing(run: (code: string) => void): ReturnType<typeof Prec.h
       return true;
     },
     mousedown(e, target) {
+      if (keyboardGesture) finish();
       if (!e.altKey || e.button !== 0 || e.ctrlKey || e.metaKey) return false;
       if (!begin(target, e.clientX, e.clientY)) return false;
       // Claim the press: no selection, no vim visual mode, no text drag.

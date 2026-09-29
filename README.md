@@ -29,6 +29,7 @@ past 1 MB the log moves to `ao.log.1`.
 | Ctrl+S, `:w` | save the sketch |
 | `:w <name>`, `:w! <name>` | save as `sketches/<name>.js` and rename the sketch (`!` replaces an existing one) |
 | Alt+scroll, Alt+drag | scrub the number under the pointer; Shift steps ten times coarser |
+| Alt+Up / Alt+Down | scrub the number at the cursor; Shift steps ten times coarser |
 | Alt+R | remix the numbers in the block under the cursor |
 | Ctrl+N | create a new sketch |
 | Ctrl+PgUp / Ctrl+PgDn | previous / next sketch, crossfading |
@@ -85,8 +86,9 @@ autosave saves it. Code that doesn't parse is left as you wrote it, and so is
 the inside of `glsl:` strings. Scrubbing and remix don't format. Set `"format": false` in
 [`settings.json`](#settings) to turn this off.
 
-**Scrubbing and remix.** Hold Alt and scroll over a number, or Alt+drag it
-sideways, and the block around it re-runs as it changes. Each step is the
+**Scrubbing and remix.** Hold Alt and scroll over a number, Alt+drag it
+sideways, or press Alt+Up/Down with the cursor on a number, and the block around
+it re-runs as it changes. Each step is the
 number's last decimal place, so `0.05` moves by `0.01` and `10` by `1`; write
 `0.050` for finer steps, or hold Shift for steps ten times coarser. Numbers
 can cross zero. Alt+R remixes the block under the cursor instead: each number
@@ -94,7 +96,8 @@ moves 10–40% up or down, keeping its sign and decimal places, and integers
 stay integers. Both work on GLSL floats inside `setFunction`'s `glsl:`
 strings too, re-running the whole call; remix leaves GLSL integers (loop counts,
 indices) alone, and neither touches other strings or comments. A whole scrub
-gesture, or a whole remix, is one undo step: `u` or Ctrl+Z brings the exact
+scrub gesture (including a run of Alt+Up/Down presses), or a whole remix, is
+one undo step: `u` or Ctrl+Z brings the exact
 text back, and autosave then saves that too.
 
 If a run fails, the previous visuals keep going and the error shows in the
