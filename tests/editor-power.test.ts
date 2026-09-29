@@ -4,7 +4,7 @@ import type { EditorView } from "@codemirror/view";
 import { describe, expect, it, vi } from "vitest";
 import { createEditorState, parseWriteArgs, runCommand, runCommandRange, writeCommand } from "../src/renderer/editor";
 import { remix } from "../src/renderer/remix";
-import { ScrubGesture } from "../src/renderer/scrub";
+import { ScrubGesture, stepMultiplier } from "../src/renderer/scrub";
 import { literalAt } from "../src/renderer/numbers";
 import { SketchWriter } from "../src/renderer/sketch-writer";
 
@@ -75,6 +75,22 @@ describe("scrub gestures", () => {
     state = command(state, undo);
     expect(state.doc.toString()).toBe("a-2");
     expect(command(state, undo).doc.toString()).toBe("a-");
+  });
+
+  it("groups repeated fine and Shift-coarse steps into one undo event", () => {
+    let state = createEditorState("osc(0.05)", actions());
+    const cursor = 5;
+    const gesture = new ScrubGesture(state, literalAt(state, cursor)!);
+    for (const steps of [1, stepMultiplier(true), -1]) {
+      const spec = gesture.move(state, steps);
+      if (spec) state = state.update(spec).state;
+      gesture.applied(state);
+    }
+    const end = gesture.end();
+    if (end) state = state.update(end).state;
+
+    expect(state.doc.toString()).toBe("osc(0.15)");
+    expect(command(state, undo).doc.toString()).toBe("osc(0.05)");
   });
 
   it("keeps separate gestures as separate undo steps", () => {
