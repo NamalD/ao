@@ -21,10 +21,9 @@ check their contents. When you change a sketch, the formatter, or what a
 deck's scope provides, also run `make check-sketches`, and fix what it reports
 in sketches you touched.
 
-The backlog lives in `tracker` (in `~/code/tracker`), not in a file. Run
-`tracker item list` from this repo to see open work, and `tracker --help` for
-the rest (`tracker item add --section P1 "..."`, `tracker item done <id>`, …).
-Refer to items by ID (`#42`) in commits and conversation.
+The backlog lives in `tracker`, not in a file: `tracker brief` shows open work,
+and `tracker --help` covers the rest. Refer to items by ID (`#42`) in commits
+and conversation.
 
 Check visual changes with `make screenshot SKETCH=<name>`, which renders
 offscreen with synthetic audio, rather than assuming a shader looks right.
