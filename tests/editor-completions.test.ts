@@ -4,7 +4,7 @@ import { EditorState } from "@codemirror/state";
 import hydraFunctions from "hydra-synth/src/glsl/glsl-functions.js";
 import { aoHydraFunctions } from "../src/renderer/audio-sources";
 import { describe, expect, it } from "vitest";
-import { ao, aoDocs } from "../src/renderer/audio";
+import { ao, aoDocs, levelArguments, levels } from "../src/renderer/audio";
 import {
   aoMemberDocs, chainMethods, functionDoc, generators, hydraCompletions, hydraDocs, memberCompletions,
   publicAoMembers, solidMethods, solidShapeNames, synonymCompletions, topLevelCompletions,
@@ -269,5 +269,41 @@ describe("level names for ao.map, ao.fit and ao.glide", () => {
     expect(completionsAt("ao.map(() => b|)") ?? []).not.toContain("bass");
     expect(completionsAt("ao.hz(|)")).toBeNull();
     expect(completionsAt("osc().map(|)")).toBeNull();
+  });
+});
+
+describe("level names stay complete", () => {
+  /** Numeric ao readings that aren't 0..1, so the helpers don't take them as levels, and why. */
+  const notLevels: Record<string, string> = {
+    time: "seconds since capture started",
+    balance: "-1..1",
+    key: "0..11; ao.fit takes it by name",
+    bpm: "beats per minute; ao.fit and ao.glide take it by name",
+    bar: "0..3",
+  };
+
+  it("takes every numeric ao reading as a level, or says why not", () => {
+    const readings = publicAoMembers(ao).filter(({ name, method }) => !method && typeof ao[name as keyof typeof ao] === "number");
+    const unclassified = readings.map(({ name }) => name).filter((name) => !(levels as readonly string[]).includes(name) && !(name in notLevels));
+    expect(unclassified, "add each to levels in audio.ts, or to notLevels here with a reason").toEqual([]);
+    for (const name of Object.keys(notLevels)) expect(levels, name).not.toContain(name);
+  });
+
+  it("lists level names for exactly the ao helpers that take a level", () => {
+    const takesLevel = Object.entries(aoDocs).filter(([, doc]) => /^ao\.\w+\(level\b/.test(doc.signature)).map(([name]) => name);
+    expect(Object.keys(levelArguments).sort()).toEqual(takesLevel.sort());
+  });
+
+  it("offers each level name with its ao reading's description", () => {
+    for (const [helper, names] of Object.entries(levelArguments)) {
+      const state = EditorState.create({ doc: `ao.${helper}("")`, extensions: [javascript()] });
+      const pos = helper.length + 5;
+      const options = hydraCompletions(new CompletionContext(state, pos, false))!.options;
+      expect(labels(options), helper).toEqual([...names]);
+      for (const option of options) {
+        expect(publicAoMembers(ao).map((m) => m.name), option.label).toContain(option.label);
+        expect(option.info, `${helper}: ${option.label}`).toBe(aoDocs[option.label].description);
+      }
+    }
   });
 });
