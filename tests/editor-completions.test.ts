@@ -21,6 +21,20 @@ function completionsAt(source: string, explicit = false): string[] | null {
   return result && labels(result.options);
 }
 
+/** Details of the options completion offers at `|` in `source`. */
+function detailsAt(source: string): (string | undefined)[] {
+  const pos = source.indexOf("|");
+  const state = EditorState.create({ doc: source.slice(0, pos) + source.slice(pos + 1), selection: { anchor: pos }, extensions: [javascript()] });
+  return hydraCompletions(new CompletionContext(state, pos, true))?.options.map((option) => option.detail) ?? [];
+}
+
+/** The detail completion shows for `label` at `|` in `source`. */
+function detailOf(source: string, label: string): string | undefined {
+  const pos = source.indexOf("|");
+  const state = EditorState.create({ doc: source.slice(0, pos) + source.slice(pos + 1), selection: { anchor: pos }, extensions: [javascript()] });
+  return hydraCompletions(new CompletionContext(state, pos, true))?.options.find((option) => option.label === label)?.detail;
+}
+
 describe("Hydra documentation", () => {
   it("describes every built-in GLSL function and Ao addition, and each of its inputs", () => {
     for (const fn of [...hydraFunctions(), ...aoHydraFunctions]) {
@@ -130,6 +144,49 @@ describe("member completion follows what is before the dot", () => {
     expect(completionsAt("const s = osc()\nconst f = (s) => s.|")).toBeNull();
   });
 
+  it("follows a call to the sketch's own function to what it returns", () => {
+    expect(completionsAt("const ripples = (a, b) => osc(a).kaleid(b)\nripples(1, 2).|")).toContain("modulateHue");
+    expect(completionsAt("const blob = () => { return sphere() }\nblob().|")).toContain("spikes");
+    expect(completionsAt("function blob(big) {\n  if (big) return sphere(1)\n  return box()\n}\nblob().|")).toContain("spikes");
+    expect(completionsAt("const lib = { blob: () => sphere() }\nlib.blob().|")).toContain("spikes");
+    expect(completionsAt("function odd() { if (x) return sphere(); return osc() }\nodd().|")).toBeNull();
+  });
+
+  it("stops at a function that calls itself", () => {
+    expect(completionsAt("const grow = (n) => (n > 0 ? grow(n - 1).spin() : sphere())\ngrow(3).|")).toContain("spikes");
+    expect(completionsAt("const loop = () => loop()\nloop().|")).toBeNull();
+  });
+
+  it("follows both branches of a conditional that agree", () => {
+    expect(completionsAt("const s = ao.beat > 0.5 ? sphere() : box()\ns.|")).toContain("spikes");
+    expect(completionsAt("const s = ao.beat > 0.5 ? sphere() : osc()\ns.|")).toBeNull();
+  });
+
+  it("follows arrays and objects to the chains they hold", () => {
+    const shapes = "const shapes = [sphere(), box(), torus()]\n";
+    expect(completionsAt(`${shapes}shapes[0].|`)).toContain("spikes");
+    expect(completionsAt(`${shapes}shapes.map((s) => s.|)`)).toContain("spikes");
+    expect(completionsAt(`${shapes}shapes.filter((s, i) => i > 0).forEach((s) => s.|)`)).toContain("spikes");
+    expect(completionsAt(`${shapes}shapes.reduce((a, b) => a.|)`)).toContain("spikes");
+    expect(completionsAt(`${shapes}const all = shapes.reduce((a, b) => a.add(b))\nall.|`)).toContain("spikes");
+    expect(completionsAt("const rings = Array.from({ length: 5 }, (_, i) => torus(0.2 * i))\nrings[2].|")).toContain("spikes");
+    expect(completionsAt("const mixed = [sphere(), osc()]\nmixed[0].|")).toBeNull();
+    expect(completionsAt("const scene = { ball: sphere(), wash: osc() }\nscene.ball.|")).toContain("spikes");
+    expect(completionsAt("const ball = sphere()\nconst scene = { ball }\nscene.ball.|")).toContain("spikes");
+  });
+
+  it("offers an object literal's keys, described by what each holds", () => {
+    const scene = "const scene = { ball: sphere(), wash: osc(), size: 3, make: () => box() }\n";
+    expect(completionsAt(`${scene}scene.|`)).toEqual(["ball", "wash", "size", "make"]);
+    expect(detailsAt(`${scene}scene.|`)).toEqual(["solid", "Hydra chain", "number", "→ solid"]);
+  });
+
+  it("treats a named function passed to a solid's pipe as receiving the solid", () => {
+    expect(completionsAt("const spikey = (s, n) => s.sp|ikes(n)\ntorus().pipe(spikey, 0.4)")).toContain("spin");
+    expect(completionsAt("function spikey(s) { return s.| }\ntorus().pipe(spikey)")).toContain("spikes");
+    expect(completionsAt("const spikey = (s) => s.sp|ikes()\nosc().pipe(spikey)")).toBeNull();
+  });
+
   it("offers a built-in namespace's own members", () => {
     const math = completionsAt("Math.s|");
     expect(math).toEqual(expect.arrayContaining(["sin", "sqrt", "PI"]));
@@ -138,6 +195,33 @@ describe("member completion follows what is before the dot", () => {
 
   it("offers nothing while naming a new variable", () => {
     expect(completionsAt("const os|")).toBeNull();
+  });
+
+  it("offers the sketch's own names, described by what they hold", () => {
+    const sketch = "const ball = sphere()\nconst wave = () => osc()\nconst rings = [torus(), torus()]\nenergy = () => ao.bass\n|";
+    const options = completionsAt(sketch, true);
+    expect(options).toEqual(expect.arrayContaining(["ball", "wave", "rings", "energy"]));
+    expect(detailOf(sketch, "ball")).toBe("solid");
+    expect(detailOf(sketch, "wave")).toBe("→ Hydra chain");
+    expect(detailOf(sketch, "rings")).toBe("solid array");
+    expect(detailOf(sketch, "energy")).toBe("sketch function");
+    expect(detailOf("const out = o1\no|", "out")).toBe("Hydra output");
+    expect(detailOf("let spin = 0.1\ns|", "spin")).toBe("number");
+  });
+
+  it("offers a name only where it can be seen, and what it holds there", () => {
+    expect(completionsAt("function f() { const inner = sphere() }\nin|")).not.toContain("inner");
+    expect(completionsAt("function f(size) { const inner = sphere()\n  in| }")).toEqual(expect.arrayContaining(["inner", "size"]));
+    expect(detailOf("torus().pipe((s, n) => s.add(s|))", "s")).toBe("solid");
+    expect(detailOf("let ball = osc()\nball = sphere()\nb|", "ball")).toBe("solid");
+  });
+
+  it("offers a declared name in place of the built-in it hides, and not a built-in a sketch assigns", () => {
+    const shape = completionsAt("const shape = sphere()\nsha|")!;
+    expect(shape.filter((label) => label === "shape")).toHaveLength(1);
+    expect(detailOf("const shape = sphere()\nsha|", "shape")).toBe("solid");
+    expect(detailOf("bpm = 120\nbp|", "bpm")).toBe(detailOf("bp|", "bpm"));
+    expect(completionsAt("bpm = 120\nbp|")!.filter((label) => label === "bpm")).toHaveLength(1);
   });
 
   it("offers solid shapes at the top level and documents every solid function", () => {

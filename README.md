@@ -100,6 +100,14 @@ scrub gesture (including a run of Alt+Up/Down presses), or a whole remix, is
 one undo step: `u` or Ctrl+Z brings the exact
 text back, and autosave then saves that too.
 
+**Completion** offers the sketch's own names beside Hydra's and Ao's, each
+labelled with what it holds: `solid`, `Hydra chain`, `→ solid` for a function
+returning one, and so on. After a `.` it offers what that value has, following
+variables, calls to your own functions, conditionals, array elements
+(`shapes[0]`, `shapes.map((s) => s.…)`), object literals' keys, and a function
+you hand to a solid's `pipe` by name. Where the kinds disagree, as in
+`[sphere(), osc()]`, it offers nothing rather than guess.
+
 If a run fails, the previous visuals keep going and the error shows in the
 status bar. Errors while the sketch runs, such as a Hydra argument function,
 `update`, or a solid's argument that throws, a timer callback, or a rejected
