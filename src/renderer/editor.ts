@@ -232,6 +232,35 @@ export type Receiver = "hydra" | "solid" | "ao" | "source" | "output";
 
 const text = (state: EditorState, node: SyntaxNode) => state.sliceDoc(node.from, node.to);
 
+const functionNodes = ["ArrowFunction", "FunctionExpression", "FunctionDeclaration"];
+/** Array methods whose callback's first parameter is an element. */
+const elementCallbacks = ["map", "flatMap", "forEach", "filter", "find", "findLast", "findIndex", "some", "every"];
+/** Array methods returning an array of the same elements. */
+const sameElements = ["filter", "slice", "reverse", "sort", "toReversed", "toSorted", "concat"];
+/** Array methods returning one of its elements. */
+const oneElement = ["find", "findLast", "at", "pop", "shift"];
+/** How deep inference follows an expression before giving up. */
+const MAX_DEPTH = 60;
+/** What inference is working out, so a function reached again from inside itself counts as unknown. */
+const evaluating = new Set<string>();
+
+/** The one kind the known kinds in `kinds` agree on; undefined if none is known, or they differ. */
+function agree(kinds: (Receiver | undefined)[]): Receiver | undefined {
+  const known = new Set(kinds.filter((kind) => kind !== undefined));
+  return known.size === 1 ? [...known][0] : undefined;
+}
+
+/** `work()`, unless the same `key` is already being worked out further up. */
+function once<T>(key: string, work: () => T | undefined): T | undefined {
+  if (evaluating.has(key)) return undefined;
+  evaluating.add(key);
+  try {
+    return work();
+  } finally {
+    evaluating.delete(key);
+  }
+}
+
 /** The expression `name` was last given before `pos`, by `const name = …` or `name = …`. */
 function assignedValue(state: EditorState, name: string, pos: number): SyntaxNode | null {
   let value: SyntaxNode | null = null;
@@ -249,21 +278,169 @@ function assignedValue(state: EditorState, name: string, pos: number): SyntaxNod
   return value;
 }
 
+/** The function `node` is or names: one written in place, one assigned to the variable, or a `function` declaration. */
+function functionAt(state: EditorState, node: SyntaxNode | null): SyntaxNode | null {
+  if (!node) return null;
+  if (functionNodes.includes(node.name)) return node;
+  if (node.name !== "VariableName") return null;
+  const name = text(state, node);
+  const value = assignedValue(state, name, node.from);
+  if (value) return functionNodes.includes(value.name) ? value : null;
+  let declared: SyntaxNode | null = null;
+  syntaxTree(state).iterate({
+    enter(ref) {
+      if (declared) return false;
+      if (ref.name === "FunctionDeclaration" && text(state, ref.node.getChild("VariableDefinition") ?? ref.node) === name) declared = ref.node;
+    },
+  });
+  return declared;
+}
+
+/** What calling `fn` gives: its expression body, or what its `return`s agree on. */
+function returnOf(state: EditorState, fn: SyntaxNode, depth: number): Receiver | undefined {
+  return once(`return ${fn.from}`, () => {
+    const body = fn.lastChild;
+    if (!body) return undefined;
+    if (body.name !== "Block") return receiverOf(state, body, depth + 1);
+    const kinds: (Receiver | undefined)[] = [];
+    const visit = (node: SyntaxNode) => {
+      for (let child = node.firstChild; child; child = child.nextSibling) {
+        if (child.name === "ReturnStatement") kinds.push(receiverOf(state, child.firstChild?.nextSibling ?? null, depth + 1));
+        else if (!functionNodes.includes(child.name)) visit(child);
+      }
+    };
+    visit(body);
+    return agree(kinds);
+  });
+}
+
+/** The name `fn` is given, by `function name`, `const name = …` or `name = …`. */
+function functionName(state: EditorState, fn: SyntaxNode): string | undefined {
+  if (fn.name === "FunctionDeclaration") {
+    const name = fn.getChild("VariableDefinition");
+    return name ? text(state, name) : undefined;
+  }
+  const target = fn.prevSibling?.name === "Equals" ? fn.prevSibling.prevSibling : null;
+  return target && ["VariableDefinition", "VariableName"].includes(target.name) ? text(state, target) : undefined;
+}
+
 /**
- * A parameter of a function around `node` named `name`: a solid when it is
- * the first parameter of an arrow passed to a solid's pipe, else unknown.
+ * What the callback `arg`, an argument of a call, receives as parameter
+ * `index`: a solid from a solid's pipe, and an element from an array's map,
+ * forEach, reduce and the like.
  */
+function callbackParameter(state: EditorState, arg: SyntaxNode, index: number, depth: number): Receiver | undefined {
+  const args = arg.parent;
+  const callee = args?.parent?.name === "CallExpression" ? args.parent.firstChild : null;
+  if (!args || callee?.name !== "MemberExpression" || callee.lastChild?.name !== "PropertyName") return undefined;
+  if (argumentIndex(args, arg.from) !== 0) return undefined;
+  const method = text(state, callee.lastChild);
+  if (method === "pipe") return index === 0 && receiverOf(state, callee.firstChild, depth + 1) === "solid" ? "solid" : undefined;
+  if (elementCallbacks.includes(method)) return index === 0 ? elementsOf(state, callee.firstChild, depth + 1) : undefined;
+  if (method !== "reduce" && method !== "reduceRight") return undefined;
+  const initial = listed(args)[1];
+  if (index === 0 && initial) return receiverOf(state, initial, depth + 1);
+  return index <= 1 ? elementsOf(state, callee.firstChild, depth + 1) : undefined;
+}
+
+/**
+ * What `fn` receives as parameter `index`, from where it is passed: in place
+ * as a callback, or by name, as with `torus().pipe(spikey)`, where every
+ * such use must agree.
+ */
+function parameterOf(state: EditorState, fn: SyntaxNode, index: number, depth: number): Receiver | undefined {
+  if (fn.parent?.name === "ArgList") return callbackParameter(state, fn, index, depth);
+  const name = functionName(state, fn);
+  if (!name) return undefined;
+  return once(`parameter ${index} ${fn.from}`, () => {
+    const kinds: (Receiver | undefined)[] = [];
+    syntaxTree(state).iterate({
+      enter(ref) {
+        if (ref.name === "VariableName" && ref.node.parent?.name === "ArgList" && text(state, ref.node) === name) {
+          kinds.push(callbackParameter(state, ref.node, index, depth));
+        }
+      },
+    });
+    return agree(kinds);
+  });
+}
+
+/** A parameter named `name` of a function around `node`: what it receives, or null when `name` isn't one. */
 function parameter(state: EditorState, node: SyntaxNode, name: string, depth: number): Receiver | undefined | null {
   for (let fn = node.parent; fn; fn = fn.parent) {
-    if (!["ArrowFunction", "FunctionExpression", "FunctionDeclaration"].includes(fn.name)) continue;
+    if (!functionNodes.includes(fn.name)) continue;
     const params = fn.getChild("ParamList")?.getChildren("VariableDefinition") ?? [];
     const index = params.findIndex((param) => text(state, param) === name);
-    if (index < 0) continue;
-    const call = fn.parent?.name === "ArgList" ? fn.parent.parent : null;
-    const callee = call?.name === "CallExpression" ? call.firstChild : null;
-    const piped = index === 0 && callee?.name === "MemberExpression" && callee.lastChild && text(state, callee.lastChild) === "pipe"
-      && receiverOf(state, callee.firstChild, depth + 1) === "solid";
-    return piped ? "solid" : undefined;
+    if (index >= 0) return parameterOf(state, fn, index, depth);
+  }
+  return null;
+}
+
+/** The expressions a list such as an array literal or argument list holds, leaving out punctuation and comments. */
+function listed(node: SyntaxNode): SyntaxNode[] {
+  const items: SyntaxNode[] = [];
+  for (let child = node.firstChild; child; child = child.nextSibling) {
+    if (!["[", "]", "(", ")", ",", "LineComment", "BlockComment"].includes(child.name)) items.push(child);
+  }
+  return items;
+}
+
+/** What the elements of the array at `node` hold, when they agree. */
+function elementsOf(state: EditorState, node: SyntaxNode | null, depth: number): Receiver | undefined {
+  if (!node || depth > MAX_DEPTH) return undefined;
+  if (node.name === "ParenthesizedExpression") return elementsOf(state, node.firstChild?.nextSibling ?? null, depth + 1);
+  if (node.name === "ArrayExpression") {
+    const elements = listed(node);
+    return elements.some((element) => element.name === "Spread") ? undefined : agree(elements.map((element) => receiverOf(state, element, depth + 1)));
+  }
+  if (node.name === "VariableName") {
+    const name = text(state, node);
+    if (parameter(state, node, name, depth) !== null) return undefined;
+    return elementsOf(state, assignedValue(state, name, node.from), depth + 1);
+  }
+  if (node.name !== "CallExpression") return undefined;
+  const callee = node.firstChild;
+  const args = node.getChild("ArgList");
+  if (callee?.name !== "MemberExpression" || !args) return undefined;
+  const method = text(state, callee.lastChild ?? callee);
+  const [first, second] = listed(args);
+  // Array.from({ length: 5 }, (_, i) => sphere(0.2 * i))
+  if (text(state, callee) === "Array.from") {
+    const fn = functionAt(state, second ?? null);
+    return fn ? returnOf(state, fn, depth + 1) : elementsOf(state, first ?? null, depth + 1);
+  }
+  if (sameElements.includes(method)) return elementsOf(state, callee.firstChild, depth + 1);
+  if (method === "map" || method === "flatMap") {
+    const fn = functionAt(state, first ?? null);
+    return fn ? returnOf(state, fn, depth + 1) : undefined;
+  }
+  return undefined;
+}
+
+/** The value given to property `name` of the object literal at `node`, followed through variables. */
+function propertyValue(state: EditorState, node: SyntaxNode | null, name: string, depth: number): SyntaxNode | null {
+  const object = objectAt(state, node, depth);
+  for (const property of object?.getChildren("Property") ?? []) {
+    const key = property.firstChild;
+    if (key?.name !== "PropertyDefinition" || text(state, key) !== name) continue;
+    // Shorthand, { shape }, holds the variable's value.
+    return key.nextSibling?.name === ":" ? key.nextSibling.nextSibling : key.nextSibling ? null : assignedValue(state, name, key.from);
+  }
+  return null;
+}
+
+/** The object literal the expression at `node` holds, if any. */
+function objectAt(state: EditorState, node: SyntaxNode | null, depth = 0): SyntaxNode | null {
+  if (!node || depth > MAX_DEPTH) return null;
+  if (node.name === "ObjectExpression") return node;
+  if (node.name === "ParenthesizedExpression") return objectAt(state, node.firstChild?.nextSibling ?? null, depth + 1);
+  if (node.name === "VariableName") {
+    const name = text(state, node);
+    if (parameter(state, node, name, depth) !== null) return null;
+    return objectAt(state, assignedValue(state, name, node.from), depth + 1);
+  }
+  if (node.name === "MemberExpression" && node.lastChild?.name === "PropertyName") {
+    return objectAt(state, propertyValue(state, node.firstChild, text(state, node.lastChild), depth + 1), depth + 1);
   }
   return null;
 }
@@ -271,11 +448,17 @@ function parameter(state: EditorState, node: SyntaxNode, name: string, depth: nu
 /**
  * What the expression at `node` holds, read from its syntax: a Hydra or
  * solid chain, `ao`, a source or an output. A variable follows its last
- * assignment; anything else, such as `ao.bass` or `.out()`, is undefined.
+ * assignment, a parameter what is passed to it, a call to the sketch's own
+ * function what that returns, and an array element or object property its
+ * literal. Anything else, such as `ao.bass` or `.out()`, is undefined.
  */
 export function receiverOf(state: EditorState, node: SyntaxNode | null, depth = 0): Receiver | undefined {
-  if (!node || depth > 20) return undefined;
+  if (!node || depth > MAX_DEPTH) return undefined;
   if (node.name === "ParenthesizedExpression") return receiverOf(state, node.firstChild?.nextSibling ?? null, depth + 1);
+  if (node.name === "ConditionalExpression") {
+    const branches = node.getChildren("LogicOp").map((op) => op.nextSibling);
+    return agree(branches.map((branch) => receiverOf(state, branch, depth + 1)));
+  }
   if (node.name === "VariableName") {
     const name = text(state, node);
     const param = parameter(state, node, name, depth);
@@ -287,13 +470,19 @@ export function receiverOf(state: EditorState, node: SyntaxNode | null, depth = 
     if (/^(o[0-3]|oS)$/.test(name)) return "output";
     return undefined;
   }
+  if (node.name === "MemberExpression") {
+    const key = node.lastChild;
+    if (key?.name === "PropertyName") return receiverOf(state, propertyValue(state, node.firstChild, text(state, key), depth + 1), depth + 1);
+    return key?.name === "]" ? elementsOf(state, node.firstChild, depth + 1) : undefined;
+  }
   if (node.name !== "CallExpression") return undefined;
   const callee = node.firstChild;
   if (callee?.name === "VariableName") {
     const name = text(state, callee);
     if (solidShapeNames.includes(name)) return "solid";
-    const generator = generators.includes(name) || extensionNames().topLevel.some((fn) => fn.kind === "generator" && fn.name === name);
-    return generator ? "hydra" : undefined;
+    if (generators.includes(name) || extensionNames().topLevel.some((fn) => fn.kind === "generator" && fn.name === name)) return "hydra";
+    const fn = functionAt(state, callee);
+    return fn ? returnOf(state, fn, depth + 1) : undefined;
   }
   if (callee?.name !== "MemberExpression" || callee.lastChild?.name !== "PropertyName") return undefined;
   const method = text(state, callee.lastChild);
@@ -301,7 +490,15 @@ export function receiverOf(state: EditorState, node: SyntaxNode | null, depth = 
   const owner = receiverOf(state, callee.firstChild, depth + 1);
   if (owner === "solid" && solidMethods.includes(method)) return "solid";
   if (owner === "hydra" && (chainMethods.includes(method) || extensionNames().chain.some((fn) => fn.name === method))) return "hydra";
-  return undefined;
+  if (owner) return undefined;
+  if (oneElement.includes(method)) return elementsOf(state, callee.firstChild, depth + 1);
+  if (method === "reduce" || method === "reduceRight") {
+    const fn = functionAt(state, node.getChild("ArgList")?.firstChild?.nextSibling ?? null);
+    return fn ? returnOf(state, fn, depth + 1) : undefined;
+  }
+  // A function kept on an object: shapes.blob()
+  const fn = functionAt(state, propertyValue(state, callee.firstChild, method, depth + 1));
+  return fn ? returnOf(state, fn, depth + 1) : undefined;
 }
 
 /** The expression before the `.` at `dot`, or null when that `.` isn't a member access. */
@@ -500,6 +697,78 @@ export function topLevelCompletions(used: ReadonlySet<string> = new Set()): Comp
   ];
 }
 
+const labelsOf = (options: readonly Completion[]) => options.map((option) => option.label);
+
+/** How completion describes what a sketch's own name holds. */
+const kindNames: Record<Receiver, string> = { hydra: "Hydra chain", solid: "solid", ao: "Ao audio", source: "Hydra source", output: "Hydra output" };
+
+/** How completion describes a name given a plain literal. */
+const literalNames: Record<string, string> = { Number: "number", String: "string", TemplateString: "string", BooleanLiteral: "boolean", ArrayExpression: "array", ObjectExpression: "object" };
+
+/** A completion for a sketch's own name holding `value`: a function, by what it returns, else by what it holds. */
+function valueOption(state: EditorState, label: string, value: SyntaxNode | null, type = "variable"): Completion {
+  const fn = value && functionNodes.includes(value.name) ? value : null;
+  if (fn) {
+    const returns = returnOf(state, fn, 0);
+    return { label, type: type === "property" ? "method" : "function", detail: returns ? `→ ${kindNames[returns]}` : "sketch function" };
+  }
+  const kind = receiverOf(state, value);
+  const elements = kind ? undefined : elementsOf(state, value, 0);
+  const literal = value && literalNames[value.name];
+  return { label, type, detail: kind ? kindNames[kind] : elements ? `${kindNames[elements]} array` : literal ?? `sketch ${type}` };
+}
+
+/** Where a declaration at `definition` can be seen: the block or function around it, or null for the whole sketch. */
+function scopeOf(definition: SyntaxNode): SyntaxNode | null {
+  let node = definition.parent?.name === "FunctionDeclaration" ? definition.parent.parent : definition.parent;
+  while (node && !["Block", "ForStatement", ...functionNodes].includes(node.name)) node = node.parent;
+  return node;
+}
+
+/**
+ * The names the sketch gives that can be seen at `pos`, each described by
+ * what it holds there: its declarations, the parameters of the functions
+ * around `pos`, and globals it assigns such as `energy = () => …`.
+ * `builtIn`: names that are already offered, which an assignment reuses.
+ */
+export function sketchNameCompletions(state: EditorState, pos: number, builtIn: ReadonlySet<string> = new Set()): Completion[] {
+  const found = new Map<string, Completion>();
+  syntaxTree(state).iterate({
+    enter(ref) {
+      const node = ref.node;
+      if (ref.name === "VariableDefinition" && !(node.from <= pos && pos <= node.to)) {
+        const scope = scopeOf(node);
+        const name = text(state, node);
+        if (found.has(name) || (scope && !(scope.from < pos && pos <= scope.to))) return;
+        const owner = node.parent;
+        if (owner?.name === "ParamList" && owner.parent) {
+          const kind = parameterOf(state, owner.parent, owner.getChildren("VariableDefinition").findIndex((param) => param.from === node.from), 0);
+          found.set(name, { label: name, type: "variable", detail: kind ? kindNames[kind] : "parameter" });
+        } else if (owner?.name === "FunctionDeclaration") {
+          found.set(name, valueOption(state, name, owner));
+        } else {
+          const value = assignedValue(state, name, pos) ?? (node.nextSibling?.name === "Equals" ? node.nextSibling.nextSibling : null);
+          found.set(name, valueOption(state, name, value));
+        }
+      } else if (ref.name === "AssignmentExpression") {
+        const target = node.firstChild;
+        const name = target?.name === "VariableName" ? text(state, target) : "";
+        if (!name || found.has(name) || builtIn.has(name) || (target!.from <= pos && pos <= target!.to)) return;
+        found.set(name, valueOption(state, name, assignedValue(state, name, pos) ?? target!.nextSibling?.nextSibling ?? null));
+      }
+    },
+  });
+  return [...found.values()];
+}
+
+/** An object literal's keys, each described by what it holds. */
+function objectKeyCompletions(state: EditorState, object: SyntaxNode): Completion[] {
+  return object.getChildren("Property").flatMap((property) => {
+    const key = property.firstChild;
+    return key?.name === "PropertyDefinition" ? [valueOption(state, text(state, key), propertyValue(state, object, text(state, key), 0), "property")] : [];
+  });
+}
+
 /** Extension names inside the string arguments of `use(...)`. */
 export function useCompletions(context: CompletionContext): CompletionResult | null {
   const node = syntaxTree(context.state).resolveInner(context.pos, -1);
@@ -685,13 +954,19 @@ export function hydraCompletions(context: CompletionContext): CompletionResult |
   if (dot) {
     const receiver = receiverNode(context.state, from - dot[0].length);
     const kind = receiverOf(context.state, receiver);
+    const object = kind ? null : objectAt(context.state, receiver);
     const options = kind ? memberCompletions(kind, used)
-      : receiver?.name === "VariableName" && !assignedValue(context.state, text(context.state, receiver), receiver.from)
-        ? namespaceCompletions(text(context.state, receiver)) : null;
+      : object ? objectKeyCompletions(context.state, object)
+        : receiver?.name === "VariableName" && !assignedValue(context.state, text(context.state, receiver), receiver.from)
+          ? namespaceCompletions(text(context.state, receiver)) : null;
     if (!options) return null;
     return { from, options: kind ? [...options, ...synonymCompletions(options, kind, typed)] : options, validFor: validFor(typed) };
   }
-  const options = topLevelCompletions(used);
+  const builtIn = topLevelCompletions(used);
+  const own = sketchNameCompletions(context.state, from, new Set(labelsOf(builtIn)));
+  // A name the sketch declares hides the built-in it shadows.
+  const ownNames = new Set(labelsOf(own));
+  const options = [...own, ...builtIn.filter((option) => !ownNames.has(option.label))];
   return { from, options: [...options, ...synonymCompletions(options, undefined, typed)], validFor: validFor(typed) };
 }
 
