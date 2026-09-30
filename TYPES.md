@@ -64,7 +64,9 @@ osc(20, 0.05, () => 1 + ao.bass)
 ```
 
 The accepted level names are `"loudness"`, `"impulse"`, `"beat"`, `"bass"`,
-`"mid"`, `"high"`, `"energy"`, `"drop"`, `"peak"`, and `"centroid"`.
+`"mid"`, `"high"`, `"energy"`, `"drop"`, `"peak"`, `"centroid"`, `"hue"`,
+`"width"`, `"phase"`, and `"tempoConfidence"`. The editor offers them as you
+start the first argument of `ao.map`, `ao.fit`, or `ao.glide`.
 
 `ao.glide` fades a value that would otherwise jump, such as `ao.bpm` when the
 tempo is re-detected or tapped. It takes the same level names plus `"bpm"`, or

@@ -12,7 +12,7 @@ import { getCM, vim, Vim } from "@replit/codemirror-vim";
 import hydraFunctions from "hydra-synth/src/glsl/glsl-functions.js";
 // hydra-synth's exports map omits this module; vite.config.ts and vitest.config.ts alias it.
 import HydraSourceClass from "hydra-synth/src/hydra-source.js";
-import { ao, aoDocs } from "./audio";
+import { ao, aoDocs, levelArguments } from "./audio";
 import { aoHydraFunctions } from "./audio-sources";
 import { blockAt } from "./blocks";
 import { addUse, extensionApi, extensionDocs, type ExtensionFunction, usedExtensions } from "./extension-api";
@@ -639,8 +639,34 @@ const signatureHelp = StateField.define<Tooltip | null>({
   provide: (field) => showTooltip.from(field),
 });
 
+/**
+ * The `ao` readings a helper such as `ao.map` takes by name, in its first
+ * argument: inside the quotes, or quoted when starting it, where they rank
+ * above everything else an expression could be.
+ */
+export function levelCompletions(context: CompletionContext): CompletionResult | null {
+  const call = callParameterContext(context.state, context.pos);
+  const names = call?.owner === "ao" && call.activeParameter === 0 ? levelArguments[call.name] : undefined;
+  if (!names) return null;
+  // Only the argument itself: not inside, say, `() => ao.b`.
+  const node = syntaxTree(context.state).resolveInner(context.pos, -1);
+  const args = ["String", "VariableName", "("].includes(node.name) ? node.parent : node;
+  if (args?.name !== "ArgList") return null;
+  const option = (name: string): Completion => ({ label: name, type: "property", detail: "ao level", info: aoDocs[name]?.description });
+  if (node.name === "String") {
+    if (context.pos <= node.from || !/^[\w$]*$/.test(context.state.sliceDoc(node.from + 1, context.pos))) return null;
+    return { from: node.from + 1, options: names.map(option), validFor: /^[\w$]*$/ };
+  }
+  const word = context.matchBefore(/[\w$]+/);
+  const justOpened = context.state.sliceDoc(context.pos - 1, context.pos) === "(";
+  if (!word && !context.explicit && !justOpened) return null;
+  const quoted = names.map((name) => ({ ...option(name), displayLabel: `"${name}"`, apply: `"${name}"`, boost: 50 }));
+  const others = word || context.explicit ? topLevelCompletions(usedExtensions(context.state.doc.toString())) : [];
+  return { from: word?.from ?? context.pos, options: [...quoted, ...others], validFor: /^[\w$]*$/ };
+}
+
 export function hydraCompletions(context: CompletionContext): CompletionResult | null {
-  const inUse = useCompletions(context) ?? optionKeyCompletions(context);
+  const inUse = useCompletions(context) ?? optionKeyCompletions(context) ?? levelCompletions(context);
   if (inUse) return inUse;
   const node = syntaxTree(context.state).resolveInner(context.pos, -1);
   for (let current: SyntaxNode | null = node; current; current = current.parent) {

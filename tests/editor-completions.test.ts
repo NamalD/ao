@@ -233,3 +233,41 @@ describe("completing by synonym", () => {
     expect(applied).toEqual(["scroll"]);
   });
 });
+
+describe("level names for ao.map, ao.fit and ao.glide", () => {
+  it("offers the readings ao.map can map inside its first argument's quotes", () => {
+    const options = completionsAt('osc().rotate(ao.map("|"))');
+    expect(options).toEqual(expect.arrayContaining(["bass", "mid", "high", "beat", "centroid", "phase"]));
+    expect(options).not.toContain("osc");
+    expect(options).not.toContain("map");
+    expect(completionsAt("ao.map('ba|', 0, 1)")).toContain("bass");
+  });
+
+  it("offers every name each helper accepts, and only those", () => {
+    expect(completionsAt('ao.map("|")')).not.toContain("bpm");
+    expect(completionsAt('ao.fit("|", 80, 160)')).toEqual(expect.arrayContaining(["bass", "bpm", "key"]));
+    expect(completionsAt('ao.glide("|")')).toEqual(expect.arrayContaining(["bass", "bpm"]));
+    expect(completionsAt('ao.glide("|")')).not.toContain("key");
+    for (const helper of ["map", "fit", "glide"] as const) {
+      for (const name of completionsAt(`ao.${helper}("|")`)!) expect(typeof ao[name as keyof typeof ao], name).toBe("number");
+    }
+  });
+
+  it("offers quoted names first on opening the call or typing the argument", () => {
+    const state = EditorState.create({ doc: "ao.map()", selection: { anchor: 7 }, extensions: [javascript()] });
+    const options = hydraCompletions(new CompletionContext(state, 7, false))!.options;
+    expect(options[0]).toMatchObject({ label: "loudness", displayLabel: '"loudness"', apply: '"loudness"' });
+    expect(completionsAt("ao.map(ba|, 0, 1)")?.slice(0, 20)).toContain("bass");
+    expect(completionsAt("ao.map(o|")).toEqual(expect.arrayContaining(["osc"]));
+  });
+
+  it("stays out of other arguments, other calls, and expressions inside the argument", () => {
+    expect(completionsAt('ao.map("bass", "|")')).toBeNull();
+    expect(completionsAt('use("|")')).not.toContain("bass");
+    expect(completionsAt("ao.map(() => ao.b|)")).not.toContain('"bass"');
+    expect(completionsAt("ao.map(() => ao.b|)")).toContain("beat");
+    expect(completionsAt("ao.map(() => b|)") ?? []).not.toContain("bass");
+    expect(completionsAt("ao.hz(|)")).toBeNull();
+    expect(completionsAt("osc().map(|)")).toBeNull();
+  });
+});
