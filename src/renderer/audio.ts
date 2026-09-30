@@ -6,7 +6,19 @@ import { waveAt } from "../shared/waveform";
 import { spectrogram } from "./spectrogram";
 import { barNow, clock, followTempo, phaseNow, pulse, ramp } from "./tempo";
 
-type Level = "loudness" | "impulse" | "beat" | "bass" | "mid" | "high" | "energy" | "drop" | "peak" | "centroid";
+/** The `ao` readings, each 0..1, that ao.map, ao.fit and ao.glide accept by name. */
+export const levels = [
+  "loudness", "impulse", "beat", "bass", "mid", "high", "energy", "drop", "peak", "centroid",
+  "hue", "width", "phase", "tempoConfidence",
+] as const;
+type Level = typeof levels[number];
+
+/** The names each `ao` helper takes as its first argument, for completion. */
+export const levelArguments: Record<string, readonly string[]> = {
+  map: levels,
+  fit: [...levels, "bpm", "key"],
+  glide: [...levels, "bpm"],
+};
 
 /**
  * The live audio state sketches read, exposed globally as `ao`.
