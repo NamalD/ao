@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { ChallengeRecord, ChallengeResult } from "../shared/challenges";
 import type { AudioFeatures } from "../shared/features";
+import type { SectionEvent } from "../shared/sections";
 import type { Settings } from "../shared/settings";
 import type { RecordingCommand, RecordingResult, RecordingStart } from "../shared/recording";
 
@@ -24,7 +25,9 @@ const bridge = {
   recentSketches: (): Promise<string[]> => ipcRenderer.invoke("sketches:recent"),
   thumbnail: (name: string): Promise<Uint8Array | null> => ipcRenderer.invoke("thumbnails:read", name),
   saveThumbnail: (name: string, png: ArrayBuffer) => ipcRenderer.send("thumbnails:save", name, png),
-  onAudio: (fn: (f: AudioFeatures) => void) => ipcRenderer.on("audio", (_e, f) => fn(f)),
+  onAudio: (fn: (f: AudioFeatures, event: SectionEvent | null) => void) =>
+    ipcRenderer.on("audio", (_e, f, event) => fn(f, event ?? null)),
+  resetSections: () => ipcRenderer.send("sections:reset"),
   onSketchChanged: (fn: (name: string) => void) => ipcRenderer.on("sketches:changed", (_e, n) => fn(n)),
   onStatus: (fn: (message: string) => void) => ipcRenderer.on("status", (_e, m) => fn(m)),
   // The main process picks the file; the renderer only streams encoded chunks.

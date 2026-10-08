@@ -6,7 +6,9 @@ import { watch } from "node:fs";
 import electron from "electron";
 import { createServer } from "vite";
 import { buildElectron } from "./build.mjs";
+import { buildNative } from "./build-native.mjs";
 
+buildNative();
 const server = await createServer();
 await server.listen();
 const url = server.resolvedUrls.local[0];

@@ -1,6 +1,8 @@
 node_modules/
 dist/
 state/
+native/target/
+native/*.node
 .worktrees/
 .claude/worktrees/
 

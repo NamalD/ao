@@ -334,8 +334,9 @@ const autopilot = new Autopilot({
   switchTo: (name) => open(name, { fade: true }), fading: () => mixer.fading,
   flash: (message) => flashStatus(status, message), log: host.log,
   save: (patch) => host.updateSettings({ autopilot: patch }),
+  resetSections: () => host.resetSections(),
 }, defaultAutopilot);
-host.onAudio((features) => autopilot.feed(features));
+host.onAudio((features, event) => autopilot.feed(features, event));
 // Automatic switches wait for the next bar (at most 4 s); a manual skip goes now.
 autopilot.alignSwitch = (reason) => reason === "skip" ? 0 : msToNextBar();
 

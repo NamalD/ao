@@ -1,56 +1,59 @@
 import { describe, expect, it } from "vitest";
-import { triggeredWave, WAVE_SIZE, WAVE_SPAN, waveAt } from "../src/shared/waveform";
+import { Analyser } from "../src/main/listen";
+import { WAVE_SIZE, WAVE_SPAN, waveAt } from "../src/shared/waveform";
 
 const RATE = 48000;
-const RING = 2048;
 
-/** Writes `count` samples of `signal` into a ring buffer, continuing from `written`. */
-function write(ring: Float64Array, written: number, count: number, signal: (t: number) => number): number {
-  for (let i = 0; i < count; i++, written++) ring[written % RING] = signal(written / RATE);
-  return written;
+function push(analyser: Analyser, frames: number, signal: (t: number) => number, start: number): Float32Array {
+  const samples = new Float32Array(frames * 2);
+  for (let i = 0; i < frames; i++) {
+    const x = signal((start + i) / RATE);
+    samples[2 * i] = samples[2 * i + 1] = x;
+  }
+  return analyser.push(samples, (start + frames) / RATE).wave;
 }
 
 /** The largest difference between waveforms taken after chunks of uneven length. */
 function jitter(signal: (t: number) => number): number {
-  const ring = new Float64Array(RING);
-  let written = write(ring, 0, RING, signal);
-  let previous = triggeredWave(ring, written), worst = 0;
+  const analyser = new Analyser(RATE);
+  let written = 2048;
+  let previous = push(analyser, written, signal, 0), worst = 0;
   for (let c = 0; c < 40; c++) {
-    written = write(ring, written, 700 + ((c * 337) % 500), signal);
-    const wave = triggeredWave(ring, written);
+    const n = 700 + ((c * 337) % 500);
+    const wave = push(analyser, n, signal, written);
+    written += n;
     for (let i = 0; i < WAVE_SIZE; i++) worst = Math.max(worst, Math.abs(wave[i] - previous[i]));
     previous = wave;
   }
   return worst;
 }
 
-describe("triggeredWave", () => {
+describe("waveform", () => {
   it("frames WAVE_SPAN samples as WAVE_SIZE values", () => {
     expect(WAVE_SIZE).toBe(512);
     expect(WAVE_SPAN / WAVE_SIZE).toBe(2);
-    const ring = new Float64Array(RING);
-    expect(triggeredWave(ring, 0)).toHaveLength(WAVE_SIZE);
-    expect(Array.from(triggeredWave(ring, 0)).every((x) => x === 0)).toBe(true);
+    const wave = new Analyser(RATE).push(new Float32Array(0), 0).wave;
+    expect(wave).toHaveLength(WAVE_SIZE);
+    expect(Array.from(wave).every((x) => x === 0)).toBe(true);
   });
 
   it("free-runs on the newest samples when there is nothing to trigger on", () => {
-    // A rising ramp that never crosses zero: the frame is the newest span.
-    const ring = new Float64Array(RING);
-    const written = RING + 300;
-    for (let w = 0; w < written; w++) ring[w % RING] = 0.1 + w * 1e-4;
-    const wave = triggeredWave(ring, written);
-    const newest = 0.1 + (written - 1) * 1e-4;
-    expect(wave[WAVE_SIZE - 1]).toBeCloseTo(newest - 0.5e-4, 6);
-    expect(wave[0]).toBeCloseTo(newest - (WAVE_SPAN - 1) * 1e-4 + 0.5e-4, 6);
+    const analyser = new Analyser(RATE);
+    const written = 2048 + 300;
+    const ramp = (i: number) => 0.1 + i * 1e-4;
+    const wave = push(analyser, written, (t) => ramp(t * RATE), 0);
+    for (let i = 0; i < WAVE_SIZE; i++) {
+      const a = ramp(written - WAVE_SPAN + 2 * i);
+      const b = ramp(written - WAVE_SPAN + 2 * i + 1);
+      expect(wave[i]).toBeCloseTo((a + b) / 2, 5);
+    }
   });
 
   it("starts on a rising zero crossing, found between samples", () => {
-    const ring = new Float64Array(RING);
-    const written = write(ring, 0, RING + 1234, (t) => 0.5 * Math.sin(2 * Math.PI * 220 * t));
-    const wave = triggeredWave(ring, written);
+    const analyser = new Analyser(RATE);
+    const wave = push(analyser, 2048 + 1234, (t) => 0.5 * Math.sin(2 * Math.PI * 220 * t), 0);
     expect(Math.abs(wave[0])).toBeLessThan(0.02);
     expect(wave[4]).toBeGreaterThan(wave[0]);
-    // One cycle of 220 Hz later (~109 values), the frame rises through zero again.
     const cycle = RATE / 220 / 2;
     expect(Math.abs(waveAt(wave, (cycle + 0.5) / WAVE_SIZE))).toBeLessThan(0.02);
   });
@@ -58,26 +61,19 @@ describe("triggeredWave", () => {
   it("holds a steady tone still however the chunks fall", () => {
     expect(jitter((t) => 0.5 * Math.sin(2 * Math.PI * 220 * t))).toBeLessThan(0.005);
     expect(jitter((t) => 0.5 * Math.sin(2 * Math.PI * 60 * t))).toBeLessThan(0.005);
-    // Two partials give several rising crossings a period; the trigger
-    // arms only on the deepest dip, so it keeps picking the same one.
     expect(jitter((t) => 0.3 * (Math.sin(2 * Math.PI * 220 * t) + Math.sin(2 * Math.PI * 330 * t)))).toBeLessThan(0.005);
   });
 
   it("slides when untriggered, which the trigger prevents", () => {
-    // Guard for the test above: without triggering, the same tone would move.
-    const ring = new Float64Array(RING);
+    const analyser = new Analyser(RATE);
     const signal = (t: number) => 0.5 * Math.sin(2 * Math.PI * 220 * t) + 0.6;
-    let written = write(ring, 0, RING, signal);
-    const a = triggeredWave(ring, written);
-    written = write(ring, written, 777, signal);
-    const b = triggeredWave(ring, written);
+    const a = push(analyser, 2048, signal, 0);
+    const b = push(analyser, 777, signal, 2048);
     expect(Math.max(...a.map((x, i) => Math.abs(x - b[i])))).toBeGreaterThan(0.1);
   });
 
   it("clamps to -1..1", () => {
-    const ring = new Float64Array(RING);
-    const written = write(ring, 0, RING, (t) => 3 * Math.sin(2 * Math.PI * 100 * t));
-    const wave = triggeredWave(ring, written);
+    const wave = push(new Analyser(RATE), 2048, (t) => 3 * Math.sin(2 * Math.PI * 100 * t), 0);
     expect(Math.max(...wave)).toBe(1);
     expect(Math.min(...wave)).toBe(-1);
   });

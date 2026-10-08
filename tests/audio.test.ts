@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { bandCentres } from "../src/shared/analysis";
+import { bandCentres } from "../src/shared/spectrum";
 import { silentFeatures, SPECTRUM_BANDS } from "../src/shared/features";
 import { ao, aoDocs, updateAudio } from "../src/renderer/audio";
 import { spectrogram } from "../src/renderer/spectrogram";

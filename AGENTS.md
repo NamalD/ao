@@ -5,8 +5,9 @@ an Electron app in TypeScript: the main process captures and analyses audio,
 the renderer hosts Hydra with Ao's audio sources, the solids compiler, and the
 overlay editor. Sketches are chained JavaScript only: Ao offers no way to
 write GLSL in a sketch beyond Hydra's own `setFunction`. Keep
-the preload bridge in `src/preload/` narrow, and keep audio analysis in
-`src/shared/` pure so it stays unit-testable.
+the preload bridge in `src/preload/` narrow. Audio analysis runs in the
+`listen` addon (`native/`); `src/shared/` keeps the feature types, spectrum
+helpers, tempo clock and glide. Tests call the addon.
 
 Commit completed, coherent work without asking for permission. At the end of
 the task, merge the completed branch into `master` from the primary checkout

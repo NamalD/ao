@@ -1,21 +1,19 @@
 import { ChildProcess, execFileSync, spawn } from "node:child_process";
-import { Analyser } from "../shared/analysis";
 import { findExecutable } from "../shared/executable";
-import { EnergyTracker } from "../shared/sections";
-import { TempoTracker } from "../shared/tempo";
 import { AudioFeatures } from "../shared/features";
+import type { SectionEvent } from "../shared/sections";
+import { Engine, Synthetic, parecCommand } from "./listen";
 
 export const SAMPLE_RATE = 48000;
+export { parecCommand };
 
-/**
- * Uses PipeWire's PulseAudio compatibility tools: unlike `pw-record`, parec
- * understands `.monitor` source names and cannot silently fall back to the
- * microphone.
- */
-export function parecCommand(target: string, executable: string): [string, string[]] {
-  return [executable, ["--device", target, "--format=float32le", `--rate=${SAMPLE_RATE}`,
-    "--channels=2", "--raw", "--latency-msec=20"]];
+export interface Capture {
+  stop(): void;
+  /** Autopilot turned on: its detector relearns the music from here. */
+  resetSections(): void;
 }
+
+export type FeaturesHandler = (features: AudioFeatures, event: SectionEvent | null) => void;
 
 function defaultMonitor(pactl: string): string | null {
   try {
@@ -26,36 +24,28 @@ function defaultMonitor(pactl: string): string | null {
   }
 }
 
-export interface Capture { stop(): void }
-
-/** One capture's analysis: the features, section energy and tempo of each chunk. */
-function analysis(): (samples: Float32Array, now: number) => AudioFeatures {
-  const analyser = new Analyser(SAMPLE_RATE);
-  const tempo = new TempoTracker(SAMPLE_RATE);
-  const energy = new EnergyTracker();
-  return (samples, now) => {
-    const features = analyser.push(samples, now);
-    return { ...features, ...energy.push(features), tempo: tempo.push(samples) };
-  };
+function deliver(engine: Engine, samples: Float32Array, onFeatures: FeaturesHandler, onPcm?: (samples: Float32Array) => void): void {
+  engine.push(samples);
+  onFeatures(engine.features(), engine.takeSection());
+  onPcm?.(samples);
 }
 
 /** Captures the current output device and reports features for every chunk. */
-export function startCapture(onFeatures: (f: AudioFeatures) => void,
+export function startCapture(onFeatures: FeaturesHandler,
                              report: (message: string) => void,
                              onPcm?: (samples: Float32Array) => void): Capture {
   const parec = findExecutable("parec");
   const pactl = findExecutable("pactl");
   if (!parec || !pactl) {
     report("parec/pactl are not installed or not on PATH; audio is disabled");
-    return { stop() {} };
+    return { stop() {}, resetSections() {} };
   }
   const target = defaultMonitor(pactl);
   if (!target) {
     report("could not determine the default PipeWire monitor; audio is disabled");
-    return { stop() {} };
+    return { stop() {}, resetSections() {} };
   }
-  const analyse = analysis();
-  const started = performance.now();
+  const engine = new Engine(SAMPLE_RATE);
   let pending: Buffer = Buffer.alloc(0);
   const [command, args] = parecCommand(target, parec);
   const child: ChildProcess = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
@@ -66,8 +56,7 @@ export function startCapture(onFeatures: (f: AudioFeatures) => void,
     // Copy so the float view is aligned regardless of the chunk's offset.
     const samples = new Float32Array(new Uint8Array(pending.subarray(0, usable)).buffer);
     pending = pending.subarray(usable);
-    onFeatures(analyse(samples, (performance.now() - started) / 1000));
-    onPcm?.(samples);
+    deliver(engine, samples, onFeatures, onPcm);
   });
   child.stderr!.on("data", (d: Buffer) => report(`parec: ${d.toString().trim()}`));
   child.on("error", (e) => report(`capture failed: ${e.message}`));
@@ -75,13 +64,14 @@ export function startCapture(onFeatures: (f: AudioFeatures) => void,
     if (signal !== "SIGTERM") report(`capture stopped (code ${code}, signal ${signal})`);
   });
   report(`capturing ${target}`);
-  return { stop: () => child.kill("SIGTERM") };
+  return { stop: () => child.kill("SIGTERM"), resetSections: () => engine.resetSections() };
 }
 
 /** A synthetic kick, pad and panned hats signal for screenshots and silent development. */
-export function startFakeCapture(onFeatures: (f: AudioFeatures) => void,
+export function startFakeCapture(onFeatures: FeaturesHandler,
                                  onPcm?: (samples: Float32Array) => void): Capture {
-  const analyse = analysis();
+  const engine = new Engine(SAMPLE_RATE);
+  const synthetic = new Synthetic(SAMPLE_RATE);
   const chunk = 960;
   const started = performance.now();
   let n = 0;
@@ -92,24 +82,9 @@ export function startFakeCapture(onFeatures: (f: AudioFeatures) => void,
     if (due <= 0) return;
     const frames = Math.min(due, SAMPLE_RATE);
     const samples = new Float32Array(frames * 2);
-    for (let i = 0; i < frames; i++, n++) {
-      const t = n / SAMPLE_RATE;
-      const beatPhase = t % 0.5;
-      const kick = Math.exp(-beatPhase * 18) * Math.sin(2 * Math.PI * (50 + 90 * Math.exp(-beatPhase * 30)) * beatPhase);
-      const low = 0.12 * Math.sin(2 * Math.PI * 220 * t);
-      const high = 0.12 * Math.sin(2 * Math.PI * 330 * t + Math.sin(t));
-      const hat = (t % 0.25 < 0.02 ? 0.08 : 0) * (Math.random() * 2 - 1);
-      // Kick and low pad stay centred; the upper pad voice drifts across
-      // the speakers every 8 s and the hats ping-pong, so balance and width
-      // have something to show.
-      const pan = 0.8 * Math.sin((2 * Math.PI * t) / 8);
-      const right = Math.floor(t / 0.25) % 2 === 1;
-      const centre = 0.6 * kick + low;
-      samples[i * 2] = centre + (1 - pan) * high + (right ? 0.2 : 1) * hat;
-      samples[i * 2 + 1] = centre + (1 + pan) * high + (right ? 1 : 0.2) * hat;
-    }
-    onFeatures(analyse(samples, n / SAMPLE_RATE));
-    onPcm?.(samples);
+    synthetic.fill(samples);
+    n += frames;
+    deliver(engine, samples, onFeatures, onPcm);
   }, (chunk / SAMPLE_RATE) * 1000);
-  return { stop: () => clearInterval(timer) };
+  return { stop: () => clearInterval(timer), resetSections: () => engine.resetSections() };
 }

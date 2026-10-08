@@ -1,0 +1,10 @@
+[package]
+name = "ao-listen-core"
+version = "0.1.0"
+edition = "2021"
+description = "Allocation-free listen push used by Ao's Node addon"
+license = "AGPL-3.0-only"
+publish = false
+
+[dependencies]
+listen = { path = "/home/namal/code/listen" }

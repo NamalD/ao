@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AudioFeatures, silentFeatures, SPECTRUM_BANDS } from "../src/shared/features";
-import { DROP_FADE, EnergyTracker, SectionDetector, SectionEvent } from "../src/shared/sections";
+import { EnergyTracker, SectionDetector } from "../src/main/listen";
+import { DROP_FADE, SectionEvent } from "../src/shared/sections";
 
 const RATE = 50; // feature frames a second, as the capture sends them
 

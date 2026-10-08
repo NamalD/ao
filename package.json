@@ -10,7 +10,7 @@
     "start": "node scripts/build.mjs && electron .",
     "dev": "node scripts/dev.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "node scripts/build-native.mjs && vitest run"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",

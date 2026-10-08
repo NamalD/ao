@@ -2,6 +2,7 @@
 // `--electron-only` skips the renderer, for the dev server.
 import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
+import { buildNative } from "./build-native.mjs";
 
 export async function buildElectron() {
   await Promise.all(["main/main", "preload/preload"].map((entry) =>
@@ -18,6 +19,7 @@ export async function buildElectron() {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
+  buildNative();
   await buildElectron();
   if (!process.argv.includes("--electron-only")) await viteBuild({ logLevel: "warn" });
 }

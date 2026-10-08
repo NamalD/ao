@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_BPM, TempoState, TempoTracker } from "../src/shared/tempo";
+import { TempoTracker } from "../src/main/listen";
+import { DEFAULT_BPM, TempoState } from "../src/shared/tempo";
 import { chunks, phaseError, renderTrack, TrackOptions, truePhase } from "./tempo-signals";
 
 interface Sample { t: number; state: TempoState; phaseError: number }

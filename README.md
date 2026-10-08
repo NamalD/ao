@@ -724,7 +724,8 @@ Live values keep their default (on) whenever the editor shows.
 ## Layout
 
 - `src/main`: Electron main process, audio capture, state and sketch files.
-- `src/shared`: audio analysis (FFT, loudness, impulse, beat, tempo), kept pure.
+- `native/`: the listen addon. Analysis (levels, spectrum, waveform, stereo, chroma, tempo, sections) runs there.
+- `src/shared`: feature types, spectrum helpers, the tempo clock and glide.
 - `src/preload`: the narrow bridge the renderer may call.
 - `src/renderer`: Hydra host, audio sources, solids compiler and the shader
   canvas it draws through, overlay editor.

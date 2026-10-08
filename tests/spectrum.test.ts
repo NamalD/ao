@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bandCentres } from "../src/shared/analysis";
+import { bandCentres } from "../src/shared/spectrum";
 import { SPECTRUM_BANDS } from "../src/shared/features";
 import {
   centroidPosition, hzLevel, hzToPosition, peakPosition, positionToHz, spectrumAt,
