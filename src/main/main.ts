@@ -160,11 +160,12 @@ void app.whenReady().then(() => {
     if (level === "warning" || level === "error") store.log(`renderer ${level}: ${message} (${sourceId}:${lineNumber})`);
   });
   const recording = setupRecording(() => win, (message) => store.log(message));
-  let capture: Capture;
+  let capture: Capture | undefined;
+  ipcMain.on("sections:reset", () => capture?.resetSections());
   win.webContents.once("did-finish-load", () => {
     capture = options.fakeAudio || headless
-      ? startFakeCapture((f) => send("audio", f), recording.pcm)
-      : startCapture((f) => send("audio", f), report, recording.pcm);
+      ? startFakeCapture((f, event) => send("audio", f, event), recording.pcm)
+      : startCapture((f, event) => send("audio", f, event), report, recording.pcm);
   });
   app.on("before-quit", () => capture?.stop());
 

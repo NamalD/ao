@@ -1,14 +1,28 @@
-import { bandEdges } from "./analysis";
+import { SPECTRUM_BANDS } from "./features";
 
 /**
  * Helpers for reading a spectrum of log-spaced band levels. Positions run
  * 0..1 along the same log-frequency axis as GLSL `aoFFT(x)`: band `i` sits at
  * `(i + 0.5) / bands`, so a position maps straight onto a frequency.
+ *
+ * The edges are the same map the listen addon analyses with: 30 Hz to 16 kHz.
  */
 
-const EDGES = bandEdges();
-const MIN_HZ = EDGES[0];
-const MAX_HZ = EDGES[EDGES.length - 1];
+const MIN_HZ = 30;
+const MAX_HZ = 16000;
+
+/** Log-spaced band edges in Hz: SPECTRUM_BANDS + 1 values. */
+export function bandEdges(): number[] {
+  return Array.from({ length: SPECTRUM_BANDS + 1 },
+    (_, i) => MIN_HZ * Math.pow(MAX_HZ / MIN_HZ, i / SPECTRUM_BANDS));
+}
+
+/** Band centres in Hz (geometric mean of each band's edges). */
+export function bandCentres(): number[] {
+  const edges = bandEdges();
+  return Array.from({ length: SPECTRUM_BANDS }, (_, i) => Math.sqrt(edges[i] * edges[i + 1]));
+}
+
 const LOG_RANGE = Math.log(MAX_HZ / MIN_HZ);
 
 /** The position of a frequency on the spectrum axis. Band centres land on their texel centres. */

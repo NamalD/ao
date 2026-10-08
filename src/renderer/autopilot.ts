@@ -2,7 +2,7 @@ import {
   AutopilotScheduler, AutopilotSettings, isEmptySketch, ShuffleBag, SwitchReason,
 } from "../shared/autopilot";
 import type { AudioFeatures } from "../shared/features";
-import { SectionDetector, SectionEvent } from "../shared/sections";
+import type { SectionEvent } from "../shared/sections";
 
 export interface AutopilotHost {
   listSketches(): Promise<string[]>;
@@ -16,6 +16,8 @@ export interface AutopilotHost {
   flash(message: string): void;
   log(message: string): void;
   save(patch: Partial<AutopilotSettings>): void;
+  /** The main process relearns sections from the next frame. */
+  resetSections(): void;
 }
 
 /** How often the dwell timer is checked, ms. */
@@ -30,14 +32,13 @@ const seconds = () => performance.now() / 1000;
 /**
  * Ambient autopilot: shuffles through the sketches, switching with a
  * crossfade when the music drops or changes section, or when the dwell time
- * runs out. The decisions live in src/shared (SectionDetector,
- * AutopilotScheduler, ShuffleBag); this wires them to the audio stream, a
- * timer, and the renderer. Nothing runs while it's off.
+ * runs out. The scheduler and shuffle live in src/shared; section events
+ * arrive from the main process, which runs listen's detector. Nothing runs
+ * while it's off.
  */
 export class Autopilot {
   private settings: AutopilotSettings;
   private readonly scheduler: AutopilotScheduler;
-  private detector = new SectionDetector();
   private readonly bag = new ShuffleBag();
   private timer: ReturnType<typeof setInterval> | undefined;
   private switching = false;
@@ -100,10 +101,9 @@ export class Autopilot {
     this.scheduler.setEditorVisible(visible);
   }
 
-  /** Each analysis frame from the capture. */
-  feed(features: AudioFeatures): void {
+  /** Each analysis frame from the capture, with the section event if one fired. */
+  feed(_features: AudioFeatures, event: SectionEvent | null = null): void {
     if (!this.settings.enabled || !this.settings.switchOnSections) return;
-    const event = this.detector.push(features);
     if (event) this.consider(event);
   }
 
@@ -174,7 +174,7 @@ export class Autopilot {
     if (!s.enabled) return;
     // A fresh start: the dwell counts from now, and the detector relearns the music.
     this.scheduler.switched(seconds());
-    this.detector = new SectionDetector();
+    this.host.resetSections();
     this.timer = setInterval(() => {
       const reason = this.scheduler.tick(seconds());
       if (reason) this.schedule(reason);
