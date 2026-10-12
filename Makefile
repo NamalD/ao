@@ -1,4 +1,4 @@
-.PHONY: all run dev test check-sketches install-hooks screenshot thumbnails clean worktree worktree-create worktree-list worktree-remove worktree-prune
+.PHONY: all run dev test check-sketches install-hooks screenshot preview thumbnails clean worktree worktree-create worktree-list worktree-remove worktree-prune
 
 all: node_modules
 	npm run build
@@ -34,6 +34,11 @@ install-hooks:
 # Render a sketch offscreen with synthetic audio: make screenshot SKETCH=dunes
 screenshot: all
 	npx electron . --sketch=$(SKETCH) --hide-editor --screenshot=state/$(SKETCH).png
+
+# Open a live window on this checkout for the author to look at, with synthetic
+# audio unless AUDIO=real: make preview SKETCH=dunes. It never commits sketches.
+preview: all
+	npx electron . --preview $(if $(filter real,$(AUDIO)),,--fake-audio) $(if $(SKETCH),--sketch=$(SKETCH)) $(if $(HIDE_EDITOR),--hide-editor)
 
 # Render missing sketch thumbnails offscreen into state/thumbnails/.
 # make thumbnails FORCE=1 re-renders them all; SKETCH=a,b limits the run.
