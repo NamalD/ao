@@ -11,7 +11,8 @@ helpers, tempo clock and glide. Tests call the addon.
 
 Commit completed, coherent work without asking for permission. At the end of
 the task, merge the completed branch into `master` from the primary checkout
-without waiting for approval. Do not commit `node_modules/`, `dist/`, or
+without waiting for approval, except for a visual change, which the author
+sees first (see Showing visual changes). Do not commit `node_modules/`, `dist/`, or
 anything in `state/`. Run `make test` before each commit; the pre-commit
 hook in `.githooks/` (enabled by `make install-hooks`) also runs it on the
 staged changes, and skips commits that only touch `sketches/`. Keep sketches
@@ -28,6 +29,28 @@ and conversation.
 
 Check visual changes with `make screenshot SKETCH=<name>`, which renders
 offscreen with synthetic audio, rather than assuming a shader looks right.
+
+## Showing visual changes
+
+A visual change is anything that alters what Ao draws: a sketch, a solid or
+shader, an audio source, the overlay's look. Before merging one, show the
+author the running result instead of describing it:
+
+1. Confirm it renders with `make screenshot SKETCH=<name>` and read the image.
+2. From the worktree, open a live window with `make preview SKETCH=<name>`
+   (`HIDE_EDITOR=1` to hide the overlay, `AUDIO=real` for the system's audio
+   instead of synthetic). Run it in the background so you can keep working,
+   and don't open it before the screenshot looks right.
+3. Tell the author what to look at, which sketch, and what changed from
+   `master`. To compare, `make preview` in the primary checkout shows the
+   old version.
+4. Commit on your branch, but wait for the author's reply before merging.
+   If they ask for changes, edit, rebuild and open the preview again. Quit
+   your preview window once they have answered.
+
+Changes that leave the picture alone (tests, tooling, analysis internals)
+merge as usual. A preview never commits sketches on close; the sketch edits
+belong to your branch commit.
 
 ## Concurrent-agent workflow
 

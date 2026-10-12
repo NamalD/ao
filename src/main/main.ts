@@ -20,6 +20,8 @@ interface Options {
   thumbnails?: string[]; force: boolean;
   /** `--autopilot[=dwellSeconds]` and `--fade=seconds`: this session only, never saved. */
   autopilot?: string; fade?: string;
+  /** `--preview`: an agent's live look at its branch; closing it never commits sketches. */
+  preview: boolean;
 }
 
 function parseOptions(argv: string[]): Options {
@@ -36,6 +38,7 @@ function parseOptions(argv: string[]): Options {
     force: argv.includes("--force"),
     autopilot: value("autopilot") ?? (argv.includes("--autopilot") ? "" : undefined),
     fade: value("fade"),
+    preview: argv.includes("--preview"),
   };
 }
 
@@ -188,9 +191,10 @@ void app.whenReady().then(() => {
 
 app.on("window-all-closed", () => app.quit());
 
-// Closing Ao commits changed sketches and pushes them in the background.
+// Closing Ao commits changed sketches and pushes them in the background,
+// except for screenshots and an agent's --preview.
 app.on("will-quit", () => {
-  if (headless) return;
+  if (headless || options.preview) return;
   const { committed, error } = syncSketches(app.getAppPath(), store.logPath);
   if (error) store.log(`sketch sync failed: ${error}`);
   else if (committed.length) store.log(`committed sketches: ${committed.join(", ")}; pushing`);
